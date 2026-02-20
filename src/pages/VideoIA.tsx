@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { initialEstrategias } from '@/data/seedData';
 import { Button } from '@/components/ui/button';
@@ -9,7 +9,8 @@ import { cn } from '@/lib/utils';
 import {
   Clapperboard, Image, Film, Copy, Check, RefreshCw,
   ChevronRight, Sparkles, AlertTriangle, Lightbulb,
-  Camera, Clock, Monitor, Download
+  Camera, Clock, Monitor, Download, Zap, FileText,
+  Upload, X, ChevronDown, ChevronUp
 } from 'lucide-react';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -94,6 +95,11 @@ interface VideoPromptResult {
   warningsAndTips: string[];
 }
 
+interface ExpressResult extends ImagePromptResult, VideoPromptResult {
+  extractedScene: string;
+  suggestedAngle: string;
+}
+
 // ─── Copy Button ──────────────────────────────────────────────────────────────
 
 function CopyButton({ text, label = 'Copiar' }: { text: string; label?: string }) {
@@ -136,8 +142,20 @@ function SpecTag({ icon: Icon, label, value }: { icon: React.ElementType; label:
 export default function VideoIA() {
   const { toast } = useToast();
   const [step, setStep] = useState(1);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Config
+  // Express mode
+  const [expressOpen, setExpressOpen] = useState(true);
+  const [expressText, setExpressText] = useState('');
+  const [expressModel, setExpressModel] = useState('Seedance 1.5 Pro');
+  const [expressAspect, setExpressAspect] = useState('9:16');
+  const [expressDuration, setExpressDuration] = useState(10);
+  const [expressResult, setExpressResult] = useState<ExpressResult | null>(null);
+  const [loadingExpress, setLoadingExpress] = useState(false);
+  const [expressAngle, setExpressAngle] = useState('');
+
+  // Config (step-by-step workflow)
+
   const [persona, setPersona] = useState(initialEstrategias[0].id);
   const [sceneInput, setSceneInput] = useState('');
   const [selectedScene, setSelectedScene] = useState('');
@@ -227,9 +245,279 @@ export default function VideoIA() {
   const canProceedToStep2 = scene.length > 0;
   const canProceedToStep3 = imagePromptResult !== null;
 
+  // Express mode: handle file upload
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const text = ev.target?.result as string;
+      // strip HTML tags if HTML file
+      const stripped = file.name.endsWith('.html')
+        ? text.replace(/<style[\s\S]*?<\/style>/gi, '')
+             .replace(/<script[\s\S]*?<\/script>/gi, '')
+             .replace(/<[^>]+>/g, ' ')
+             .replace(/\s{2,}/g, ' ')
+             .trim()
+             .slice(0, 8000) // keep manageable
+        : text.slice(0, 8000);
+      setExpressText(stripped);
+      toast({ title: 'Arquivo carregado', description: `${file.name} — conteúdo extraído com sucesso.` });
+    };
+    reader.readAsText(file);
+  };
+
+  const handleExpress = async () => {
+    if (!expressText.trim()) {
+      toast({ title: 'Insira uma ideia ou texto', description: 'Cole ou carregue algum conteúdo para gerar os prompts.', variant: 'destructive' });
+      return;
+    }
+    setLoadingExpress(true);
+    setExpressResult(null);
+    try {
+      const { data, error } = await supabase.functions.invoke('generate-video-assets', {
+        body: {
+          operation: 'express_prompts',
+          freeText: expressText.trim(),
+          videoModel: expressModel,
+          aspectRatio: expressAspect,
+          duration: expressDuration,
+          contentAngle: expressAngle || undefined,
+        },
+      });
+      if (error) throw new Error(error.message);
+      if (data?.error) throw new Error(data.error);
+      setExpressResult(data);
+    } catch (e: unknown) {
+      toast({ title: 'Erro ao gerar prompts', description: String(e), variant: 'destructive' });
+    } finally {
+      setLoadingExpress(false);
+    }
+  };
+
   return (
     <div className="space-y-5 animate-fade-in">
-      {/* Header */}
+      {/* ─── EXPRESS PANEL ───────────────────────────────────────────────────── */}
+      <div className="rounded-xl border border-primary/40 bg-primary/5 overflow-hidden">
+        {/* Header toggle */}
+        <button
+          onClick={() => setExpressOpen(o => !o)}
+          className="flex w-full items-center gap-3 p-4 text-left hover:bg-primary/10 transition-colors"
+        >
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/20 shrink-0">
+            <Zap className="h-4 w-4 text-primary" />
+          </div>
+          <div className="flex-1">
+            <p className="text-sm font-black text-foreground">⚡ Geração Express — Cole uma ideia, receba os prompts</p>
+            <p className="text-[11px] text-muted-foreground">Cole texto, roteiro ou carrossel e gere prompt de imagem + vídeo de uma vez</p>
+          </div>
+          <Badge variant="outline" className="border-primary/40 text-primary text-[10px] shrink-0">Modo Rápido</Badge>
+          {expressOpen ? <ChevronUp className="h-4 w-4 text-muted-foreground shrink-0" /> : <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />}
+        </button>
+
+        {expressOpen && (
+          <div className="border-t border-primary/20 p-4 space-y-4">
+            {/* Input area */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-bold text-foreground uppercase tracking-wider">📝 Ideia / Referência / Roteiro</p>
+                <div className="flex gap-2">
+                  <input ref={fileInputRef} type="file" accept=".txt,.html,.md" className="hidden" onChange={handleFileUpload} />
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs text-muted-foreground hover:border-primary/40 hover:text-primary transition-all"
+                  >
+                    <Upload className="h-3.5 w-3.5" /> Carregar arquivo
+                  </button>
+                  {expressText && (
+                    <button onClick={() => setExpressText('')} className="flex items-center gap-1 rounded-lg border border-border px-2 py-1.5 text-xs text-muted-foreground hover:border-destructive/40 hover:text-destructive transition-all">
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+              </div>
+              <Textarea
+                placeholder={`Cole aqui qualquer referência:\n• Roteiro de carrossel (ex: "Slide 1: Você trabalhou R$2.000 este mês...")\n• Ideia de campanha ("Piscineiro recebendo PIX no momento que cliente aprova...")\n• Conceito visual ("Eletricista confiante, contraluz do sol de tarde em condomínio de Floripa...")\n• Arquivo de briefing (.html, .txt, .md)`}
+                value={expressText}
+                onChange={e => setExpressText(e.target.value)}
+                className="min-h-[120px] resize-none text-xs bg-background border-border font-mono"
+              />
+              {expressText && (
+                <p className="text-[10px] text-muted-foreground">{expressText.length.toLocaleString()} caracteres carregados</p>
+              )}
+            </div>
+
+            {/* Quick settings */}
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <div>
+                <p className="text-[10px] text-muted-foreground mb-1.5 uppercase tracking-wider">Modelo de Vídeo</p>
+                <div className="flex flex-col gap-1">
+                  {VIDEO_MODELS.map(m => (
+                    <button key={m.id} onClick={() => setExpressModel(m.id)}
+                      className={cn('rounded-lg border px-2.5 py-1.5 text-left text-[11px] font-medium transition-all',
+                        expressModel === m.id ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:border-primary/30')}>
+                      {m.label}
+                      <span className={cn('ml-1.5 text-[9px]', m.badgeColor.split(' ')[1])}>{m.cost}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="text-[10px] text-muted-foreground mb-1.5 uppercase tracking-wider">Aspecto</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {ASPECT_RATIOS.map(ar => (
+                    <button key={ar} onClick={() => setExpressAspect(ar)}
+                      className={cn('rounded-lg border px-2.5 py-1.5 text-xs font-bold transition-all',
+                        expressAspect === ar ? 'border-primary bg-primary/20 text-primary' : 'border-border text-muted-foreground hover:border-primary/40')}>
+                      {ar}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[10px] text-muted-foreground mt-3 mb-1.5 uppercase tracking-wider">Duração</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {DURATIONS.map(d => (
+                    <button key={d} onClick={() => setExpressDuration(d)}
+                      className={cn('rounded-lg border px-2.5 py-1.5 text-xs font-bold transition-all',
+                        expressDuration === d ? 'border-primary bg-primary/20 text-primary' : 'border-border text-muted-foreground hover:border-primary/40')}>
+                      {d}s
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="text-[10px] text-muted-foreground mb-1.5 uppercase tracking-wider">Ângulo (opcional)</p>
+                <div className="flex flex-col gap-1">
+                  {['', ...CONTENT_ANGLES.map(a => a.id)].map(a => (
+                    <button key={a} onClick={() => setExpressAngle(a)}
+                      className={cn('rounded-lg border px-2.5 py-1.5 text-left text-[11px] transition-all',
+                        expressAngle === a ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:border-primary/30')}>
+                      {a === '' ? '🤖 Detectar automaticamente' : CONTENT_ANGLES.find(x => x.id === a)?.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <Button onClick={handleExpress} disabled={loadingExpress || !expressText.trim()} size="lg" className="w-full gap-2 font-bold">
+              {loadingExpress
+                ? <><RefreshCw className="h-4 w-4 animate-spin" /> Gerando prompts com IA (Gemini 2.5 Pro)...</>
+                : <><Zap className="h-4 w-4" /> Gerar Prompt de Imagem + Vídeo</>}
+            </Button>
+
+            {/* Express Results */}
+            {expressResult && (
+              <div className="space-y-4 animate-fade-in pt-2 border-t border-primary/20">
+                {/* Detected context */}
+                <div className="flex flex-wrap gap-2">
+                  {expressResult.extractedScene && (
+                    <div className="rounded-lg bg-muted/40 px-3 py-1.5 text-xs text-foreground">
+                      <span className="text-muted-foreground">Cena detectada: </span>{expressResult.extractedScene}
+                    </div>
+                  )}
+                  {expressResult.suggestedAngle && (
+                    <Badge variant="outline" className="border-primary/30 text-primary">{expressResult.suggestedAngle}</Badge>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+                  {/* Image Prompt */}
+                  <div className="space-y-2">
+                    <div className="rounded-xl border border-border bg-card p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <Camera className="h-4 w-4 text-primary" />
+                          <p className="text-xs font-black text-foreground uppercase tracking-wider">Prompt do Frame Inicial</p>
+                        </div>
+                        <CopyButton text={expressResult.imagePrompt} label="Copiar EN" />
+                      </div>
+                      <div className="rounded-lg bg-muted/30 p-3 mb-2">
+                        <p className="text-[11px] font-mono text-foreground leading-relaxed">{expressResult.imagePrompt}</p>
+                      </div>
+                      <div className="rounded-lg border border-primary/20 bg-primary/5 p-2.5">
+                        <p className="text-[10px] font-bold text-primary mb-1">Tradução</p>
+                        <p className="text-[11px] text-foreground leading-relaxed">{expressResult.imagePromptPtBr}</p>
+                      </div>
+                      {expressResult.visualNotes && (
+                        <p className="text-[10px] text-muted-foreground mt-2 italic">{expressResult.visualNotes}</p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Video Prompt */}
+                  <div className="space-y-2">
+                    <div className="rounded-xl border border-primary/30 bg-primary/5 p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <Film className="h-4 w-4 text-primary" />
+                          <p className="text-xs font-black text-foreground uppercase tracking-wider">Prompt de Vídeo (Higgsfield)</p>
+                        </div>
+                        <CopyButton text={expressResult.videoPrompt} label="Copiar EN" />
+                      </div>
+                      <div className="rounded-lg bg-background border border-border p-3 mb-2">
+                        <p className="text-[11px] font-mono text-foreground leading-relaxed whitespace-pre-wrap">{expressResult.videoPrompt}</p>
+                      </div>
+                      <div className="rounded-lg bg-muted/30 p-2.5">
+                        <p className="text-[10px] font-bold text-muted-foreground mb-1">Análise do Diretor</p>
+                        <p className="text-[11px] text-foreground leading-relaxed">{expressResult.videoPromptPtBr}</p>
+                      </div>
+                    </div>
+
+                    {/* Tech specs */}
+                    <div className="grid grid-cols-2 gap-2">
+                      <SpecTag icon={Camera} label="Modelo" value={expressResult.technicalSpecs?.model || expressModel} />
+                      <SpecTag icon={Clock} label="Duração" value={expressResult.technicalSpecs?.duration || `${expressDuration}s`} />
+                      <SpecTag icon={Monitor} label="Aspecto" value={expressResult.technicalSpecs?.aspectRatio || expressAspect} />
+                      <SpecTag icon={Monitor} label="Resolução" value={expressResult.technicalSpecs?.resolution || '1080p'} />
+                    </div>
+
+                    {/* Director notes */}
+                    {expressResult.directorNotes && (
+                      <div className="rounded-xl border border-border bg-card p-3">
+                        <div className="flex items-center gap-2 mb-1.5">
+                          <Clapperboard className="h-3.5 w-3.5 text-primary" />
+                          <p className="text-[10px] font-bold text-foreground uppercase tracking-wider">Notas do Diretor</p>
+                        </div>
+                        <p className="text-[11px] text-muted-foreground leading-relaxed">{expressResult.directorNotes}</p>
+                      </div>
+                    )}
+
+                    {/* Tips */}
+                    {expressResult.warningsAndTips?.length > 0 && (
+                      <div className="rounded-xl border border-yellow-500/20 bg-yellow-500/5 p-3">
+                        <div className="flex items-center gap-2 mb-1.5">
+                          <AlertTriangle className="h-3.5 w-3.5 text-yellow-400" />
+                          <p className="text-[10px] font-bold text-yellow-400 uppercase tracking-wider">Dicas & Atenção</p>
+                        </div>
+                        <ul className="space-y-1">
+                          {expressResult.warningsAndTips.map((tip, i) => (
+                            <li key={i} className="flex items-start gap-2 text-[11px] text-foreground">
+                              <Lightbulb className="h-3.5 w-3.5 text-yellow-400 shrink-0 mt-0.5" />
+                              {tip}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Use in workflow hint */}
+                <div className="rounded-xl border border-green-500/20 bg-green-500/5 p-3">
+                  <p className="text-xs font-bold text-green-400 mb-1">✅ Próximos passos no Higgsfield</p>
+                  <div className="grid grid-cols-1 gap-0.5 sm:grid-cols-2 text-[11px] text-foreground">
+                    <p>1. Copie o <strong>Prompt do Frame Inicial</strong> → gere a imagem (Higgsfield ou outro gerador)</p>
+                    <p>2. Faça upload da imagem como <strong>Start Frame</strong> no Higgsfield</p>
+                    <p>3. Cole o <strong>Prompt de Vídeo</strong> no campo de prompt</p>
+                    <p>4. Configure: <strong>{expressResult.technicalSpecs?.model || expressModel}</strong> · {expressResult.technicalSpecs?.aspectRatio || expressAspect} · {expressResult.technicalSpecs?.duration || `${expressDuration}s`}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+
       <div className="flex items-center gap-3">
         <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/20">
           <Clapperboard className="h-5 w-5 text-primary" />
