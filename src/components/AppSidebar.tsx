@@ -13,6 +13,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Target,
+  MessageSquareText,
 } from 'lucide-react';
 import {
   Sidebar,
@@ -29,6 +30,7 @@ import { cn } from '@/lib/utils';
 const navItems = [
   { title: 'Dashboard', url: '/', icon: LayoutDashboard },
   { title: 'Estratégia', url: '/estrategia', icon: Target, highlight: true },
+  { title: 'Fórum', url: '/forum', icon: MessageSquareText, highlight: true },
   { title: 'Campanhas', url: '/campanhas', icon: Megaphone },
   { title: 'Kanban', url: '/kanban', icon: Trello },
   { title: 'Calendário', url: '/calendario', icon: CalendarDays },
