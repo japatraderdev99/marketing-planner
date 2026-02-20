@@ -44,6 +44,39 @@ const TEAM = [
     bg: 'bg-primary/15',
     border: 'border-primary/30',
   },
+  {
+    id: 'marcelo',
+    name: 'Marcelo',
+    role: 'CFO',
+    initials: 'MC',
+    color: 'bg-emerald-600',
+    ring: 'ring-emerald-600',
+    text: 'text-emerald-400',
+    bg: 'bg-emerald-600/15',
+    border: 'border-emerald-600/30',
+  },
+  {
+    id: 'leandro',
+    name: 'Leandro',
+    role: 'CEO',
+    initials: 'LE',
+    color: 'bg-violet-600',
+    ring: 'ring-violet-600',
+    text: 'text-violet-400',
+    bg: 'bg-violet-600/15',
+    border: 'border-violet-600/30',
+  },
+  {
+    id: 'gustavo',
+    name: 'Gustavo',
+    role: 'Dev',
+    initials: 'GV',
+    color: 'bg-rose-600',
+    ring: 'ring-rose-600',
+    text: 'text-rose-400',
+    bg: 'bg-rose-600/15',
+    border: 'border-rose-600/30',
+  },
 ] as const;
 
 type TeamMemberId = typeof TEAM[number]['id'];
@@ -52,6 +85,9 @@ function getTeamMember(responsible: string) {
   const lower = responsible.toLowerCase();
   if (lower.includes('gabriel')) return TEAM[0];
   if (lower.includes('guilherme')) return TEAM[1];
+  if (lower.includes('marcelo')) return TEAM[2];
+  if (lower.includes('leandro')) return TEAM[3];
+  if (lower.includes('gustavo')) return TEAM[4];
   return null;
 }
 
