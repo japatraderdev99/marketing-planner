@@ -1,5 +1,7 @@
 // ===== DQEF Hub — Seed Data =====
 // Dados reais extraídos dos documentos estratégicos da DQEF
+// SEED VERSION: bump this to force localStorage reset when seed changes
+export const SEED_VERSION = '2026-02-20-v4';
 
 export type Channel = 'Instagram' | 'TikTok' | 'Meta Ads' | 'LinkedIn' | 'Google Ads' | 'Orgânico' | 'YouTube';
 export type Priority = 'Alta' | 'Média' | 'Baixa';
@@ -428,6 +430,192 @@ export const initialCampaigns: Campaign[] = [
     links: [],
     history: [],
   },
+  // ===== TASKS GUILHERME — LANÇAMENTO 15/03/2026 =====
+
+  // ─── BLOCO 1: AWARENESS — 10 VÍDEOS VIRAIS (deadline URGENTE: 22/02) ──────────
+  {
+    id: 'gui-aw-001',
+    name: '🔴 [AWARENESS] 10 Vídeos Virais — Prestadores',
+    channel: ['TikTok', 'Instagram', 'YouTube'],
+    status: 'Ativa',
+    kanbanStatus: 'desenvolvimento',
+    priority: 'Alta',
+    category: 'Awareness',
+    responsible: 'Guilherme',
+    avatar: 'GU',
+    startDate: '2026-02-20',
+    endDate: '2026-02-22',
+    budget: 0,
+    funnel: 'Topo',
+    objective: 'Produzir e entregar 10 vídeos virais para awareness de prestadores até 22/02 — pré-lançamento da plataforma em 15/03.',
+    audience: 'Prestadores autônomos 25-50 anos, Florianópolis e Campinas',
+    description: '⚠️ PRAZO CRÍTICO: 22/02/2026 — 2 dias. Guilherme é responsável por todos os criativos. Foco total em ganchos emocionais e virais para prestadores: comparativo de comissão, ASMR de trabalho, POV prestador, desafio viral, choque financeiro, reconhecimento de dor.',
+    videoFormat: 'Reels 9:16',
+    duration: 30,
+    aiTool: ['VEO 3.1', 'CapCut', 'Runway'],
+    viralMechanism: 'Choque financeiro',
+    hook: 'Você sabe quanto a plataforma tirou de você esse mês?',
+    cta: 'Link na bio → Cadastro grátis DQEF',
+    targetReach: 500000,
+    subtasks: [
+      { id: 'aw-v01', title: '🎬 Vídeo 01 — Choque Financeiro: "Faz a conta"', done: false },
+      { id: 'aw-v02', title: '🎬 Vídeo 02 — ASMR Serviço Perfeito (eletricista)', done: false },
+      { id: 'aw-v03', title: '🎬 Vídeo 03 — POV Prestador: agenda vazia → PIX recebido', done: false },
+      { id: 'aw-v04', title: '🎬 Vídeo 04 — Reconhecimento: "Você pagou e ele sumiu"', done: false },
+      { id: 'aw-v05', title: '🎬 Vídeo 05 — Comparativo: 27% vs 15% (gráfico animado)', done: false },
+      { id: 'aw-v06', title: '🎬 Vídeo 06 — ASMR Serviço Perfeito (piscineiro)', done: false },
+      { id: 'aw-v07', title: '🎬 Vídeo 07 — Indignação: "Trabalho 10h e ainda não escalo"', done: false },
+      { id: 'aw-v08', title: '🎬 Vídeo 08 — Desafio viral: "#FazAContaTu"', done: false },
+      { id: 'aw-v09', title: '🎬 Vídeo 09 — POV imersivo: câmera subjetiva total', done: false },
+      { id: 'aw-v10', title: '🎬 Vídeo 10 — Prova social: depoimento UGC prestador', done: false },
+      { id: 'aw-rev', title: '✅ Revisão final e export de todos os 10 vídeos', done: false },
+      { id: 'aw-pub', title: '🚀 Agendamento e publicação nos canais', done: false },
+    ],
+    links: [],
+    history: [
+      { date: '2026-02-20', action: '⚠️ Campanha criada — PRAZO: 22/02. Apenas 2 dias úteis.', user: 'Gabriel' },
+    ],
+  },
+
+  // ─── BLOCO 2: FEED INSTAGRAM — 3 POSTS FIXADOS (deadline: 12/03) ────────────
+  {
+    id: 'gui-feed-pins',
+    name: '📌 [FEED] 3 Posts Fixados — Inauguração 15/03',
+    channel: ['Instagram'],
+    status: 'Ativa',
+    kanbanStatus: 'ideia',
+    priority: 'Alta',
+    category: 'Conversão',
+    responsible: 'Guilherme',
+    avatar: 'GU',
+    startDate: '2026-02-23',
+    endDate: '2026-03-12',
+    budget: 0,
+    funnel: 'Fundo',
+    objective: 'Criar os 3 posts fixados do feed do Instagram da DQEF — âncora do perfil para novos visitantes chegando via campanha de awareness.',
+    audience: 'Prestadores autônomos que visitam o perfil pela primeira vez',
+    description: 'Os 3 pins são a vitrine da marca no Instagram. Quem clicar nos anúncios e chegar no perfil vai ver esses 3 conteúdos fixados no topo. Precisam ser impecáveis: qualidade institucional, clareza máxima e CTA irresistível.',
+    videoFormat: 'Reels 9:16',
+    aiTool: ['VEO 3.1', 'Midjourney', 'CapCut'],
+    viralMechanism: 'Prova social',
+    cta: 'Link na bio → Cadastro grátis',
+    targetReach: 50000,
+    subtasks: [
+      // PIN 1 — Tutorial Cadastro
+      { id: 'pin-1-roteiro', title: '📝 PIN 1 — Roteiro: Tutorial "Como se Cadastrar na Plataforma"', done: false },
+      { id: 'pin-1-grav', title: '🎬 PIN 1 — Gravação/Animação do tutorial passo a passo', done: false },
+      { id: 'pin-1-edit', title: '✂️ PIN 1 — Edição, legendas e motion (max 60s)', done: false },
+      { id: 'pin-1-aprov', title: '✅ PIN 1 — Aprovação Gabriel/Leandro e publicação fixada', done: false },
+      // PIN 2 — Institucional "Quem Somos"
+      { id: 'pin-2-roteiro', title: '📝 PIN 2 — Roteiro: Vídeo Institucional "Quem Somos — DQEF"', done: false },
+      { id: 'pin-2-grav', title: '🎬 PIN 2 — Produção: manifesto da marca + equipe + missão', done: false },
+      { id: 'pin-2-edit', title: '✂️ PIN 2 — Edição cinematográfica + identidade visual', done: false },
+      { id: 'pin-2-aprov', title: '✅ PIN 2 — Aprovação e publicação fixada', done: false },
+      // PIN 3 — Tutorial Uso da Plataforma
+      { id: 'pin-3-roteiro', title: '📝 PIN 3 — Roteiro: Tutorial "Como Usar a Plataforma"', done: false },
+      { id: 'pin-3-screen', title: '🎬 PIN 3 — Screen recording + narração do fluxo do app', done: false },
+      { id: 'pin-3-edit', title: '✂️ PIN 3 — Edição com animações de UI e CTA final', done: false },
+      { id: 'pin-3-aprov', title: '✅ PIN 3 — Aprovação e publicação fixada', done: false },
+    ],
+    links: [],
+    history: [
+      { date: '2026-02-20', action: 'Posts fixados planejados — deadline 12/03 para estar no ar antes da inauguração.', user: 'Gabriel' },
+    ],
+  },
+
+  // ─── BLOCO 3: FEED INSTAGRAM — GRID DE 9 POSTS (deadline: 14/03) ────────────
+  {
+    id: 'gui-feed-grid',
+    name: '🟠 [FEED] Grid de Lançamento — 9 Posts (4 vídeos + 2 carrosséis + 3 posts)',
+    channel: ['Instagram'],
+    status: 'Ativa',
+    kanbanStatus: 'ideia',
+    priority: 'Alta',
+    category: 'Awareness',
+    responsible: 'Guilherme',
+    avatar: 'GU',
+    startDate: '2026-02-23',
+    endDate: '2026-03-14',
+    budget: 0,
+    funnel: 'Topo',
+    objective: 'Montar o grid visual do Instagram com 9 posts que compõem a vitrine da plataforma no lançamento — com cadência de publicação e identidade visual coesa.',
+    audience: 'Prestadores autônomos de Florianópolis e Campinas, 25-50 anos',
+    description: 'O grid de 9 posts após os fixados define a identidade visual do perfil. Devem ser publicados em cadência estratégica nos dias anteriores à inauguração (08/03 a 14/03), construindo antecipação. Identidade visual laranja DQEF, minimalista e impactante.',
+    aiTool: ['VEO 3.1', 'Midjourney', 'CapCut', 'Runway'],
+    viralMechanism: 'Reconhecimento emocional',
+    cta: 'Cadastra grátis → link na bio',
+    targetReach: 80000,
+    subtasks: [
+      // 4 VÍDEOS
+      { id: 'grid-v1', title: '🎬 Vídeo 1 — "As Mãos Que Constroem" (manifesto visual, sem texto)', done: false },
+      { id: 'grid-v2', title: '🎬 Vídeo 2 — Bastidores da plataforma (equipe, tech, missão)', done: false },
+      { id: 'grid-v3', title: '🎬 Vídeo 3 — Depoimento real: prestador antes e depois da DQEF', done: false },
+      { id: 'grid-v4', title: '🎬 Vídeo 4 — Comparativo live: GetNinja vs DQEF (dados reais)', done: false },
+      // 2 CARROSSÉIS
+      { id: 'grid-c1', title: '🎠 Carrossel 1 — "5 razões para trocar de plataforma" (5 lâminas)', done: false },
+      { id: 'grid-c2', title: '🎠 Carrossel 2 — "Como a DQEF funciona?" (passo a passo visual)', done: false },
+      // 3 POSTS ESTÁTICOS
+      { id: 'grid-p1', title: '🖼️ Post 1 — Data reveal: "15/03 • Algo grande está chegando"', done: false },
+      { id: 'grid-p2', title: '🖼️ Post 2 — Infográfico: "Quanto você perde por mês?" (dados impactantes)', done: false },
+      { id: 'grid-p3', title: '🖼️ Post 3 — Manifesto da marca: frase + identidade visual', done: false },
+      // CALENDÁRIO
+      { id: 'grid-cal', title: '📅 Definir calendário de publicação (08/03 a 14/03, 1-2 por dia)', done: false },
+      { id: 'grid-rev', title: '✅ Revisão coesão visual do grid completo com Gabriel', done: false },
+    ],
+    links: [],
+    history: [
+      { date: '2026-02-20', action: 'Grid planejado — publicação escalonada de 08/03 a 14/03. Inauguração 15/03.', user: 'Gabriel' },
+    ],
+  },
+
+  // ─── BLOCO 4: CAMPANHA ENGAJAMENTO — PRESTADORES (deadline: 14/03) ──────────
+  {
+    id: 'gui-eng-prestadores',
+    name: '🎯 [ENGAJAMENTO] Campanha Prestadores — Pré-Lançamento (2 carrosséis + 4 vídeos + 3 posts/canal)',
+    channel: ['Instagram', 'TikTok'],
+    status: 'Aprovada',
+    kanbanStatus: 'ideia',
+    priority: 'Alta',
+    category: 'Engajamento',
+    responsible: 'Guilherme',
+    avatar: 'GU',
+    startDate: '2026-02-28',
+    endDate: '2026-03-14',
+    budget: 0,
+    funnel: 'Meio',
+    objective: 'Gerar engajamento profundo com o público de prestadores: cadastros, salvamentos, compartilhamentos e comentários — para validar demanda e calibrar alocação de budget para campanhas de clientes.',
+    audience: 'Prestadores autônomos já expostos à campanha de awareness — fase de decisão de cadastro',
+    description: '⚡ LÓGICA ESTRATÉGICA: Sem prestadores não há plataforma. O engajamento de prestadores valida a demanda real. O volume de cadastros de prestadores determinará a alocação de budget para campanhas de clientes — quanto mais prestadores, maior o investimento em atrair clientes. Esta campanha mede e amplifica esse ciclo.',
+    aiTool: ['VEO 3.1', 'CapCut', 'Midjourney'],
+    viralMechanism: 'Prova social',
+    cta: 'Salva, compartilha e se cadastra grátis',
+    targetReach: 120000,
+    subtasks: [
+      // 2 CARROSSÉIS
+      { id: 'eng-c1', title: '🎠 Carrossel 1 — "Quanto você vale? Descubra com a DQEF" (educacional + CTA)', done: false },
+      { id: 'eng-c2', title: '🎠 Carrossel 2 — "Prestador DQEF vs sem plataforma" (comparativo visual)', done: false },
+      // 4 VÍDEOS
+      { id: 'eng-v1', title: '🎬 Vídeo 1 (Instagram) — Reels: Prestador usando o app ao vivo', done: false },
+      { id: 'eng-v2', title: '🎬 Vídeo 2 (TikTok) — Dueto/resposta: "Qual é a sua profissão?"', done: false },
+      { id: 'eng-v3', title: '🎬 Vídeo 3 (Instagram) — Stories: Enquete + swipe up cadastro', done: false },
+      { id: 'eng-v4', title: '🎬 Vídeo 4 (TikTok) — POV: primeiro dia usando a DQEF', done: false },
+      // 3 POSTS POR CANAL
+      { id: 'eng-pi1', title: '🖼️ Post Instagram 1 — Depoimento UGC de prestador beta', done: false },
+      { id: 'eng-pi2', title: '🖼️ Post Instagram 2 — "Você trabalha hoje e recebe hoje" (dado + visual)', done: false },
+      { id: 'eng-pi3', title: '🖼️ Post Instagram 3 — CTA direto: "Vagas abertas para prestadores"', done: false },
+      { id: 'eng-pt1', title: '🖼️ Post TikTok 1 — Stitch: "Minha comissão antes e depois"', done: false },
+      { id: 'eng-pt2', title: '🖼️ Post TikTok 2 — Green screen: comparativo de comissões', done: false },
+      { id: 'eng-pt3', title: '🖼️ Post TikTok 3 — Trend + produto: som viral + CTA cadastro', done: false },
+      // INTELIGÊNCIA DE DADOS
+      { id: 'eng-intel', title: '📊 Definir métricas de aferição: cadastros/dia por canal (base para alocação em clientes)', done: false },
+      { id: 'eng-rev', title: '✅ Revisão final com Gabriel e aprovação da cadência de publicação', done: false },
+    ],
+    links: [],
+    history: [
+      { date: '2026-02-20', action: '🎯 Lógica definida: volume de cadastros de prestadores determina budget de campanhas de clientes.', user: 'Gabriel' },
+    ],
+  },
+
   // ===== SÉRIE O NINJA — 6 variações =====
   {
     id: 'camp-ninja-01',
