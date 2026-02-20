@@ -1,820 +1,799 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
-import {
-  initialCampaigns, Campaign, CampaignStatus, Channel, Priority,
-  ContentObjective, Funnel, VideoFormat, ViralMechanism, AITool, CampaignFrame
-} from '@/data/seedData';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { initialCampaigns, Campaign, CampaignStatus, Channel, ContentFormat, Priority, Funnel, KanbanStatus } from '@/data/seedData';
+import { initialContents, ContentItem } from '@/data/seedData';
+import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
+import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import {
-  Plus, Search, Edit2, Trash2, Film, Zap, BarChart2, Layers,
-  Copy, ChevronRight, X, Target, Users, Clock, DollarSign, TrendingUp
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue
+} from '@/components/ui/select';
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter
+} from '@/components/ui/dialog';
+import {
+  Megaphone, Plus, Sparkles, Target, Users, TrendingUp, Calendar,
+  DollarSign, AlertTriangle, CheckCircle2, Loader2, ChevronRight,
+  LayoutGrid, List, Brain, Zap, Copy, Eye, Trash2, PenLine,
+  ArrowRight, X, Info, RefreshCw,
 } from 'lucide-react';
-import { cn } from '@/lib/utils';
 
-const STATUS_COLORS: Record<CampaignStatus, string> = {
-  Rascunho: 'bg-muted text-muted-foreground',
-  Aprovada: 'bg-blue-500/20 text-blue-400',
-  Ativa: 'bg-green-500/20 text-green-400',
-  Pausada: 'bg-primary/20 text-primary',
-  Finalizada: 'bg-muted text-muted-foreground',
+// ─── Types ─────────────────────────────────────────────────────────────────────
+
+interface MetaFields {
+  brandEssence?: string;
+  uniqueValueProp?: string;
+  targetPersona?: { profile?: string; biggestPain?: string; dream?: string; demographics?: string };
+  toneRules?: { use?: string[]; avoid?: string[] };
+  keyMessages?: string[];
+  contentAngles?: string[];
+  currentCampaignFocus?: string;
+  ctaStyle?: string;
+  kpiPriorities?: string[];
+  forbiddenTopics?: string[];
+  promptContext?: string;
+  completenessScore?: number;
+}
+
+interface AiPlan {
+  campaignSummary: string;
+  angle: string;
+  hooks: string[];
+  keyMessage: string;
+  ctaMain: string;
+  viralLogic: string;
+  estimatedResults?: { reach?: string; engagement?: string; conversions?: string };
+  warnings?: string[];
+  kanbanTasks?: Array<{
+    title: string; description: string; format: ContentFormat; channel: Channel;
+    priority: Priority; status: KanbanStatus; daysFromStart: number;
+  }>;
+  calendarEntries?: Array<{
+    title: string; format: ContentFormat; channel: Channel;
+    daysFromStart: number; copy: string; responsible: string;
+  }>;
+}
+
+// ─── Status / color helpers ───────────────────────────────────────────────────
+
+const STATUS_CONFIG: Record<CampaignStatus, { label: string; color: string; dot: string }> = {
+  Rascunho:   { label: 'Rascunho',   color: 'bg-muted/60 text-muted-foreground border-border',             dot: 'bg-muted-foreground' },
+  Aprovada:   { label: 'Aprovada',   color: 'bg-blue-500/15 text-blue-400 border-blue-500/25',             dot: 'bg-blue-400' },
+  Ativa:      { label: 'Ativa',      color: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/25',   dot: 'bg-emerald-400' },
+  Pausada:    { label: 'Pausada',    color: 'bg-amber-500/15 text-amber-400 border-amber-500/25',          dot: 'bg-amber-400' },
+  Finalizada: { label: 'Finalizada', color: 'bg-muted/40 text-muted-foreground/70 border-border/50',       dot: 'bg-muted-foreground/50' },
 };
+
 const PRIORITY_COLORS: Record<Priority, string> = {
-  Alta: 'bg-red-500/20 text-red-400',
-  Média: 'bg-primary/20 text-primary',
-  Baixa: 'bg-green-500/20 text-green-400',
-};
-const CHANNEL_ICON: Record<string, string> = {
-  Instagram: '📸', TikTok: '🎵', 'Meta Ads': '📊', LinkedIn: '💼',
-  'Google Ads': '🔍', Orgânico: '🌱', YouTube: '▶️',
-};
-const FRAME_TYPE_COLORS: Record<string, string> = {
-  setup: 'border-l-teal-500',
-  disaster: 'border-l-red-500',
-  resolution: 'border-l-muted-foreground',
-  hero: 'border-l-primary',
-  cta: 'border-l-green-500',
+  Alta:  'bg-red-500/15 text-red-400 border-red-500/25',
+  Média: 'bg-amber-500/15 text-amber-400 border-amber-500/25',
+  Baixa: 'bg-muted/50 text-muted-foreground border-border',
 };
 
-const CHANNELS: Channel[] = ['Instagram', 'TikTok', 'Meta Ads', 'LinkedIn', 'Google Ads', 'Orgânico', 'YouTube'];
-const AI_TOOLS: AITool[] = ['VEO 3.1', 'Sora', 'Seedance', 'Midjourney', 'Runway', 'CapCut', 'Manual'];
-const VIDEO_FORMATS: VideoFormat[] = ['Reels 9:16', 'Shorts 9:16', 'Feed 1:1', 'Carrossel', 'Stories 9:16', 'Horizontal 16:9'];
-const VIRAL_MECHANISMS: ViralMechanism[] = [
-  'Choque financeiro', 'Reconhecimento emocional', 'POV imersivo',
-  'ASMR sensorial', 'Desafio/Challenge', 'Humor cômica',
-  'Indignação coletiva', 'Prova social',
-];
-
-const EMPTY_FORM: Partial<Campaign> = {
-  name: '', channel: ['Instagram'], status: 'Rascunho', priority: 'Média',
-  category: 'Awareness', funnel: 'Topo', objective: '', audience: '',
-  description: '', budget: 0, responsible: '',
-  startDate: '', endDate: '', kanbanStatus: 'ideia',
-  videoFormat: 'Reels 9:16', duration: 30, aiTool: [],
-  viralMechanism: undefined, hook: '', cta: '', caption: '',
-  impressions: 0, clicks: 0, leads: 0, conversions: 0,
-  cpc: 0, cpl: 0, roas: 0,
-  budgetPaid: 0, budgetOrganic: 0, targetReach: 0,
-  frames: [],
-  subtasks: [], links: [], history: [],
+const ANGLE_EMOJI: Record<string, string> = {
+  Orgulho: '🏆', Dinheiro: '💸', Urgência: '⏰', Raiva: '🔴', Alívio: '💚',
 };
 
-type ModalTab = 'info' | 'criativo' | 'metricas' | 'frames';
+const EMPTY_FORM = (): Partial<Campaign> => ({
+  name: '', objective: '', channel: 'Instagram' as Channel,
+  format: 'Carrossel' as ContentFormat, targetAudience: '', budget: '',
+  startDate: new Date().toISOString().split('T')[0], endDate: '',
+  priority: 'Alta' as Priority, status: 'Rascunho' as CampaignStatus,
+  funnel: 'Topo' as Funnel, responsible: '', description: '',
+  kpis: [], channels: [], formats: [], frames: [],
+});
 
-const MODAL_TABS: { id: ModalTab; label: string; icon: React.ReactNode }[] = [
-  { id: 'info', label: 'Info Básica', icon: <Target className="h-3.5 w-3.5" /> },
-  { id: 'criativo', label: 'Criativo', icon: <Film className="h-3.5 w-3.5" /> },
-  { id: 'metricas', label: 'Métricas', icon: <BarChart2 className="h-3.5 w-3.5" /> },
-  { id: 'frames', label: 'Frames AI', icon: <Layers className="h-3.5 w-3.5" /> },
-];
+// ─── Strategy Pill (shows meta-field context) ─────────────────────────────────
 
-function MultiSelect<T extends string>({
-  options, selected, onChange, renderLabel,
-}: {
-  options: T[];
-  selected: T[];
-  onChange: (v: T[]) => void;
-  renderLabel?: (v: T) => string;
-}) {
-  const toggle = (v: T) => {
-    if (selected.includes(v)) onChange(selected.filter(x => x !== v));
-    else onChange([...selected, v]);
-  };
+function StrategyPill({ label, value }: { label: string; value: string }) {
+  const { toast } = useToast();
   return (
-    <div className="flex flex-wrap gap-1.5">
-      {options.map(opt => (
-        <button
-          key={opt}
-          type="button"
-          onClick={() => toggle(opt)}
-          className={cn(
-            'rounded-full px-2.5 py-1 text-[10px] font-semibold border transition-all',
-            selected.includes(opt)
-              ? 'border-primary bg-primary/20 text-primary'
-              : 'border-border text-muted-foreground hover:border-primary/40'
-          )}>
-          {renderLabel ? renderLabel(opt) : opt}
-        </button>
-      ))}
+    <div
+      onClick={() => { navigator.clipboard.writeText(value); toast({ title: 'Copiado ✅', description: label }); }}
+      className="flex items-start gap-1.5 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 cursor-pointer hover:bg-primary/10 transition-colors group"
+      title="Clique para copiar"
+    >
+      <div className="flex-1 min-w-0">
+        <p className="text-[9px] font-bold uppercase tracking-wider text-primary/60 mb-0.5">{label}</p>
+        <p className="text-[11px] text-foreground/85 leading-snug line-clamp-2">{value}</p>
+      </div>
+      <Copy className="h-3 w-3 text-primary/30 group-hover:text-primary shrink-0 mt-0.5 transition-colors" />
     </div>
   );
 }
 
-function MetricInput({ label, value, onChange, prefix = '', suffix = '' }: {
-  label: string; value: number | undefined; onChange: (v: number) => void; prefix?: string; suffix?: string;
+// ─── Campaign Card ────────────────────────────────────────────────────────────
+
+function CampaignCard({
+  campaign,
+  onEdit,
+  onDelete,
+  onView,
+}: {
+  campaign: Campaign;
+  onEdit: () => void;
+  onDelete: () => void;
+  onView: () => void;
 }) {
+  const st = STATUS_CONFIG[campaign.status];
   return (
-    <div>
-      <label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</label>
-      <div className="relative mt-1">
-        {prefix && <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">{prefix}</span>}
-        <Input
-          type="number"
-          value={value ?? 0}
-          onChange={e => onChange(Number(e.target.value))}
-          className={cn('bg-background h-8 text-sm', prefix && 'pl-6', suffix && 'pr-8')}
-        />
-        {suffix && <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">{suffix}</span>}
+    <div
+      className="rounded-xl border border-border bg-card p-4 hover:border-primary/30 transition-all duration-200 group cursor-pointer"
+      onClick={onView}
+    >
+      <div className="flex items-start justify-between gap-3 mb-3">
+        <div className="flex-1 min-w-0">
+          <h3 className="text-sm font-bold text-foreground truncate">{campaign.name}</h3>
+          <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{campaign.objective}</p>
+        </div>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <span className={cn('flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold', st.color)}>
+            <span className={cn('h-1.5 w-1.5 rounded-full', st.dot)} />
+            {st.label}
+          </span>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap gap-1.5 mb-3">
+        <span className={cn('rounded-full border px-2 py-0.5 text-[10px] font-medium', PRIORITY_COLORS[campaign.priority])}>{campaign.priority}</span>
+        {campaign.channel && <span className="rounded-full border border-border bg-muted/30 px-2 py-0.5 text-[10px] text-muted-foreground">{campaign.channel}</span>}
+        {campaign.format && <span className="rounded-full border border-border bg-muted/30 px-2 py-0.5 text-[10px] text-muted-foreground">{campaign.format}</span>}
+        {campaign.funnel && <span className="rounded-full border border-border bg-muted/30 px-2 py-0.5 text-[10px] text-muted-foreground">{campaign.funnel}</span>}
+      </div>
+
+      {campaign.budget && (
+        <div className="flex items-center gap-1 text-xs text-muted-foreground mb-2">
+          <DollarSign className="h-3 w-3" />
+          <span>R$ {campaign.budget}</span>
+        </div>
+      )}
+
+      <div className="flex items-center justify-between pt-2 border-t border-border/50">
+        <span className="text-[10px] text-muted-foreground/60">
+          {campaign.startDate ? new Date(campaign.startDate + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }) : '—'}
+        </span>
+        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
+          <button onClick={onEdit} className="rounded p-1 hover:bg-muted transition-colors">
+            <PenLine className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground" />
+          </button>
+          <button onClick={onDelete} className="rounded p-1 hover:bg-destructive/15 transition-colors group/del">
+            <Trash2 className="h-3.5 w-3.5 text-muted-foreground group-hover/del:text-destructive" />
+          </button>
+        </div>
       </div>
     </div>
   );
 }
 
-function FrameCard({ frame, onCopy }: { frame: CampaignFrame; onCopy: (text: string) => void }) {
-  const [expanded, setExpanded] = useState(false);
-  const borderClass = FRAME_TYPE_COLORS[frame.type] || 'border-l-border';
-  return (
-    <div className={cn('border border-border border-l-2 rounded-md bg-background/50 overflow-hidden', borderClass)}>
-      <button
-        type="button"
-        onClick={() => setExpanded(e => !e)}
-        className="w-full flex items-center justify-between px-3 py-2 text-left hover:bg-muted/10 transition-colors"
-      >
-        <div className="flex items-center gap-2">
-          <span className="text-[9px] font-mono font-bold text-muted-foreground uppercase tracking-wider">{frame.label}</span>
-          <ChevronRight className={cn('h-3 w-3 text-muted-foreground transition-transform', expanded && 'rotate-90')} />
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-semibold text-foreground">{frame.title}</span>
-          <span className="text-[9px] font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded">{frame.timing}</span>
-        </div>
-      </button>
-      {expanded && (
-        <div className="px-3 pb-3 space-y-2">
-          <p className="text-[11px] text-muted-foreground italic">{frame.purpose}</p>
-          <div className="relative">
-            <div className="bg-muted/30 border border-border rounded p-2 font-mono text-[10px] text-foreground/70 leading-relaxed max-h-28 overflow-y-auto">
-              {frame.prompt}
-            </div>
-            <button
-              type="button"
-              onClick={() => onCopy(frame.prompt)}
-              className="absolute top-1.5 right-1.5 flex items-center gap-1 text-[9px] font-mono text-teal-400 hover:text-teal-300 transition-colors"
-            >
-              <Copy className="h-2.5 w-2.5" /> COPY
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
+// ─── Main ─────────────────────────────────────────────────────────────────────
 
 export default function Campanhas() {
+  const { toast } = useToast();
   const [campaigns, setCampaigns] = useLocalStorage<Campaign[]>('dqef-campaigns', initialCampaigns);
-  const [search, setSearch] = useState('');
+  const [, setKanbanCampaigns] = useLocalStorage<Campaign[]>('dqef-campaigns', initialCampaigns);
+  const [contents, setContents] = useLocalStorage<ContentItem[]>('dqef-contents', initialContents);
+
+  const [view, setView] = useState<'grid' | 'list'>('grid');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [form, setForm] = useState<Partial<Campaign>>(EMPTY_FORM);
   const [detailId, setDetailId] = useState<string | null>(null);
-  const [modalTab, setModalTab] = useState<ModalTab>('info');
-  const [copied, setCopied] = useState<string | null>(null);
+  const [form, setForm] = useState<Partial<Campaign>>(EMPTY_FORM());
 
-  const filtered = campaigns.filter(c => {
-    const matchSearch = search === '' || c.name.toLowerCase().includes(search.toLowerCase());
-    const matchStatus = filterStatus === 'all' || c.status === filterStatus;
-    return matchSearch && matchStatus;
-  });
+  // AI state
+  const [generating, setGenerating] = useState(false);
+  const [aiPlan, setAiPlan] = useState<AiPlan | null>(null);
+  const [extraInstructions, setExtraInstructions] = useState('');
+  const [showAiPanel, setShowAiPanel] = useState(false);
 
-  const openNew = () => { setForm(EMPTY_FORM); setEditingId(null); setModalTab('info'); setShowModal(true); };
-  const openEdit = (c: Campaign) => { setForm({ ...c }); setEditingId(c.id); setModalTab('info'); setShowModal(true); };
+  // Meta-fields from strategy
+  const [metafields, setMetafields] = useState<MetaFields | null>(null);
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('dqef_strategy_metafields_v1');
+      if (raw) setMetafields(JSON.parse(raw));
+    } catch { /* noop */ }
+  }, []);
 
-  const handleSave = () => {
-    if (!form.name?.trim()) return;
-    if (editingId) {
-      setCampaigns(prev => prev.map(c => c.id === editingId ? { ...c, ...form } as Campaign : c));
-    } else {
-      const newCamp: Campaign = {
-        ...EMPTY_FORM, ...form,
-        id: `camp-${Date.now()}`,
-        avatar: (form.responsible || 'TM').split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2),
-        history: [{ date: new Date().toISOString(), action: 'Campanha criada', user: form.responsible || 'Time Marketing' }],
-      } as Campaign;
-      setCampaigns(prev => [...prev, newCamp]);
-    }
-    setShowModal(false);
+  // Auto-fill form from meta-fields
+  const autofillFromStrategy = () => {
+    if (!metafields) return;
+    setForm(prev => ({
+      ...prev,
+      targetAudience: prev.targetAudience || metafields.targetPersona?.profile || '',
+      objective: prev.objective || metafields.currentCampaignFocus || '',
+    }));
+    toast({ title: 'Campos preenchidos ✅', description: 'Usamos os meta-fields da estratégia como base.' });
+  };
+
+  const detailCampaign = campaigns.find(c => c.id === detailId);
+
+  const openCreate = () => {
+    setEditingId(null);
+    setAiPlan(null);
+    setExtraInstructions('');
+    setForm(EMPTY_FORM());
+    setShowAiPanel(false);
+    setShowModal(true);
+  };
+
+  const openEdit = (c: Campaign) => {
+    setEditingId(c.id);
+    setAiPlan(null);
+    setExtraInstructions('');
+    setForm({ ...c });
+    setShowAiPanel(false);
+    setShowModal(true);
   };
 
   const handleDelete = (id: string) => {
     setCampaigns(prev => prev.filter(c => c.id !== id));
-    if (detailId === id) setDetailId(null);
+    toast({ title: 'Campanha removida' });
   };
 
-  const handleCopy = (text: string) => {
-    navigator.clipboard.writeText(text).catch(() => {});
-    setCopied(text.slice(0, 20));
-    setTimeout(() => setCopied(null), 2000);
+  const handleSave = () => {
+    if (!form.name?.trim()) {
+      toast({ title: 'Nome obrigatório', variant: 'destructive' });
+      return;
+    }
+    if (editingId) {
+      setCampaigns(prev => prev.map(c => c.id === editingId ? { ...c, ...form } as Campaign : c));
+      toast({ title: 'Campanha atualizada ✅' });
+    } else {
+      const newCampaign: Campaign = {
+        id: `camp-${Date.now()}`,
+        name: form.name!, objective: form.objective || '',
+        channel: form.channel || 'Instagram',
+        format: form.format || 'Carrossel',
+        targetAudience: form.targetAudience || '',
+        budget: form.budget || '', startDate: form.startDate || '',
+        endDate: form.endDate || '', priority: form.priority || 'Alta',
+        status: form.status || 'Rascunho', funnel: form.funnel || 'Topo',
+        responsible: form.responsible || 'Time Marketing',
+        description: form.description || '',
+        kpis: [], channels: [form.channel || 'Instagram'],
+        formats: [form.format || 'Carrossel'], frames: [],
+      };
+      setCampaigns(prev => [...prev, newCampaign]);
+      toast({ title: 'Campanha criada ✅' });
+    }
+    setShowModal(false);
   };
 
-  const setF = (patch: Partial<Campaign>) => setForm(f => ({ ...f, ...patch }));
+  // ── AI generation ──────────────────────────────────────────────────────────
 
-  const detailCampaign = campaigns.find(c => c.id === detailId);
+  const handleGenerateAI = async () => {
+    if (!form.name?.trim()) {
+      toast({ title: 'Dê um nome para a campanha', description: 'Pelo menos o nome é necessário para a IA gerar o plano.', variant: 'destructive' });
+      return;
+    }
+    setGenerating(true);
+    setAiPlan(null);
+    try {
+      const { data: result, error } = await supabase.functions.invoke('generate-campaign-plan', {
+        body: { campaignForm: form, strategyMetafields: metafields, extraInstructions },
+      });
+      if (error) throw error;
+      if (result?.error) throw new Error(result.error);
+      setAiPlan(result.plan as AiPlan);
+      setShowAiPanel(true);
+      toast({ title: 'Plano de campanha gerado ✅', description: 'Revise e aplique as sugestões ao Kanban e Calendário.' });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Erro desconhecido';
+      toast({ title: 'Erro ao gerar plano', description: msg, variant: 'destructive' });
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  // Apply AI plan → Kanban + Calendar
+  const handleApplyPlan = () => {
+    if (!aiPlan) return;
+
+    const startMs = form.startDate ? new Date(form.startDate + 'T12:00:00').getTime() : Date.now();
+
+    // First save the campaign
+    const savedId = editingId || `camp-${Date.now()}`;
+    const campaignName = form.name!;
+    if (editingId) {
+      setCampaigns(prev => prev.map(c => c.id === editingId ? { ...c, ...form, description: aiPlan.campaignSummary } as Campaign : c));
+    } else {
+      const newC: Campaign = {
+        id: savedId, name: campaignName,
+        objective: form.objective || aiPlan.keyMessage,
+        channel: form.channel || 'Instagram', format: form.format || 'Carrossel',
+        targetAudience: form.targetAudience || '', budget: form.budget || '',
+        startDate: form.startDate || '', endDate: form.endDate || '',
+        priority: form.priority || 'Alta', status: 'Aprovada',
+        funnel: form.funnel || 'Topo',
+        responsible: form.responsible || 'Time Marketing',
+        description: aiPlan.campaignSummary,
+        kpis: [], channels: [form.channel || 'Instagram'],
+        formats: [form.format || 'Carrossel'], frames: [],
+      };
+      setCampaigns(prev => [...prev, newC]);
+    }
+
+    // Add kanban tasks
+    const kanbanItems: Campaign[] = (aiPlan.kanbanTasks || []).map((t, i) => ({
+      id: `camp-${Date.now()}-k${i}`,
+      name: `[${campaignName}] ${t.title}`,
+      objective: t.description,
+      channel: t.channel, format: t.format,
+      targetAudience: '', budget: '',
+      startDate: new Date(startMs + t.daysFromStart * 86400000).toISOString().split('T')[0],
+      endDate: '', priority: t.priority,
+      status: t.status as CampaignStatus,
+      funnel: form.funnel || 'Topo',
+      responsible: form.responsible || 'Time Marketing',
+      description: t.description,
+      kpis: [], channels: [t.channel], formats: [t.format], frames: [],
+    }));
+    setKanbanCampaigns(prev => [...prev, ...kanbanItems]);
+
+    // Add calendar entries
+    const calItems: ContentItem[] = (aiPlan.calendarEntries || []).map((e, i) => ({
+      id: `cont-${Date.now()}-c${i}`,
+      title: e.title, format: e.format, channel: e.channel,
+      date: new Date(startMs + e.daysFromStart * 86400000).toISOString().split('T')[0],
+      status: 'Rascunho' as ContentItem['status'],
+      responsible: e.responsible || 'Time Marketing',
+      copy: e.copy || '',
+    }));
+    setContents(prev => [...prev, ...calItems]);
+
+    toast({
+      title: '🚀 Campanha aplicada!',
+      description: `${kanbanItems.length} tarefas no Kanban · ${calItems.length} entradas no Calendário`,
+    });
+    setShowModal(false);
+  };
+
+  // ── Filters ────────────────────────────────────────────────────────────────
+
+  const filtered = campaigns.filter(c =>
+    filterStatus === 'all' || c.status === filterStatus
+  );
+
+  const grouped = (Object.keys(STATUS_CONFIG) as CampaignStatus[]).reduce<Record<CampaignStatus, Campaign[]>>(
+    (acc, st) => { acc[st] = filtered.filter(c => c.status === st); return acc; },
+    {} as Record<CampaignStatus, Campaign[]>
+  );
+
+  const hasStrategy = !!metafields && (metafields.completenessScore ?? 0) > 0;
 
   return (
-    <div className="space-y-4 animate-fade-in">
-      {/* Controls */}
-      <div className="flex flex-col sm:flex-row gap-3">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input placeholder="Buscar campanhas..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9 bg-card border-border" />
+    <div className="h-full overflow-y-auto">
+      <div className="max-w-6xl mx-auto px-4 py-6 space-y-6">
+
+        {/* ── Header ─────────────────────────────────────────────────────── */}
+        <div className="flex items-start gap-4">
+          <div className="rounded-xl bg-primary/15 p-3 border border-primary/20">
+            <Megaphone className="h-5 w-5 text-primary" />
+          </div>
+          <div className="flex-1">
+            <h1 className="text-xl font-black text-foreground tracking-tight">Campanhas</h1>
+            <p className="text-sm text-muted-foreground">
+              {hasStrategy
+                ? `Estratégia ativa · Score ${metafields.completenessScore}% · IA vai usar esses dados na geração`
+                : 'Preencha a aba Estratégia para a IA gerar campanhas mais precisas'}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="flex rounded-lg border border-border overflow-hidden">
+              <button onClick={() => setView('grid')} className={cn('p-2 transition-colors', view === 'grid' ? 'bg-primary/20 text-primary' : 'text-muted-foreground hover:text-foreground')}>
+                <LayoutGrid className="h-4 w-4" />
+              </button>
+              <button onClick={() => setView('list')} className={cn('p-2 transition-colors', view === 'list' ? 'bg-primary/20 text-primary' : 'text-muted-foreground hover:text-foreground')}>
+                <List className="h-4 w-4" />
+              </button>
+            </div>
+            <Button onClick={openCreate} className="bg-primary text-primary-foreground hover:bg-primary/90 gap-2">
+              <Plus className="h-4 w-4" /> Nova campanha
+            </Button>
+          </div>
         </div>
-        <div className="flex gap-2 flex-wrap">
-          {['all', 'Rascunho', 'Aprovada', 'Ativa', 'Pausada', 'Finalizada'].map(s => (
-            <button key={s} onClick={() => setFilterStatus(s)}
-              className={cn('rounded-full border px-3 py-1.5 text-xs font-medium transition-all',
-                filterStatus === s ? 'border-primary bg-primary/20 text-primary' : 'border-border text-muted-foreground hover:border-primary/40')}>
-              {s === 'all' ? 'Todas' : s}
+
+        {/* ── Strategy context banner ────────────────────────────────────── */}
+        {hasStrategy && metafields && (
+          <div className="rounded-xl border border-primary/20 bg-gradient-to-br from-primary/8 to-transparent p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <Brain className="h-4 w-4 text-primary" />
+              <p className="text-sm font-bold text-foreground">Meta-Fields Ativos da Estratégia</p>
+              <span className="ml-auto rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-bold text-primary">
+                Score {metafields.completenessScore}%
+              </span>
+            </div>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {metafields.brandEssence && <StrategyPill label="Essência" value={metafields.brandEssence} />}
+              {metafields.targetPersona?.profile && <StrategyPill label="Persona" value={metafields.targetPersona.profile} />}
+              {metafields.currentCampaignFocus && <StrategyPill label="Foco Atual" value={metafields.currentCampaignFocus} />}
+              {metafields.targetPersona?.biggestPain && <StrategyPill label="Maior Dor" value={metafields.targetPersona.biggestPain} />}
+              {metafields.ctaStyle && <StrategyPill label="CTA Style" value={metafields.ctaStyle} />}
+              {metafields.keyMessages?.[0] && <StrategyPill label="Mensagem Central" value={metafields.keyMessages[0]} />}
+            </div>
+          </div>
+        )}
+
+        {/* ── Filter bar ─────────────────────────────────────────────────── */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {['all', ...Object.keys(STATUS_CONFIG)].map(st => (
+            <button
+              key={st}
+              onClick={() => setFilterStatus(st)}
+              className={cn(
+                'rounded-full border px-3 py-1 text-xs font-semibold transition-colors',
+                filterStatus === st
+                  ? 'bg-primary/20 text-primary border-primary/30'
+                  : 'border-border text-muted-foreground hover:text-foreground'
+              )}
+            >
+              {st === 'all' ? `Todas (${campaigns.length})` : `${st} (${grouped[st as CampaignStatus]?.length ?? 0})`}
             </button>
           ))}
         </div>
-        <Button onClick={openNew} className="gradient-orange text-white border-0 shrink-0">
-          <Plus className="mr-1.5 h-4 w-4" /> Nova Campanha
-        </Button>
-      </div>
 
-      <div className="flex gap-4">
-        {/* Table */}
-        <Card className={cn('border-border bg-card transition-all', detailId ? 'flex-1' : 'w-full')}>
-          <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border">
-                    {['Nome', 'Canal', 'Formato', 'Status', 'Prioridade', 'Budget', 'Período', 'Responsável', ''].map(h => (
-                      <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground whitespace-nowrap">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {filtered.map(c => (
-                    <tr key={c.id}
-                      onClick={() => setDetailId(d => d === c.id ? null : c.id)}
-                      className={cn('border-b border-border/50 cursor-pointer hover:bg-muted/20 transition-colors',
-                        detailId === c.id && 'bg-primary/5 border-primary/20')}>
-                      <td className="px-4 py-3 font-semibold text-foreground max-w-[160px] truncate">
-                        <div className="flex items-center gap-1.5">
-                          {c.frames && c.frames.length > 0 && <Film className="h-3 w-3 text-teal-400 shrink-0" />}
-                          {c.name}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex gap-1">
-                          {c.channel.slice(0, 2).map(ch => <span key={ch} className="text-xs">{CHANNEL_ICON[ch]}</span>)}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        {c.videoFormat && (
-                          <span className="text-[10px] font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded">{c.videoFormat}</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-medium', STATUS_COLORS[c.status])}>{c.status}</span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-medium', PRIORITY_COLORS[c.priority])}>{c.priority}</span>
-                      </td>
-                      <td className="px-4 py-3 text-foreground font-medium">R${(c.budget / 1000).toFixed(1)}k</td>
-                      <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">
-                        {c.startDate && `${new Date(c.startDate + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}${c.endDate ? ` – ${new Date(c.endDate + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}` : ''}`}
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-1.5">
-                          <div className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/20 text-[9px] font-bold text-primary">{c.avatar}</div>
-                          <span className="text-xs text-muted-foreground hidden xl:block">{c.responsible.split(' ')[0]}</span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex gap-1" onClick={e => e.stopPropagation()}>
-                          <button onClick={() => openEdit(c)} className="flex h-7 w-7 items-center justify-center rounded text-muted-foreground hover:bg-primary/20 hover:text-primary transition-colors">
-                            <Edit2 className="h-3.5 w-3.5" />
-                          </button>
-                          <button onClick={() => handleDelete(c.id)} className="flex h-7 w-7 items-center justify-center rounded text-muted-foreground hover:bg-red-500/20 hover:text-red-400 transition-colors">
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              {filtered.length === 0 && (
-                <div className="py-12 text-center text-muted-foreground">
-                  <p className="text-sm">Nenhuma campanha encontrada</p>
-                  <Button variant="ghost" onClick={openNew} className="mt-2 text-primary"><Plus className="mr-1 h-3 w-3" /> Criar campanha</Button>
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Detail Panel */}
-        {detailCampaign && (
-          <Card className="w-80 shrink-0 border-border bg-card animate-slide-in overflow-auto max-h-[70vh]">
-            <CardHeader className="pb-2">
-              <div className="flex items-start justify-between">
-                <CardTitle className="text-sm font-bold flex-1 pr-2">{detailCampaign.name}</CardTitle>
-                <button onClick={() => setDetailId(null)} className="text-muted-foreground hover:text-foreground">
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              </div>
-              <div className="flex flex-wrap gap-1 mt-1">
-                <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-medium', STATUS_COLORS[detailCampaign.status])}>{detailCampaign.status}</span>
-                <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-medium', PRIORITY_COLORS[detailCampaign.priority])}>{detailCampaign.priority}</span>
-                <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">{detailCampaign.funnel}</span>
-                {detailCampaign.videoFormat && (
-                  <span className="rounded-full bg-teal-500/10 px-2 py-0.5 text-[10px] text-teal-400 font-mono">{detailCampaign.videoFormat}</span>
-                )}
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-3 text-xs">
-              {/* Hook */}
-              {detailCampaign.hook && (
-                <div className="rounded-md bg-primary/5 border border-primary/20 p-2">
-                  <p className="font-bold text-primary uppercase tracking-wider text-[9px] mb-1">Hook</p>
-                  <p className="text-foreground italic">"{detailCampaign.hook}"</p>
-                </div>
-              )}
-              {/* Viral Mechanism */}
-              {detailCampaign.viralMechanism && (
-                <div className="flex items-center gap-2">
-                  <Zap className="h-3 w-3 text-primary shrink-0" />
-                  <span className="text-muted-foreground">Gatilho viral:</span>
-                  <span className="text-foreground font-medium">{detailCampaign.viralMechanism}</span>
-                </div>
-              )}
-              {/* Duração e AI */}
-              <div className="flex gap-3">
-                {detailCampaign.duration && (
-                  <div className="flex items-center gap-1.5">
-                    <Clock className="h-3 w-3 text-muted-foreground" />
-                    <span className="text-muted-foreground">{detailCampaign.duration}s</span>
-                  </div>
-                )}
-                {detailCampaign.aiTool && detailCampaign.aiTool.length > 0 && (
-                  <div className="flex items-center gap-1 flex-wrap">
-                    <Film className="h-3 w-3 text-teal-400" />
-                    {detailCampaign.aiTool.map(t => (
-                      <span key={t} className="text-[9px] font-mono text-teal-400 bg-teal-500/10 px-1.5 rounded">{t}</span>
-                    ))}
-                  </div>
-                )}
-              </div>
-              {/* Métricas */}
-              {(detailCampaign.impressions || 0) > 0 && (
-                <div>
-                  <p className="font-bold text-muted-foreground uppercase tracking-wider mb-1.5">Performance</p>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    {[
-                      { label: 'Impressões', value: ((detailCampaign.impressions || 0) / 1000).toFixed(0) + 'k' },
-                      { label: 'Clicks', value: ((detailCampaign.clicks || 0) / 1000).toFixed(1) + 'k' },
-                      { label: 'Leads', value: String(detailCampaign.leads || 0) },
-                      { label: 'ROAS', value: (detailCampaign.roas || 0) + 'x' },
-                    ].map(m => (
-                      <div key={m.label} className="rounded bg-muted/30 px-2 py-1.5 text-center">
-                        <p className="text-[9px] text-muted-foreground uppercase tracking-wider">{m.label}</p>
-                        <p className="text-sm font-bold text-foreground">{m.value}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {/* CTA e Caption */}
-              {detailCampaign.cta && (
-                <div>
-                  <p className="font-bold text-muted-foreground uppercase tracking-wider mb-1">CTA</p>
-                  <p className="text-foreground">{detailCampaign.cta}</p>
-                </div>
-              )}
-              {detailCampaign.caption && (
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <p className="font-bold text-muted-foreground uppercase tracking-wider">Caption</p>
-                    <button onClick={() => handleCopy(detailCampaign.caption || '')}
-                      className="flex items-center gap-1 text-[9px] text-teal-400 hover:text-teal-300">
-                      <Copy className="h-2.5 w-2.5" />
-                      {copied ? 'Copiado!' : 'Copiar'}
-                    </button>
-                  </div>
-                  <p className="text-foreground bg-muted/20 rounded p-1.5">{detailCampaign.caption}</p>
-                </div>
-              )}
-              {/* Frames */}
-              {detailCampaign.frames && detailCampaign.frames.length > 0 && (
-                <div>
-                  <p className="font-bold text-muted-foreground uppercase tracking-wider mb-1.5">Frames AI ({detailCampaign.frames.length})</p>
-                  <div className="space-y-1.5">
-                    {detailCampaign.frames.map(f => (
-                      <FrameCard key={f.id} frame={f} onCopy={handleCopy} />
-                    ))}
-                  </div>
-                </div>
-              )}
-              {/* Objetivo e Público */}
-              <div>
-                <p className="font-bold text-muted-foreground uppercase tracking-wider mb-1">Objetivo</p>
-                <p className="text-foreground">{detailCampaign.objective || '—'}</p>
-              </div>
-              <div>
-                <p className="font-bold text-muted-foreground uppercase tracking-wider mb-1">Público</p>
-                <p className="text-foreground">{detailCampaign.audience || '—'}</p>
-              </div>
-              {/* Subtasks */}
-              {detailCampaign.subtasks.length > 0 && (
-                <div>
-                  <p className="font-bold text-muted-foreground uppercase tracking-wider mb-1">Subtarefas</p>
-                  {detailCampaign.subtasks.map(st => (
-                    <div key={st.id} className="flex items-center gap-2 mb-1">
-                      <div className={cn('h-3.5 w-3.5 rounded border flex items-center justify-center shrink-0', st.done ? 'bg-primary border-primary' : 'border-border')}>
-                        {st.done && <span className="text-[8px] text-white font-bold">✓</span>}
-                      </div>
-                      <span className={cn(st.done && 'line-through text-muted-foreground')}>{st.title}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-              {/* Histórico */}
-              {detailCampaign.history.length > 0 && (
-                <div>
-                  <p className="font-bold text-muted-foreground uppercase tracking-wider mb-1">Histórico</p>
-                  {detailCampaign.history.map((h, i) => (
-                    <p key={i} className="text-muted-foreground mb-0.5">{h.date.split('T')[0]} — {h.action}</p>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        )}
-      </div>
-
-      {/* Create/Edit Modal */}
-      <Dialog open={showModal} onOpenChange={setShowModal}>
-        <DialogContent className="sm:max-w-2xl bg-card border-border max-h-[92vh] overflow-hidden flex flex-col p-0">
-          <DialogHeader className="px-6 pt-5 pb-0 shrink-0">
-            <DialogTitle className="text-base">{editingId ? 'Editar Campanha' : 'Nova Campanha'}</DialogTitle>
-          </DialogHeader>
-
-          {/* Tab navigation */}
-          <div className="flex gap-0 px-6 pt-3 border-b border-border shrink-0">
-            {MODAL_TABS.map(tab => (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => setModalTab(tab.id)}
-                className={cn(
-                  'flex items-center gap-1.5 px-4 py-2 text-xs font-semibold border-b-2 -mb-px transition-all',
-                  modalTab === tab.id
-                    ? 'border-primary text-primary'
-                    : 'border-transparent text-muted-foreground hover:text-foreground'
-                )}>
-                {tab.icon}
-                {tab.label}
-              </button>
+        {/* ── Campaign grid / list ───────────────────────────────────────── */}
+        {view === 'grid' ? (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {filtered.map(c => (
+              <CampaignCard
+                key={c.id}
+                campaign={c}
+                onEdit={() => openEdit(c)}
+                onDelete={() => handleDelete(c.id)}
+                onView={() => setDetailId(c.id)}
+              />
             ))}
+            <button
+              onClick={openCreate}
+              className="flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-primary/30 hover:border-primary/60 hover:bg-primary/5 transition-all min-h-[140px] text-sm text-muted-foreground hover:text-primary"
+            >
+              <Plus className="h-5 w-5" />
+              Nova campanha
+            </button>
           </div>
+        ) : (
+          <div className="space-y-2">
+            {filtered.map(c => {
+              const st = STATUS_CONFIG[c.status];
+              return (
+                <div key={c.id} className="flex items-center gap-4 rounded-xl border border-border bg-card px-4 py-3 hover:border-primary/30 transition-colors group cursor-pointer" onClick={() => setDetailId(c.id)}>
+                  <div className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border', c.priority === 'Alta' ? 'border-red-500/30 bg-red-500/10' : 'border-border bg-muted/30')}>
+                    <Megaphone className={cn('h-4 w-4', c.priority === 'Alta' ? 'text-red-400' : 'text-muted-foreground')} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-foreground truncate">{c.name}</p>
+                    <p className="text-xs text-muted-foreground truncate">{c.objective}</p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className={cn('flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold', st.color)}>
+                      <span className={cn('h-1.5 w-1.5 rounded-full', st.dot)} />{st.label}
+                    </span>
+                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
+                      <button onClick={() => openEdit(c)} className="rounded p-1 hover:bg-muted transition-colors"><PenLine className="h-3.5 w-3.5 text-muted-foreground" /></button>
+                      <button onClick={() => handleDelete(c.id)} className="rounded p-1 hover:bg-destructive/15 transition-colors group/del"><Trash2 className="h-3.5 w-3.5 text-muted-foreground group-hover/del:text-destructive" /></button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
 
-          {/* Tab content */}
-          <div className="flex-1 overflow-y-auto px-6 py-4">
+        {/* ── Create / Edit Modal ────────────────────────────────────────── */}
+        <Dialog open={showModal} onOpenChange={v => { if (!v) setShowModal(false); }}>
+          <DialogContent className="max-w-2xl bg-card border-border overflow-y-auto max-h-[90vh]">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Megaphone className="h-5 w-5 text-primary" />
+                {editingId ? 'Editar campanha' : 'Nova campanha'}
+                {hasStrategy && (
+                  <span className="ml-auto rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-bold text-primary flex items-center gap-1">
+                    <Brain className="h-3 w-3" /> Estratégia ativa
+                  </span>
+                )}
+              </DialogTitle>
+            </DialogHeader>
 
-            {/* ── TAB: Info Básica ── */}
-            {modalTab === 'info' && (
+            <div className="space-y-5">
+
+              {/* Strategy auto-fill hint */}
+              {hasStrategy && (
+                <div className="flex items-center justify-between rounded-lg bg-primary/8 border border-primary/20 px-3 py-2.5">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="h-3.5 w-3.5 text-primary" />
+                    <p className="text-xs text-foreground/80">Quer pré-preencher com a estratégia ativa?</p>
+                  </div>
+                  <button onClick={autofillFromStrategy} className="text-xs font-bold text-primary hover:underline">
+                    Preencher →
+                  </button>
+                </div>
+              )}
+
+              {/* Form */}
               <div className="space-y-4">
                 <div>
-                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Nome da Campanha *</label>
+                  <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">Nome da campanha *</label>
                   <Input
-                    placeholder="ex: O Ninja na Piscina"
-                    value={form.name ?? ''}
-                    onChange={e => setF({ name: e.target.value })}
-                    className="bg-background mt-1"
+                    placeholder="Ex: Campanha Prestadores — Fevereiro 2026"
+                    value={form.name || ''}
+                    onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                    className="bg-muted/20 border-border/60"
                   />
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Status</label>
-                    <Select value={form.status} onValueChange={v => setF({ status: v as CampaignStatus })}>
-                      <SelectTrigger className="bg-background mt-1"><SelectValue /></SelectTrigger>
-                      <SelectContent className="bg-card border-border">
-                        {(['Rascunho', 'Aprovada', 'Ativa', 'Pausada', 'Finalizada'] as CampaignStatus[]).map(s =>
-                          <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Prioridade</label>
-                    <Select value={form.priority} onValueChange={v => setF({ priority: v as Priority })}>
-                      <SelectTrigger className="bg-background mt-1"><SelectValue /></SelectTrigger>
-                      <SelectContent className="bg-card border-border">
-                        {(['Alta', 'Média', 'Baixa'] as Priority[]).map(p =>
-                          <SelectItem key={p} value={p}>{p}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Funil</label>
-                    <Select value={form.funnel} onValueChange={v => setF({ funnel: v as Funnel })}>
-                      <SelectTrigger className="bg-background mt-1"><SelectValue /></SelectTrigger>
-                      <SelectContent className="bg-card border-border">
-                        {(['Topo', 'Meio', 'Fundo'] as Funnel[]).map(f =>
-                          <SelectItem key={f} value={f}>{f}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Categoria</label>
-                    <Select value={form.category} onValueChange={v => setF({ category: v as ContentObjective })}>
-                      <SelectTrigger className="bg-background mt-1"><SelectValue /></SelectTrigger>
-                      <SelectContent className="bg-card border-border">
-                        {(['Awareness', 'Engajamento', 'Conversão', 'Retenção'] as ContentObjective[]).map(c =>
-                          <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
                 </div>
 
                 <div>
-                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">Canais</label>
-                  <MultiSelect<Channel>
-                    options={CHANNELS}
-                    selected={form.channel || []}
-                    onChange={v => setF({ channel: v })}
-                    renderLabel={v => `${CHANNEL_ICON[v]} ${v}`}
+                  <label className="text-xs font-semibold text-muted-foreground mb-1.5 block flex items-center gap-1">
+                    Objetivo
+                    {metafields?.currentCampaignFocus && (
+                      <span className="text-[9px] text-primary/70 font-normal ml-1">(sugestão: {metafields.currentCampaignFocus.slice(0, 40)}...)</span>
+                    )}
+                  </label>
+                  <Textarea
+                    placeholder="O que essa campanha precisa alcançar? Seja específico com números e prazo."
+                    value={form.objective || ''}
+                    onChange={e => setForm(f => ({ ...f, objective: e.target.value }))}
+                    rows={2}
+                    className="bg-muted/20 border-border/60 resize-none text-sm"
                   />
                 </div>
 
-                <Textarea
-                  placeholder="Objetivo da campanha"
-                  value={form.objective ?? ''}
-                  onChange={e => setF({ objective: e.target.value })}
-                  className="bg-background" rows={2}
-                />
-                <Textarea
-                  placeholder="Público-alvo"
-                  value={form.audience ?? ''}
-                  onChange={e => setF({ audience: e.target.value })}
-                  className="bg-background" rows={2}
-                />
-                <Textarea
-                  placeholder="Descrição"
-                  value={form.description ?? ''}
-                  onChange={e => setF({ description: e.target.value })}
-                  className="bg-background" rows={2}
-                />
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">Canal principal</label>
+                    <Select value={form.channel || 'Instagram'} onValueChange={v => setForm(f => ({ ...f, channel: v as Channel }))}>
+                      <SelectTrigger className="bg-muted/20 border-border/60"><SelectValue /></SelectTrigger>
+                      <SelectContent className="bg-card border-border">
+                        {['Instagram', 'TikTok', 'Meta Ads', 'LinkedIn', 'YouTube', 'Orgânico'].map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">Formato</label>
+                    <Select value={form.format || 'Carrossel'} onValueChange={v => setForm(f => ({ ...f, format: v as ContentFormat }))}>
+                      <SelectTrigger className="bg-muted/20 border-border/60"><SelectValue /></SelectTrigger>
+                      <SelectContent className="bg-card border-border">
+                        {['Post', 'Reels', 'Stories', 'Carrossel', 'Ads', 'Shorts'].map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
 
                 <div className="grid grid-cols-3 gap-3">
                   <div>
-                    <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Início</label>
-                    <Input type="date" value={form.startDate ?? ''} onChange={e => setF({ startDate: e.target.value })} className="bg-background mt-1" />
-                  </div>
-                  <div>
-                    <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Fim</label>
-                    <Input type="date" value={form.endDate ?? ''} onChange={e => setF({ endDate: e.target.value })} className="bg-background mt-1" />
-                  </div>
-                  <div>
-                    <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Responsável</label>
-                    <Input placeholder="Nome" value={form.responsible ?? ''} onChange={e => setF({ responsible: e.target.value })} className="bg-background mt-1" />
-                  </div>
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Budget Total (R$)</label>
-                  <Input type="number" value={form.budget ?? 0} onChange={e => setF({ budget: Number(e.target.value) })} className="bg-background mt-1" />
-                </div>
-              </div>
-            )}
-
-            {/* ── TAB: Criativo ── */}
-            {modalTab === 'criativo' && (
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Formato de Vídeo</label>
-                    <Select value={form.videoFormat} onValueChange={v => setF({ videoFormat: v as VideoFormat })}>
-                      <SelectTrigger className="bg-background mt-1"><SelectValue placeholder="Formato" /></SelectTrigger>
+                    <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">Prioridade</label>
+                    <Select value={form.priority || 'Alta'} onValueChange={v => setForm(f => ({ ...f, priority: v as Priority }))}>
+                      <SelectTrigger className="bg-muted/20 border-border/60"><SelectValue /></SelectTrigger>
                       <SelectContent className="bg-card border-border">
-                        {VIDEO_FORMATS.map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}
+                        {['Alta', 'Média', 'Baixa'].map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
                       </SelectContent>
                     </Select>
                   </div>
                   <div>
-                    <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Duração (segundos)</label>
-                    <Input
-                      type="number"
-                      value={form.duration ?? 30}
-                      onChange={e => setF({ duration: Number(e.target.value) })}
-                      className="bg-background mt-1"
-                      placeholder="30"
-                    />
+                    <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">Funil</label>
+                    <Select value={form.funnel || 'Topo'} onValueChange={v => setForm(f => ({ ...f, funnel: v as Funnel }))}>
+                      <SelectTrigger className="bg-muted/20 border-border/60"><SelectValue /></SelectTrigger>
+                      <SelectContent className="bg-card border-border">
+                        {['Topo', 'Meio', 'Fundo'].map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">Status</label>
+                    <Select value={form.status || 'Rascunho'} onValueChange={v => setForm(f => ({ ...f, status: v as CampaignStatus }))}>
+                      <SelectTrigger className="bg-muted/20 border-border/60"><SelectValue /></SelectTrigger>
+                      <SelectContent className="bg-card border-border">
+                        {Object.keys(STATUS_CONFIG).map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">Início</label>
+                    <Input type="date" value={form.startDate || ''} onChange={e => setForm(f => ({ ...f, startDate: e.target.value }))} className="bg-muted/20 border-border/60" />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">Término</label>
+                    <Input type="date" value={form.endDate || ''} onChange={e => setForm(f => ({ ...f, endDate: e.target.value }))} className="bg-muted/20 border-border/60" />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">Orçamento (R$)</label>
+                    <Input placeholder="Ex: 5000" value={form.budget || ''} onChange={e => setForm(f => ({ ...f, budget: e.target.value }))} className="bg-muted/20 border-border/60" />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">Responsável</label>
+                    <Input placeholder="Ex: Guilherme" value={form.responsible || ''} onChange={e => setForm(f => ({ ...f, responsible: e.target.value }))} className="bg-muted/20 border-border/60" />
                   </div>
                 </div>
 
                 <div>
-                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">Ferramentas AI</label>
-                  <MultiSelect<AITool>
-                    options={AI_TOOLS}
-                    selected={form.aiTool || []}
-                    onChange={v => setF({ aiTool: v })}
-                  />
-                </div>
-
-                <div>
-                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">
-                    <Zap className="h-3 w-3 inline mr-1 text-primary" />
-                    Mecanismo Viral
-                  </label>
-                  <div className="flex flex-wrap gap-1.5">
-                    {VIRAL_MECHANISMS.map(m => (
-                      <button
-                        key={m}
-                        type="button"
-                        onClick={() => setF({ viralMechanism: form.viralMechanism === m ? undefined : m as ViralMechanism })}
-                        className={cn(
-                          'rounded-full px-2.5 py-1 text-[10px] font-semibold border transition-all',
-                          form.viralMechanism === m
-                            ? 'border-primary bg-primary/20 text-primary'
-                            : 'border-border text-muted-foreground hover:border-primary/40'
-                        )}>
-                        {m}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div>
-                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Hook de Abertura</label>
+                  <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">Público-alvo</label>
                   <Input
-                    placeholder="A frase que prende nos primeiros 3 segundos..."
-                    value={form.hook ?? ''}
-                    onChange={e => setF({ hook: e.target.value })}
-                    className="bg-background mt-1"
+                    placeholder={metafields?.targetPersona?.profile || 'Descreva quem é o público desta campanha'}
+                    value={form.targetAudience || ''}
+                    onChange={e => setForm(f => ({ ...f, targetAudience: e.target.value }))}
+                    className="bg-muted/20 border-border/60"
                   />
-                  <p className="text-[10px] text-muted-foreground mt-1">Decisivo nos primeiros 3s para não rolar o feed</p>
-                </div>
-
-                <div>
-                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">CTA (Call-to-Action)</label>
-                  <Input
-                    placeholder="ex: Cadastra grátis. Link na bio."
-                    value={form.cta ?? ''}
-                    onChange={e => setF({ cta: e.target.value })}
-                    className="bg-background mt-1"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Caption / Legenda</label>
-                  <Textarea
-                    placeholder="Texto da legenda do post — emoji, hashtags, engajamento..."
-                    value={form.caption ?? ''}
-                    onChange={e => setF({ caption: e.target.value })}
-                    className="bg-background mt-1"
-                    rows={3}
-                  />
-                  {form.caption && (
-                    <p className="text-[10px] text-muted-foreground mt-1">{form.caption.length} caracteres</p>
-                  )}
                 </div>
               </div>
-            )}
 
-            {/* ── TAB: Métricas ── */}
-            {modalTab === 'metricas' && (
-              <div className="space-y-5">
-                <div>
-                  <div className="flex items-center gap-2 mb-3">
-                    <TrendingUp className="h-4 w-4 text-teal-400" />
-                    <p className="text-xs font-bold text-foreground uppercase tracking-wider">Performance Real</p>
+              {/* ── AI Generation section ─────────────────────────────── */}
+              <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 space-y-3">
+                <div className="flex items-center gap-2">
+                  <div className="rounded-lg bg-primary/15 p-1.5 border border-primary/20">
+                    <Sparkles className="h-4 w-4 text-primary" />
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <MetricInput label="Impressões" value={form.impressions} onChange={v => setF({ impressions: v })} />
-                    <MetricInput label="Cliques" value={form.clicks} onChange={v => setF({ clicks: v })} />
-                    <MetricInput label="Leads Gerados" value={form.leads} onChange={v => setF({ leads: v })} />
-                    <MetricInput label="Conversões" value={form.conversions} onChange={v => setF({ conversions: v })} />
+                  <div>
+                    <p className="text-sm font-bold text-foreground">Gerar plano de campanha com IA</p>
+                    <p className="text-[11px] text-muted-foreground">
+                      {hasStrategy ? 'Usa os meta-fields da estratégia + knowledge base' : 'Preencha os campos acima e deixe a IA sugerir tarefas e conteúdos'}
+                    </p>
                   </div>
                 </div>
 
-                <div className="border-t border-border pt-4">
-                  <div className="flex items-center gap-2 mb-3">
-                    <DollarSign className="h-4 w-4 text-primary" />
-                    <p className="text-xs font-bold text-foreground uppercase tracking-wider">Eficiência de Custo</p>
-                  </div>
-                  <div className="grid grid-cols-3 gap-3">
-                    <MetricInput label="CPC (R$)" value={form.cpc} onChange={v => setF({ cpc: v })} prefix="R$" />
-                    <MetricInput label="CPL (R$)" value={form.cpl} onChange={v => setF({ cpl: v })} prefix="R$" />
-                    <MetricInput label="ROAS" value={form.roas} onChange={v => setF({ roas: v })} suffix="x" />
-                  </div>
-                </div>
+                <Textarea
+                  placeholder="Instruções adicionais (opcional) — Ex: 'Foco em vídeos curtos no TikTok, tom mais urgente, usar dado da comissão de 10%'"
+                  value={extraInstructions}
+                  onChange={e => setExtraInstructions(e.target.value)}
+                  rows={2}
+                  className="bg-muted/20 border-border/60 resize-none text-sm placeholder:text-muted-foreground/40"
+                />
 
-                <div className="border-t border-border pt-4">
-                  <div className="flex items-center gap-2 mb-3">
-                    <Users className="h-4 w-4 text-blue-400" />
-                    <p className="text-xs font-bold text-foreground uppercase tracking-wider">Distribuição de Budget</p>
+                <Button
+                  onClick={handleGenerateAI}
+                  disabled={generating}
+                  variant="outline"
+                  className="w-full border-primary/40 text-primary hover:bg-primary/10 hover:border-primary/60 gap-2 font-bold"
+                >
+                  {generating
+                    ? <><Loader2 className="h-4 w-4 animate-spin" /> Gerando plano com IA...</>
+                    : <><Sparkles className="h-4 w-4" /> Gerar plano com IA</>
+                  }
+                </Button>
+              </div>
+
+              {/* ── AI Plan result ────────────────────────────────────── */}
+              {aiPlan && showAiPanel && (
+                <div className="rounded-xl border border-emerald-500/25 bg-emerald-500/5 p-4 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                      <p className="text-sm font-bold text-foreground">Plano gerado pela IA</p>
+                      {aiPlan.angle && (
+                        <span className="rounded-full bg-emerald-500/15 border border-emerald-500/25 px-2 py-0.5 text-[10px] font-bold text-emerald-400">
+                          {ANGLE_EMOJI[aiPlan.angle] || '🎯'} {aiPlan.angle}
+                        </span>
+                      )}
+                    </div>
+                    <button onClick={() => setShowAiPanel(false)} className="text-muted-foreground hover:text-foreground">
+                      <X className="h-4 w-4" />
+                    </button>
                   </div>
-                  <div className="grid grid-cols-3 gap-3">
-                    <MetricInput label="Pago (R$)" value={form.budgetPaid} onChange={v => setF({ budgetPaid: v })} prefix="R$" />
-                    <MetricInput label="Orgânico (R$)" value={form.budgetOrganic} onChange={v => setF({ budgetOrganic: v })} prefix="R$" />
-                    <MetricInput label="Alcance Alvo" value={form.targetReach} onChange={v => setF({ targetReach: v })} />
-                  </div>
-                  {/* Visual budget split */}
-                  {((form.budgetPaid || 0) + (form.budgetOrganic || 0)) > 0 && (
-                    <div className="mt-3">
-                      <div className="flex h-2 rounded-full overflow-hidden">
-                        <div
-                          className="bg-primary transition-all"
-                          style={{ width: `${((form.budgetPaid || 0) / ((form.budgetPaid || 0) + (form.budgetOrganic || 0))) * 100}%` }}
-                        />
-                        <div className="bg-teal-500 flex-1" />
-                      </div>
-                      <div className="flex justify-between text-[9px] text-muted-foreground mt-1">
-                        <span>🔶 Pago {Math.round(((form.budgetPaid || 0) / ((form.budgetPaid || 0) + (form.budgetOrganic || 0))) * 100)}%</span>
-                        <span>🌱 Orgânico {Math.round(((form.budgetOrganic || 0) / ((form.budgetPaid || 0) + (form.budgetOrganic || 0))) * 100)}%</span>
+
+                  <p className="text-xs text-foreground/80 leading-relaxed bg-muted/30 rounded-lg px-3 py-2">
+                    {aiPlan.campaignSummary}
+                  </p>
+
+                  {aiPlan.keyMessage && (
+                    <div className="rounded-lg bg-muted/30 px-3 py-2">
+                      <p className="text-[10px] font-bold text-muted-foreground/60 mb-0.5 uppercase tracking-wider">Mensagem Central</p>
+                      <p className="text-xs font-semibold text-foreground">{aiPlan.keyMessage}</p>
+                    </div>
+                  )}
+
+                  {aiPlan.hooks && aiPlan.hooks.length > 0 && (
+                    <div>
+                      <p className="text-[10px] font-bold text-muted-foreground/60 uppercase tracking-wider mb-1.5">Hooks sugeridos</p>
+                      <div className="space-y-1">
+                        {aiPlan.hooks.map((h, i) => (
+                          <div key={i} className="flex items-start gap-2 rounded-lg bg-muted/20 px-3 py-2">
+                            <span className="text-primary text-xs font-bold mt-0.5">{i + 1}</span>
+                            <p className="text-xs text-foreground/85">{h}</p>
+                          </div>
+                        ))}
                       </div>
                     </div>
                   )}
-                </div>
 
-                {/* Calculated KPIs */}
-                {(form.impressions || 0) > 0 && (form.clicks || 0) > 0 && (
-                  <div className="border-t border-border pt-4">
-                    <p className="text-xs font-bold text-foreground uppercase tracking-wider mb-3">KPIs Calculados</p>
-                    <div className="grid grid-cols-3 gap-2">
-                      {[
-                        { label: 'CTR', value: `${(((form.clicks || 0) / (form.impressions || 1)) * 100).toFixed(2)}%` },
-                        { label: 'Conv. Rate', value: `${(((form.conversions || 0) / (form.leads || 1)) * 100).toFixed(1)}%` },
-                        { label: 'Lead Rate', value: `${(((form.leads || 0) / (form.clicks || 1)) * 100).toFixed(1)}%` },
-                      ].map(k => (
-                        <div key={k.label} className="rounded-md bg-muted/30 border border-border p-2 text-center">
-                          <p className="text-[9px] text-muted-foreground uppercase tracking-wider">{k.label}</p>
-                          <p className="text-sm font-bold text-teal-400">{k.value}</p>
-                        </div>
-                      ))}
+                  <div className="grid grid-cols-2 gap-2 text-center">
+                    {aiPlan.kanbanTasks && (
+                      <div className="rounded-lg bg-blue-500/10 border border-blue-500/20 px-3 py-2">
+                        <p className="text-lg font-black text-blue-400">{aiPlan.kanbanTasks.length}</p>
+                        <p className="text-[10px] text-muted-foreground">tarefas no Kanban</p>
+                      </div>
+                    )}
+                    {aiPlan.calendarEntries && (
+                      <div className="rounded-lg bg-primary/10 border border-primary/20 px-3 py-2">
+                        <p className="text-lg font-black text-primary">{aiPlan.calendarEntries.length}</p>
+                        <p className="text-[10px] text-muted-foreground">entradas no Calendário</p>
+                      </div>
+                    )}
+                  </div>
+
+                  {aiPlan.warnings && aiPlan.warnings.length > 0 && (
+                    <div className="flex items-start gap-2 rounded-lg bg-amber-500/10 border border-amber-500/20 px-3 py-2">
+                      <AlertTriangle className="h-3.5 w-3.5 text-amber-400 shrink-0 mt-0.5" />
+                      <div>
+                        {aiPlan.warnings.map((w, i) => (
+                          <p key={i} className="text-[11px] text-amber-400">{w}</p>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                )}
-              </div>
-            )}
+                  )}
 
-            {/* ── TAB: Frames AI ── */}
-            {modalTab === 'frames' && (
-              <div className="space-y-3">
-                <div className="rounded-md bg-primary/5 border border-primary/20 p-3">
-                  <p className="text-[10px] font-mono text-primary uppercase tracking-wider mb-1">Série de Frames para AI Video Generation</p>
-                  <p className="text-xs text-muted-foreground">Cada frame é um prompt para VEO 3.1, Sora ou Seedance. Clique para expandir e copiar o prompt completo.</p>
+                  <Button
+                    onClick={handleApplyPlan}
+                    className="w-full bg-emerald-600 hover:bg-emerald-600/90 text-white font-bold gap-2"
+                  >
+                    <Zap className="h-4 w-4" />
+                    Aplicar plano → Kanban + Calendário
+                  </Button>
                 </div>
-
-                {(form.frames || []).length === 0 ? (
-                  <div className="text-center py-8 text-muted-foreground">
-                    <Layers className="h-8 w-8 mx-auto mb-2 opacity-30" />
-                    <p className="text-sm">Nenhum frame definido</p>
-                    <p className="text-xs mt-1">Frames são adicionados automaticamente nas campanhas da Série O Ninja</p>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {(form.frames || []).map(f => (
-                      <FrameCard key={f.id} frame={f} onCopy={handleCopy} />
-                    ))}
-                  </div>
-                )}
-
-                {copied && (
-                  <div className="fixed bottom-6 right-6 bg-teal-500 text-white text-xs px-3 py-2 rounded-full font-mono animate-fade-in z-50">
-                    ✓ Prompt copiado!
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-
-          <DialogFooter className="px-6 py-4 border-t border-border shrink-0">
-            <div className="flex items-center gap-2 w-full">
-              <div className="flex gap-1 mr-auto">
-                {MODAL_TABS.map((tab, i) => (
-                  <button
-                    key={tab.id}
-                    type="button"
-                    onClick={() => setModalTab(tab.id)}
-                    className={cn('h-1.5 rounded-full transition-all', modalTab === tab.id ? 'w-6 bg-primary' : 'w-1.5 bg-muted-foreground/30')}
-                  />
-                ))}
-              </div>
-              <Button variant="ghost" onClick={() => setShowModal(false)}>Cancelar</Button>
-              <Button onClick={handleSave} className="gradient-orange text-white border-0">
-                {editingId ? 'Salvar' : 'Criar Campanha'}
-              </Button>
+              )}
             </div>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
-      {/* Copy toast */}
-      {copied && (
-        <div className="fixed bottom-6 right-6 bg-teal-500 text-white text-xs px-3 py-2 rounded-full font-mono z-50">
-          ✓ Copiado!
-        </div>
-      )}
+            <DialogFooter className="gap-2">
+              <Button variant="ghost" onClick={() => setShowModal(false)}>Cancelar</Button>
+              <Button onClick={handleSave} className="bg-primary text-primary-foreground hover:bg-primary/90">
+                {editingId ? 'Salvar alterações' : 'Criar campanha'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* ── Detail drawer ─────────────────────────────────────────────── */}
+        {detailCampaign && (
+          <Dialog open={!!detailId} onOpenChange={v => { if (!v) setDetailId(null); }}>
+            <DialogContent className="max-w-lg bg-card border-border">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <Megaphone className="h-4 w-4 text-primary" />
+                  {detailCampaign.name}
+                </DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div className="flex flex-wrap gap-2">
+                  <span className={cn('flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-semibold', STATUS_CONFIG[detailCampaign.status].color)}>
+                    <span className={cn('h-1.5 w-1.5 rounded-full', STATUS_CONFIG[detailCampaign.status].dot)} />
+                    {detailCampaign.status}
+                  </span>
+                  <span className={cn('rounded-full border px-2 py-0.5 text-xs font-medium', PRIORITY_COLORS[detailCampaign.priority])}>{detailCampaign.priority}</span>
+                  {detailCampaign.funnel && <span className="rounded-full border border-border bg-muted/30 px-2 py-0.5 text-xs">{detailCampaign.funnel}</span>}
+                </div>
+                {detailCampaign.objective && <p className="text-sm text-foreground/85 leading-relaxed">{detailCampaign.objective}</p>}
+                {detailCampaign.description && detailCampaign.description !== detailCampaign.objective && (
+                  <p className="text-xs text-muted-foreground leading-relaxed border-t border-border pt-3">{detailCampaign.description}</p>
+                )}
+                <div className="grid grid-cols-2 gap-3 text-xs">
+                  {detailCampaign.channel && <div><p className="text-muted-foreground/60 mb-0.5">Canal</p><p className="font-medium">{detailCampaign.channel}</p></div>}
+                  {detailCampaign.format && <div><p className="text-muted-foreground/60 mb-0.5">Formato</p><p className="font-medium">{detailCampaign.format}</p></div>}
+                  {detailCampaign.budget && <div><p className="text-muted-foreground/60 mb-0.5">Orçamento</p><p className="font-medium">R$ {detailCampaign.budget}</p></div>}
+                  {detailCampaign.responsible && <div><p className="text-muted-foreground/60 mb-0.5">Responsável</p><p className="font-medium">{detailCampaign.responsible}</p></div>}
+                  {detailCampaign.startDate && <div><p className="text-muted-foreground/60 mb-0.5">Início</p><p className="font-medium">{new Date(detailCampaign.startDate + 'T12:00:00').toLocaleDateString('pt-BR')}</p></div>}
+                  {detailCampaign.endDate && <div><p className="text-muted-foreground/60 mb-0.5">Término</p><p className="font-medium">{new Date(detailCampaign.endDate + 'T12:00:00').toLocaleDateString('pt-BR')}</p></div>}
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="ghost" onClick={() => setDetailId(null)}>Fechar</Button>
+                <Button onClick={() => { setDetailId(null); openEdit(detailCampaign); }} className="bg-primary text-primary-foreground hover:bg-primary/90">
+                  <PenLine className="mr-1.5 h-4 w-4" /> Editar
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        )}
+
+      </div>
     </div>
   );
 }
