@@ -14,6 +14,62 @@ export type Database = {
   }
   public: {
     Tables: {
+      forum_messages: {
+        Row: {
+          author_initials: string
+          author_name: string
+          author_role: string
+          content: string
+          created_at: string
+          id: string
+          is_ai: boolean
+          is_pinned: boolean
+          message_type: string
+          metadata: Json | null
+          reply_to: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          author_initials?: string
+          author_name: string
+          author_role?: string
+          content: string
+          created_at?: string
+          id?: string
+          is_ai?: boolean
+          is_pinned?: boolean
+          message_type?: string
+          metadata?: Json | null
+          reply_to?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          author_initials?: string
+          author_name?: string
+          author_role?: string
+          content?: string
+          created_at?: string
+          id?: string
+          is_ai?: boolean
+          is_pinned?: boolean
+          message_type?: string
+          metadata?: Json | null
+          reply_to?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "forum_messages_reply_to_fkey"
+            columns: ["reply_to"]
+            isOneToOne: false
+            referencedRelation: "forum_messages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       media_library: {
         Row: {
           category: string | null
