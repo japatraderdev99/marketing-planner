@@ -78,6 +78,158 @@ const PERSONAS = [
 const CHANNELS = ['Instagram Feed', 'Stories', 'TikTok', 'LinkedIn'];
 const TONES = ['Peer-to-peer', 'Editorial', 'Direto ao ponto'];
 
+// ─── Creative Formats with safe zones ────────────────────────────────────────
+export interface CreativeFormat {
+  id: string;
+  label: string;
+  platform: string;
+  width: number;   // real export px
+  height: number;  // real export px
+  ratio: string;
+  // Safe zone padding in px (at export resolution) to avoid UI chrome
+  safeZone: { top: number; right: number; bottom: number; left: number };
+  notes?: string;
+}
+
+export const CREATIVE_FORMATS: CreativeFormat[] = [
+  // ── Instagram ──────────────────────────────────────────────────────────────
+  {
+    id: 'ig-feed-4x5',
+    label: 'Feed 4:5',
+    platform: 'Instagram',
+    width: 1080, height: 1350, ratio: '4:5',
+    safeZone: { top: 90, right: 90, bottom: 90, left: 90 },
+    notes: 'Ocupa mais espaço no feed — maior impacto',
+  },
+  {
+    id: 'ig-feed-1x1',
+    label: 'Feed 1:1',
+    platform: 'Instagram',
+    width: 1080, height: 1080, ratio: '1:1',
+    safeZone: { top: 90, right: 90, bottom: 90, left: 90 },
+  },
+  {
+    id: 'ig-stories',
+    label: 'Stories / Reels',
+    platform: 'Instagram',
+    width: 1080, height: 1920, ratio: '9:16',
+    // Top 250px = status bar + profile; Bottom 350px = CTA strip + swipe-up zone
+    safeZone: { top: 250, right: 90, bottom: 350, left: 90 },
+    notes: 'Zona segura: evitar 250px topo e 350px base',
+  },
+  {
+    id: 'ig-feed-landscape',
+    label: 'Feed Paisagem',
+    platform: 'Instagram',
+    width: 1080, height: 566, ratio: '1.91:1',
+    safeZone: { top: 60, right: 90, bottom: 60, left: 90 },
+  },
+  // ── TikTok ─────────────────────────────────────────────────────────────────
+  {
+    id: 'tiktok-vertical',
+    label: 'TikTok Vertical',
+    platform: 'TikTok',
+    width: 1080, height: 1920, ratio: '9:16',
+    // Top 200px = TikTok nav; Bottom 400px = actions + nav bar
+    safeZone: { top: 200, right: 120, bottom: 400, left: 120 },
+    notes: 'Evitar 200px topo e 400px base — botões de ação TikTok',
+  },
+  {
+    id: 'tiktok-square',
+    label: 'TikTok Quadrado',
+    platform: 'TikTok',
+    width: 1080, height: 1080, ratio: '1:1',
+    safeZone: { top: 80, right: 80, bottom: 80, left: 80 },
+  },
+  // ── Facebook / Meta ────────────────────────────────────────────────────────
+  {
+    id: 'fb-feed-1x1',
+    label: 'Facebook Feed',
+    platform: 'Facebook',
+    width: 1080, height: 1080, ratio: '1:1',
+    safeZone: { top: 90, right: 90, bottom: 90, left: 90 },
+  },
+  {
+    id: 'fb-stories',
+    label: 'Facebook Stories',
+    platform: 'Facebook',
+    width: 1080, height: 1920, ratio: '9:16',
+    safeZone: { top: 280, right: 90, bottom: 380, left: 90 },
+    notes: 'Zona segura: 280px topo, 380px base',
+  },
+  // ── LinkedIn ───────────────────────────────────────────────────────────────
+  {
+    id: 'li-feed-1x1',
+    label: 'LinkedIn Feed',
+    platform: 'LinkedIn',
+    width: 1200, height: 1200, ratio: '1:1',
+    safeZone: { top: 100, right: 100, bottom: 100, left: 100 },
+  },
+  {
+    id: 'li-landscape',
+    label: 'LinkedIn Landscape',
+    platform: 'LinkedIn',
+    width: 1200, height: 628, ratio: '1.91:1',
+    safeZone: { top: 60, right: 100, bottom: 60, left: 100 },
+  },
+  // ── Google Display ─────────────────────────────────────────────────────────
+  {
+    id: 'gd-medium-rect',
+    label: 'Medium Rectangle',
+    platform: 'Google Display',
+    width: 300, height: 250, ratio: '6:5',
+    safeZone: { top: 16, right: 16, bottom: 16, left: 16 },
+    notes: 'Formato #1 em volume global',
+  },
+  {
+    id: 'gd-leaderboard',
+    label: 'Leaderboard',
+    platform: 'Google Display',
+    width: 728, height: 90, ratio: '8.09:1',
+    safeZone: { top: 8, right: 16, bottom: 8, left: 16 },
+    notes: 'Maior volume de impressões',
+  },
+  {
+    id: 'gd-half-page',
+    label: 'Half Page',
+    platform: 'Google Display',
+    width: 300, height: 600, ratio: '1:2',
+    safeZone: { top: 24, right: 20, bottom: 24, left: 20 },
+    notes: 'Impacto máximo — premium inventory',
+  },
+  {
+    id: 'gd-responsive-land',
+    label: 'Responsive 1.91:1',
+    platform: 'Google Display',
+    width: 1200, height: 628, ratio: '1.91:1',
+    safeZone: { top: 60, right: 80, bottom: 60, left: 80 },
+    notes: 'Google adapta para qualquer slot',
+  },
+  {
+    id: 'gd-responsive-sq',
+    label: 'Responsive 1:1',
+    platform: 'Google Display',
+    width: 1200, height: 1200, ratio: '1:1',
+    safeZone: { top: 80, right: 80, bottom: 80, left: 80 },
+  },
+  // ── YouTube ────────────────────────────────────────────────────────────────
+  {
+    id: 'yt-thumbnail',
+    label: 'YT Thumbnail',
+    platform: 'YouTube',
+    width: 1280, height: 720, ratio: '16:9',
+    safeZone: { top: 60, right: 80, bottom: 60, left: 80 },
+  },
+  {
+    id: 'yt-shorts',
+    label: 'YouTube Shorts',
+    platform: 'YouTube',
+    width: 1080, height: 1920, ratio: '9:16',
+    safeZone: { top: 220, right: 80, bottom: 420, left: 80 },
+    notes: 'Evitar 220px topo e 420px base — interface YT',
+  },
+];
+
 const SLIDE_BG = '#E8603C';
 
 const BG_COLORS: Record<string, string> = {
@@ -148,12 +300,30 @@ interface SlidePreviewProps {
   slide: SlideOutput;
   imageUrl?: string;
   slideRef?: React.RefObject<HTMLDivElement>;
+  format?: CreativeFormat;
+  /** When true, renders at exact export dimensions (offscreen). When false (default), renders responsively for UI display */
+  exportMode?: boolean;
 }
 
-function SlidePreview({ slide, imageUrl, slideRef }: SlidePreviewProps) {
+function SlidePreview({ slide, imageUrl, slideRef, format, exportMode = false }: SlidePreviewProps) {
   const bg = BG_COLORS[slide.bgStyle] ?? SLIDE_BG;
   const isDataSlide = slide.layout === 'number-dominant';
   const isCTA = slide.layout === 'cta-clean';
+
+  // Determine aspect ratio from format or default to 4:5
+  const fmt = format ?? CREATIVE_FORMATS[0];
+  const aspectRatio = `${fmt.width}/${fmt.height}`;
+
+  // Safe zone: convert real-px safe zone to % for fluid display, or use px directly in export mode
+  const sz = fmt.safeZone;
+  const paddingStyle = exportMode
+    ? { paddingTop: sz.top, paddingRight: sz.right, paddingBottom: sz.bottom, paddingLeft: sz.left }
+    : {
+        paddingTop: `${(sz.top / fmt.height) * 100}%`,
+        paddingRight: `${(sz.right / fmt.width) * 100}%`,
+        paddingBottom: `${(sz.bottom / fmt.height) * 100}%`,
+        paddingLeft: `${(sz.left / fmt.width) * 100}%`,
+      };
 
   const renderHeadline = (headline: string, highlight?: string) => {
     if (!highlight || !headline.toLowerCase().includes(highlight.toLowerCase())) {
@@ -175,21 +345,24 @@ function SlidePreview({ slide, imageUrl, slideRef }: SlidePreviewProps) {
     );
   };
 
+  const exportDimensions = exportMode ? { width: fmt.width, height: fmt.height } : {};
+
   return (
     <div
       ref={slideRef}
       style={{
         background: bg,
-        aspectRatio: '4/5',
-        width: '100%',
+        aspectRatio: exportMode ? undefined : aspectRatio,
+        ...exportDimensions,
+        width: exportMode ? fmt.width : '100%',
         position: 'relative',
-        borderRadius: '8px',
+        borderRadius: exportMode ? '0' : '8px',
         overflow: 'hidden',
-      display: 'flex',
+        display: 'flex',
         flexDirection: 'column',
         justifyContent: isDataSlide ? 'center' : isCTA ? 'center' : 'flex-end',
         alignItems: isCTA ? 'center' : 'flex-start',
-        padding: '36px 32px',
+        ...paddingStyle,
         boxSizing: 'border-box',
       }}
     >
@@ -330,16 +503,18 @@ interface SlideCardProps {
   mediaLibraryCount: number;
   userId: string | null;
   onLibraryChange: () => void;
+  format: CreativeFormat;
 }
 
 function buildGenericImagePrompt(slide: SlideOutput): string {
   return `Editorial photography for a Brazilian service brand carousel slide. Style: documentary, natural light, authentic moment. The slide headline is "${slide.headline}". Create a background image that evokes this concept — no text, no overlays, no logos. The image will have a semi-transparent orange (#E8603C) overlay, so use high-contrast composition. Shot on Canon EOS R5, 35mm lens, f/2.8. Professional but human.`;
 }
 
-function SlideCard({ slide, imageUrl, isGenerating, onGenerateImage, onClearImage, onApplyLibraryImage, mediaLibraryCount, userId, onLibraryChange }: SlideCardProps) {
+function SlideCard({ slide, imageUrl, isGenerating, onGenerateImage, onClearImage, onApplyLibraryImage, mediaLibraryCount, userId, onLibraryChange, format }: SlideCardProps) {
   const { toast } = useToast();
   const [expanded, setExpanded] = useState(false);
   const slideRef = useRef<HTMLDivElement>(null);
+  const exportRef = useRef<HTMLDivElement>(null);
   const uploadInputRef = useRef<HTMLInputElement>(null);
   const [exporting, setExporting] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
@@ -367,15 +542,24 @@ function SlideCard({ slide, imageUrl, isGenerating, onGenerateImage, onClearImag
   };
 
   const handleExport = async () => {
-    const el = slideRef.current;
+    const el = exportRef.current;
     if (!el) return;
     setExporting(true);
     try {
-      const dataUrl = await toPng(el, { pixelRatio: 2, cacheBust: true, style: { borderRadius: '0' } });
+      // Export at exact real pixel dimensions — no pixelRatio scaling needed since element is already full-res
+      const dataUrl = await toPng(el, {
+        cacheBust: true,
+        width: format.width,
+        height: format.height,
+        style: { borderRadius: '0' },
+      });
       const link = document.createElement('a');
-      link.download = `dqef-slide-${String(slide.number).padStart(2, '0')}.png`;
+      link.download = `dqef-slide-${String(slide.number).padStart(2, '0')}-${format.width}x${format.height}.png`;
       link.href = dataUrl;
       link.click();
+      toast({ title: `PNG ${format.width}×${format.height}px exportado ✅`, description: `${format.label} — ${format.platform}` });
+    } catch (err) {
+      toast({ title: 'Erro ao exportar', description: String(err), variant: 'destructive' });
     } finally {
       setExporting(false);
     }
@@ -476,9 +660,9 @@ function SlideCard({ slide, imageUrl, isGenerating, onGenerateImage, onClearImag
   return (
     <div className="rounded-xl border border-border overflow-hidden bg-card flex flex-col">
 
-      {/* ── Slide preview ── */}
+      {/* ── Slide preview (display — fluid) ── */}
       <div className="p-3">
-        <SlidePreview slide={editedSlide} imageUrl={imageUrl} slideRef={slideRef} />
+        <SlidePreview slide={editedSlide} imageUrl={imageUrl} slideRef={slideRef} format={format} />
       </div>
 
       {/* ── Quick actions bar ── */}
@@ -706,9 +890,9 @@ function SlideCard({ slide, imageUrl, isGenerating, onGenerateImage, onClearImag
         </div>
       )}
 
-      {/* Hidden full-res ref for PNG export */}
-      <div style={{ position: 'absolute', left: '-9999px', top: 0, width: '400px', pointerEvents: 'none' }}>
-        <SlidePreview slide={editedSlide} imageUrl={imageUrl} slideRef={slideRef} />
+      {/* Offscreen full-res node for PNG export */}
+      <div style={{ position: 'fixed', left: '-99999px', top: 0, pointerEvents: 'none', zIndex: -1 }}>
+        <SlidePreview slide={editedSlide} imageUrl={imageUrl} slideRef={exportRef} format={format} exportMode />
       </div>
     </div>
   );
@@ -1463,6 +1647,7 @@ export default function AiCarrosseis() {
   const [tone, setTone] = useState('Peer-to-peer');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<{ carousel: CarouselOutput; autonomous: boolean } | null>(null);
+  const [selectedFormat, setSelectedFormat] = useState<CreativeFormat>(CREATIVE_FORMATS[0]);
 
   // Per-slide image state
   const [slideImages, setSlideImages] = useState<Record<number, string>>({});
@@ -1704,6 +1889,63 @@ export default function AiCarrosseis() {
                     </div>
                   </div>
 
+                  {/* Format selector */}
+                  <div>
+                    <p className="text-xs font-bold text-muted-foreground tracking-widest mb-2.5">FORMATO DE SAÍDA</p>
+                    <p className="text-[10px] text-muted-foreground mb-2 leading-relaxed">
+                      O PNG exportado terá exatamente essas dimensões com zonas de segurança aplicadas.
+                    </p>
+                    {/* Group by platform */}
+                    {Array.from(new Set(CREATIVE_FORMATS.map(f => f.platform))).map(platform => (
+                      <div key={platform} className="mb-3">
+                        <p className="text-[9px] font-bold text-muted-foreground/50 tracking-[0.15em] uppercase mb-1.5">{platform}</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {CREATIVE_FORMATS.filter(f => f.platform === platform).map(fmt => (
+                            <button
+                              key={fmt.id}
+                              onClick={() => setSelectedFormat(fmt)}
+                              title={`${fmt.width}×${fmt.height}px${fmt.notes ? ' — ' + fmt.notes : ''}`}
+                              className={cn(
+                                'group relative rounded-lg border px-2.5 py-1.5 text-left transition-all',
+                                selectedFormat.id === fmt.id
+                                  ? 'border-primary bg-primary/15 text-primary'
+                                  : 'border-border text-muted-foreground hover:border-border/70 hover:text-foreground'
+                              )}
+                            >
+                              {/* Aspect ratio mini-preview */}
+                              <div className="flex items-center gap-2">
+                                <div
+                                  className={cn(
+                                    'rounded-sm border flex-shrink-0',
+                                    selectedFormat.id === fmt.id ? 'border-primary bg-primary/30' : 'border-border bg-muted/40'
+                                  )}
+                                  style={{
+                                    width: Math.round(Math.min(22, 22 * (fmt.width / fmt.height))),
+                                    height: Math.round(Math.min(22, 22 * (fmt.height / fmt.width))),
+                                  }}
+                                />
+                                <div>
+                                  <p className="text-[10px] font-semibold leading-none">{fmt.label}</p>
+                                  <p className="text-[9px] text-muted-foreground/70 leading-none mt-0.5">{fmt.width}×{fmt.height}</p>
+                                </div>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                    {/* Selected format info */}
+                    <div className="mt-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 flex items-center justify-between gap-2">
+                      <div>
+                        <p className="text-[10px] font-bold text-primary">{selectedFormat.platform} · {selectedFormat.label}</p>
+                        <p className="text-[10px] text-muted-foreground">{selectedFormat.width}×{selectedFormat.height}px · {selectedFormat.ratio}</p>
+                      </div>
+                      {selectedFormat.notes && (
+                        <p className="text-[9px] text-muted-foreground italic max-w-[120px] text-right leading-snug">{selectedFormat.notes}</p>
+                      )}
+                    </div>
+                  </div>
+
                   {/* Generate button */}
                   <Button
                     onClick={handleGenerate}
@@ -1815,6 +2057,7 @@ export default function AiCarrosseis() {
                       mediaLibraryCount={library.length}
                       userId={userId}
                       onLibraryChange={fetchLibrary}
+                      format={selectedFormat}
                     />
                   ))}
                 </div>
