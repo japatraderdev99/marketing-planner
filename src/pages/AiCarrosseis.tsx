@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { Layers, Wand2, Copy, Check, Download, ChevronDown, ChevronUp, ImageIcon, Video, Zap, RefreshCw, Image, Minimize2, Shuffle, Upload, Trash2, Library, X, Star } from 'lucide-react';
+import { Layers, Wand2, Copy, Check, Download, ChevronDown, ChevronUp, ImageIcon, Video, Zap, RefreshCw, Image, Minimize2, Shuffle, Upload, Trash2, Library, X, Star, Target, FileText, Users, Megaphone, TrendingUp, BookOpen, AlertTriangle, PlusCircle, File, Eye } from 'lucide-react';
 import dqfIcon from '@/assets/dqf-icon.svg';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -714,6 +714,392 @@ function SlideCard({ slide, imageUrl, isGenerating, onGenerateImage, onClearImag
   );
 }
 
+// ─── StrategicPanel ───────────────────────────────────────────────────────────
+
+interface StrategyDoc {
+  id: string;
+  name: string;
+  url: string;
+  size: number;
+  type: string;
+  uploadedAt: string;
+}
+
+interface StrategyData {
+  positioning: string;
+  differentials: string;
+  targetAudience: string;
+  pains: string;
+  toneOfVoice: string;
+  competitors: string;
+  forbiddenTopics: string;
+  currentObjective: string;
+  kpis: string;
+  docs: StrategyDoc[];
+}
+
+const STRATEGY_STORAGE_KEY = 'dqef_strategy_v1';
+
+function StrategicPanel() {
+  const { toast } = useToast();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [preview, setPreview] = useState<string | null>(null);
+
+  const defaultStrategy: StrategyData = {
+    positioning: '',
+    differentials: '',
+    targetAudience: '',
+    pains: '',
+    toneOfVoice: '',
+    competitors: '',
+    forbiddenTopics: '',
+    currentObjective: '',
+    kpis: '',
+    docs: [],
+  };
+
+  const [data, setData] = useState<StrategyData>(() => {
+    try {
+      const saved = localStorage.getItem(STRATEGY_STORAGE_KEY);
+      return saved ? JSON.parse(saved) : defaultStrategy;
+    } catch {
+      return defaultStrategy;
+    }
+  });
+
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => setUserId(data.user?.id ?? null));
+  }, []);
+
+  const update = (field: keyof StrategyData, value: string) => {
+    setData(prev => ({ ...prev, [field]: value }));
+    setSaved(false);
+  };
+
+  const handleSave = () => {
+    localStorage.setItem(STRATEGY_STORAGE_KEY, JSON.stringify(data));
+    setSaved(true);
+    toast({ title: 'Estratégia salva ✅', description: 'Os dados foram salvos localmente.' });
+    setTimeout(() => setSaved(false), 3000);
+  };
+
+  const handleFileUpload = async (files: FileList | null) => {
+    if (!files || !userId) return;
+    setUploading(true);
+
+    const newDocs: StrategyDoc[] = [];
+
+    for (const file of Array.from(files)) {
+      if (file.size > 20 * 1024 * 1024) {
+        toast({ title: 'Arquivo muito grande', description: `${file.name} excede 20MB.`, variant: 'destructive' });
+        continue;
+      }
+
+      const ext = file.name.split('.').pop()?.toLowerCase() ?? 'bin';
+      const uuid = crypto.randomUUID();
+      const storagePath = `${userId}/strategy/${uuid}.${ext}`;
+
+      const { error: storageError } = await supabase.storage
+        .from('media-library')
+        .upload(storagePath, file, { contentType: file.type, upsert: false });
+
+      if (storageError) {
+        toast({ title: 'Erro no upload', description: storageError.message, variant: 'destructive' });
+        continue;
+      }
+
+      const { data: urlData } = supabase.storage.from('media-library').getPublicUrl(storagePath);
+
+      newDocs.push({
+        id: uuid,
+        name: file.name,
+        url: urlData.publicUrl,
+        size: file.size,
+        type: file.type,
+        uploadedAt: new Date().toISOString(),
+      });
+    }
+
+    setUploading(false);
+
+    if (newDocs.length > 0) {
+      setData(prev => {
+        const updated = { ...prev, docs: [...prev.docs, ...newDocs] };
+        localStorage.setItem(STRATEGY_STORAGE_KEY, JSON.stringify(updated));
+        return updated;
+      });
+      toast({ title: `${newDocs.length} arquivo(s) enviado(s) ✅`, description: 'Referências de estratégia salvas.' });
+    }
+  };
+
+  const handleDeleteDoc = async (doc: StrategyDoc) => {
+    if (!userId) return;
+
+    const urlParts = doc.url.split('/media-library/');
+    const storagePath = urlParts[1];
+    if (storagePath) {
+      await supabase.storage.from('media-library').remove([storagePath]);
+    }
+
+    setData(prev => {
+      const updated = { ...prev, docs: prev.docs.filter(d => d.id !== doc.id) };
+      localStorage.setItem(STRATEGY_STORAGE_KEY, JSON.stringify(updated));
+      return updated;
+    });
+    toast({ title: 'Arquivo removido', description: doc.name });
+  };
+
+  const formatBytes = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  const getFileIcon = (type: string) => {
+    if (type.startsWith('image/')) return <ImageIcon className="h-4 w-4 text-blue-400" />;
+    if (type.includes('pdf')) return <FileText className="h-4 w-4 text-red-400" />;
+    return <File className="h-4 w-4 text-muted-foreground" />;
+  };
+
+  const sections = [
+    {
+      key: 'positioning',
+      label: 'POSICIONAMENTO',
+      icon: <Target className="h-3.5 w-3.5" />,
+      placeholder: 'Como a marca se posiciona no mercado? Qual é a promessa central?\nEx: Plataforma de serviços que paga o prestador na hora, com taxa justa.',
+      hint: 'A âncora de tudo. Sem isso, o conteúdo fica genérico.',
+      rows: 3,
+    },
+    {
+      key: 'differentials',
+      label: 'DIFERENCIAIS COMPETITIVOS',
+      icon: <TrendingUp className="h-3.5 w-3.5" />,
+      placeholder: 'Liste os diferenciais reais (números, fatos):\n• Comissão de 10-15% vs 27% da concorrência\n• PIX imediato na conclusão\n• Profissionais verificados por KYC',
+      hint: 'Diferenciais com números convertem. Adjetivos não.',
+      rows: 4,
+    },
+    {
+      key: 'targetAudience',
+      label: 'PÚBLICO-ALVO',
+      icon: <Users className="h-3.5 w-3.5" />,
+      placeholder: 'Descreva quem é o público principal:\n• Perfil: Piscineiro autônomo, 28-45 anos\n• Renda: R$ 3.000–8.000/mês\n• Dor: Depende de indicação, não escala',
+      hint: 'Fale para uma pessoa, não para "todo mundo".',
+      rows: 4,
+    },
+    {
+      key: 'pains',
+      label: 'DORES E FRUSTRAÇÕES',
+      icon: <AlertTriangle className="h-3.5 w-3.5" />,
+      placeholder: 'Quais as frases que o público pensa ou fala?\n• "Pago 27% pro GetNinjas e perco o cliente"\n• "Fico sem trabalho no mês fraco"\n• "Nunca aprendi a me vender no digital"',
+      hint: 'Copie a voz do cliente. Quem escreve como o cliente, vende.',
+      rows: 4,
+    },
+    {
+      key: 'toneOfVoice',
+      label: 'TOM DE VOZ',
+      icon: <Megaphone className="h-3.5 w-3.5" />,
+      placeholder: 'Como a marca fala? Dê exemplos do que pode e não pode:\n✅ Pode: "Tu manda bem. Tu merece mais."\n❌ Não pode: "Você possui habilidades excepcionais."\nTom: Direto, peer-to-peer, sem jargão corporativo.',
+      hint: 'O tom que a IA deve imitar. Quanto mais específico, melhor.',
+      rows: 4,
+    },
+    {
+      key: 'competitors',
+      label: 'CONCORRENTES',
+      icon: <BookOpen className="h-3.5 w-3.5" />,
+      placeholder: 'Quem são os concorrentes e como a marca se diferencia de cada um?\n• GetNinjas: cobra por lead, sem garantia → nós cobramos só se fechar\n• Parafuzo: taxa de 35% → nós cobramos 10-15%',
+      hint: 'Comparativos geram conteúdo viral. Nomeie com cuidado.',
+      rows: 3,
+    },
+    {
+      key: 'forbiddenTopics',
+      label: 'TÓPICOS PROIBIDOS',
+      icon: <X className="h-3.5 w-3.5" />,
+      placeholder: 'O que a marca nunca deve dizer ou prometer?\n• Não mencionar cidades específicas\n• Não prometer "renda garantida"\n• Não atacar concorrentes pelo nome diretamente',
+      hint: 'Limites claros evitam crises de comunicação.',
+      rows: 3,
+    },
+    {
+      key: 'currentObjective',
+      label: 'OBJETIVO ATUAL',
+      icon: <Zap className="h-3.5 w-3.5" />,
+      placeholder: 'Qual é o objetivo dos próximos 30-90 dias?\nEx: Cadastrar 200 prestadores verificados até março. Foco em conversão, não em awareness.',
+      hint: 'O objetivo muda o tipo de conteúdo. Seja específico.',
+      rows: 3,
+    },
+    {
+      key: 'kpis',
+      label: 'KPIS E METAS DE CONTEÚDO',
+      icon: <TrendingUp className="h-3.5 w-3.5" />,
+      placeholder: 'Quais métricas definem sucesso?\n• Taxa de salvamento acima de 8%\n• 500 cliques no link da bio por mês\n• 30% de aumento de cadastros orgânicos',
+      hint: 'KPIs guiam o tipo de CTA e o ângulo do conteúdo.',
+      rows: 3,
+    },
+  ] as const;
+
+  const completedFields = sections.filter(s => (data[s.key as keyof StrategyData] as string).trim().length > 0).length;
+  const completionPct = Math.round((completedFields / sections.length) * 100);
+
+  return (
+    <div className="space-y-5">
+      {/* Progress indicator */}
+      <div className="rounded-xl border border-border bg-card p-4">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-xs font-bold text-muted-foreground tracking-widest">PREENCHIMENTO DO PLAYBOOK</span>
+          <span className="text-xs font-mono font-bold text-primary">{completionPct}%</span>
+        </div>
+        <div className="h-1.5 w-full rounded-full bg-muted/50 overflow-hidden">
+          <div
+            className="h-full rounded-full bg-primary transition-all duration-500"
+            style={{ width: `${completionPct}%` }}
+          />
+        </div>
+        <p className="text-[10px] text-muted-foreground/60 mt-2">
+          {completedFields} de {sections.length} seções preenchidas · Quanto mais completo, mais preciso o conteúdo gerado.
+        </p>
+      </div>
+
+      {/* Fields */}
+      {sections.map(section => {
+        const value = data[section.key as keyof StrategyData] as string;
+        const filled = value.trim().length > 0;
+        return (
+          <div key={section.key} className="space-y-1.5">
+            <div className="flex items-center gap-2">
+              <span className={cn(
+                'flex items-center gap-1.5 text-[10px] font-bold tracking-widest',
+                filled ? 'text-primary' : 'text-muted-foreground'
+              )}>
+                {section.icon}
+                {section.label}
+              </span>
+              {filled && (
+                <span className="rounded-full bg-primary/15 px-1.5 py-0.5 text-[9px] font-bold text-primary">✓</span>
+              )}
+            </div>
+            <Textarea
+              value={value}
+              onChange={e => update(section.key as keyof StrategyData, e.target.value)}
+              placeholder={section.placeholder}
+              rows={section.rows}
+              className="text-xs resize-none bg-muted/20 border-border/60 placeholder:text-muted-foreground/40 leading-relaxed"
+            />
+            <p className="text-[10px] text-muted-foreground/50 italic pl-0.5">
+              💡 {section.hint}
+            </p>
+          </div>
+        );
+      })}
+
+      {/* Documents section */}
+      <div className="space-y-2 pt-2 border-t border-border">
+        <div className="flex items-center gap-2">
+          <FileText className="h-3.5 w-3.5 text-muted-foreground" />
+          <span className="text-[10px] font-bold text-muted-foreground tracking-widest">ARQUIVOS DE REFERÊNCIA</span>
+          {data.docs.length > 0 && (
+            <span className="rounded-full bg-muted/50 px-1.5 py-0.5 text-[9px] font-bold text-muted-foreground">{data.docs.length}</span>
+          )}
+        </div>
+        <p className="text-[10px] text-muted-foreground/50 italic">
+          Faça upload de decks, guides de marca, pesquisas, briefings ou qualquer referência relevante.
+        </p>
+
+        {/* Doc list */}
+        {data.docs.length > 0 && (
+          <div className="space-y-2">
+            {data.docs.map(doc => (
+              <div key={doc.id} className="flex items-center gap-2.5 rounded-lg border border-border bg-muted/20 px-3 py-2.5">
+                <div className="flex-shrink-0">
+                  {getFileIcon(doc.type)}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium text-foreground truncate">{doc.name}</p>
+                  <p className="text-[10px] text-muted-foreground/60">{formatBytes(doc.size)} · {new Date(doc.uploadedAt).toLocaleDateString('pt-BR')}</p>
+                </div>
+                <div className="flex items-center gap-1 flex-shrink-0">
+                  {doc.type.startsWith('image/') && (
+                    <button
+                      onClick={() => setPreview(preview === doc.url ? null : doc.url)}
+                      className="rounded p-1 hover:bg-muted transition-colors"
+                      title="Visualizar"
+                    >
+                      <Eye className="h-3 w-3 text-muted-foreground hover:text-foreground" />
+                    </button>
+                  )}
+                  <a
+                    href={doc.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="rounded p-1 hover:bg-muted transition-colors"
+                    title="Abrir"
+                  >
+                    <Download className="h-3 w-3 text-muted-foreground hover:text-foreground" />
+                  </a>
+                  <button
+                    onClick={() => handleDeleteDoc(doc)}
+                    className="rounded p-1 hover:bg-destructive/20 transition-colors group"
+                    title="Remover"
+                  >
+                    <Trash2 className="h-3 w-3 text-muted-foreground group-hover:text-destructive" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Image preview */}
+        {preview && (
+          <div className="relative rounded-xl overflow-hidden border border-border">
+            <img src={preview} alt="Preview" className="w-full object-contain max-h-48" />
+            <button
+              onClick={() => setPreview(null)}
+              className="absolute top-2 right-2 rounded-full bg-black/60 p-1 hover:bg-black/80"
+            >
+              <X className="h-3 w-3 text-white" />
+            </button>
+          </div>
+        )}
+
+        {/* Upload button */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          className="hidden"
+          onChange={e => handleFileUpload(e.target.files)}
+        />
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          disabled={uploading || !userId}
+          className="w-full flex items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border hover:border-primary/50 hover:bg-primary/5 transition-all py-3.5 text-xs font-medium text-muted-foreground hover:text-foreground disabled:opacity-40"
+        >
+          {uploading
+            ? <><span className="h-3.5 w-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" /> Enviando...</>
+            : <><PlusCircle className="h-3.5 w-3.5" /> Adicionar arquivo de referência</>
+          }
+        </button>
+      </div>
+
+      {/* Save button */}
+      <Button
+        onClick={handleSave}
+        className={cn(
+          'w-full h-11 text-sm font-bold rounded-xl transition-all',
+          saved
+            ? 'bg-green-600 hover:bg-green-600 text-white'
+            : 'bg-primary hover:bg-primary/90 text-primary-foreground'
+        )}
+      >
+        {saved ? <><Check className="h-4 w-4 mr-2" /> Playbook salvo</> : 'Salvar playbook estratégico'}
+      </Button>
+    </div>
+  );
+}
+
 // ─── MediaLibraryPanel ────────────────────────────────────────────────────────
 
 interface MediaLibraryPanelProps {
@@ -1191,8 +1577,12 @@ export default function AiCarrosseis() {
           {/* ── LEFT: Briefing + Biblioteca tabs ── */}
           <div className="space-y-4">
             <Tabs defaultValue="briefing">
-              <TabsList className="w-full grid grid-cols-2 mb-4">
+              <TabsList className="w-full grid grid-cols-3 mb-4">
                 <TabsTrigger value="briefing">Briefing</TabsTrigger>
+                <TabsTrigger value="estrategia" className="flex items-center gap-1">
+                  <Target className="h-3 w-3" />
+                  Estratégia
+                </TabsTrigger>
                 <TabsTrigger value="biblioteca" className="flex items-center gap-1.5">
                   Biblioteca
                   {library.length > 0 && (
@@ -1322,6 +1712,22 @@ export default function AiCarrosseis() {
                       </span>
                     )}
                   </Button>
+                </div>
+              </TabsContent>
+
+              {/* ── ESTRATÉGIA TAB ── */}
+              <TabsContent value="estrategia">
+                <div className="rounded-xl border border-border bg-card p-5">
+                  <div className="flex items-center gap-2 mb-5">
+                    <div className="rounded-lg bg-primary/10 p-1.5">
+                      <Target className="h-4 w-4 text-primary" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-foreground">Playbook Estratégico</p>
+                      <p className="text-[10px] text-muted-foreground">Contexto que alimenta a IA em todas as gerações</p>
+                    </div>
+                  </div>
+                  <StrategicPanel />
                 </div>
               </TabsContent>
 
