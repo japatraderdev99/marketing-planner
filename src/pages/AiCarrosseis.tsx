@@ -1,5 +1,7 @@
 import { useState, useRef, useCallback } from 'react';
 import { Layers, Wand2, Copy, Check, Download, ChevronDown, ChevronUp, ImageIcon, Video, Zap, RefreshCw, Image } from 'lucide-react';
+import dqfIcon from '@/assets/dqf-icon.svg';
+import dqfLogoWhite from '@/assets/dqf-logo-white.png';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
@@ -124,7 +126,7 @@ function SlidePreview({ slide, imageUrl, slideRef }: SlidePreviewProps) {
   const isDataSlide = slide.layout === 'number-dominant';
   const isCTA = slide.layout === 'cta-clean';
 
-  // Render headline with highlight
+  // Render headline with highlight — orange color when image behind, box when no image
   const renderHeadline = (headline: string, highlight?: string) => {
     if (!highlight || !headline.toLowerCase().includes(highlight.toLowerCase())) {
       return <span style={{ color: '#FFFFFF' }}>{headline}</span>;
@@ -133,10 +135,14 @@ function SlidePreview({ slide, imageUrl, slideRef }: SlidePreviewProps) {
     const before = headline.slice(0, idx);
     const word = headline.slice(idx, idx + highlight.length);
     const after = headline.slice(idx + highlight.length);
+    // When image is behind, use orange text for contrast (no box); otherwise semi-transparent white box
+    const highlightStyle = imageUrl
+      ? { color: '#E8603C' }
+      : { color: '#FFFFFF', backgroundColor: 'rgba(255,255,255,0.22)', borderRadius: '2px', padding: '0 3px' };
     return (
       <>
         {before && <span style={{ color: '#FFFFFF' }}>{before}</span>}
-        <span style={{ color: '#FFFFFF', backgroundColor: 'rgba(255,255,255,0.22)', borderRadius: '2px', padding: '0 3px' }}>{word}</span>
+        <span style={highlightStyle}>{word}</span>
         {after && <span style={{ color: '#FFFFFF' }}>{after}</span>}
       </>
     );
@@ -182,35 +188,23 @@ function SlidePreview({ slide, imageUrl, slideRef }: SlidePreviewProps) {
         </>
       )}
 
-      {/* Slide number + type */}
+      {/* DQF Icon — top left */}
       <div style={{
         position: 'absolute',
-        top: '14px',
-        left: '16px',
-        fontFamily: 'Montserrat, sans-serif',
-        fontSize: '10px',
-        fontWeight: 800,
-        color: '#FFFFFF',
-        letterSpacing: '0.12em',
-        lineHeight: 1,
-        opacity: 0.9,
+        top: '12px',
+        left: '12px',
         zIndex: 10,
+        opacity: 0.85,
       }}>
-        {String(slide.number).padStart(2, '0')} · {TYPE_LABELS[slide.type] ?? slide.type.toUpperCase()}
+        <img src={dqfIcon} alt="DQF" style={{ width: '22px', height: '22px', filter: 'brightness(0) invert(1)' }} />
       </div>
 
       {/* CTA Layout */}
       {isCTA && (
         <div style={{ textAlign: 'center', width: '100%', position: 'relative', zIndex: 10 }}>
-          <div style={{
-            fontFamily: 'Montserrat, sans-serif',
-            fontSize: '11px',
-            fontWeight: 900,
-            color: '#FFFFFF',
-            letterSpacing: '0.3em',
-            marginBottom: '12px',
-            opacity: 0.7,
-          }}>DQEF</div>
+          <div style={{ marginBottom: '12px', display: 'flex', justifyContent: 'center' }}>
+            <img src={dqfLogoWhite} alt="DQF" style={{ height: '28px', opacity: 0.75, filter: 'brightness(0) invert(1)' }} />
+          </div>
           <div style={{
             fontFamily: 'Montserrat, sans-serif',
             fontWeight: 900,
@@ -292,18 +286,16 @@ function SlidePreview({ slide, imageUrl, slideRef }: SlidePreviewProps) {
         </div>
       )}
 
-      {/* DQEF watermark */}
+      {/* DQF logo watermark — bottom right */}
       <div style={{
         position: 'absolute',
         bottom: '10px',
-        right: '12px',
-        fontFamily: 'Montserrat, sans-serif',
-        fontWeight: 800,
-        fontSize: '8px',
-        color: 'rgba(255,255,255,0.3)',
-        letterSpacing: '0.2em',
+        right: '10px',
         zIndex: 10,
-      }}>DQEF</div>
+        opacity: 0.55,
+      }}>
+        <img src={dqfIcon} alt="DQF" style={{ width: '18px', height: '18px', filter: 'brightness(0) invert(1)' }} />
+      </div>
     </div>
   );
 }
