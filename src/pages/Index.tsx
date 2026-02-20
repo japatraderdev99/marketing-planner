@@ -55,7 +55,7 @@ const channelData = [
 ];
 
 const teamDemands = [
-  { member: 'Gabriel', role: 'Estrategista', initials: 'GA', color: C.orange, bg: 'bg-primary/15', ring: 'ring-primary', total: 8, done: 5, overdue: 1 },
+  { member: 'Gabriel', role: 'CMO · Head de Comunicação', initials: 'GA', color: C.blue, bg: 'bg-blue-500/15', ring: 'ring-blue-500', total: 8, done: 5, overdue: 1 },
   { member: 'Guilherme', role: 'Criativo', initials: 'GU', color: C.teal, bg: 'bg-teal/15', ring: 'ring-teal', total: 11, done: 7, overdue: 2 },
   { member: 'Marcelo', role: 'CFO', initials: 'MC', color: C.green, bg: 'bg-emerald-600/15', ring: 'ring-emerald-600', total: 4, done: 3, overdue: 0 },
   { member: 'Leandro', role: 'CEO', initials: 'LE', color: C.purple, bg: 'bg-violet-600/15', ring: 'ring-violet-600', total: 6, done: 2, overdue: 1 },

@@ -25,7 +25,7 @@ const TEAM = [
   {
     id: 'gabriel',
     name: 'Gabriel',
-    role: 'Estrategista · Head Comunicação',
+    role: 'CMO · Head de Comunicação',
     initials: 'GA',
     color: 'bg-blue-500',
     ring: 'ring-blue-500',
