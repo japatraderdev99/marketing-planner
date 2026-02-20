@@ -682,9 +682,34 @@ export default function Estrategia() {
   const criticalSections = SECTIONS.filter(s => s.weight === 'critical');
   const criticalFilled = criticalSections.filter(s => (data[s.key as SectionKey] as string).trim().length > 0).length;
 
+  // Scorecard data derived from strategy
+  const scorecardItems = [
+    { label: 'Seções Críticas', value: `${criticalFilled}/${criticalSections.length}`, ok: criticalFilled === criticalSections.length, icon: Target },
+    { label: 'Completude Geral', value: `${pct}%`, ok: pct >= 80, icon: TrendingUp },
+    { label: 'Brand Book', value: knowledgeDocs.filter(d => d.status === 'done').length > 0 ? 'Ativo' : 'Pendente', ok: knowledgeDocs.some(d => d.status === 'done'), icon: BookMarked },
+    { label: 'Meta-Fields IA', value: metafields ? `${metafields.completenessScore}%` : 'Não gerado', ok: !!metafields && (metafields.completenessScore ?? 0) >= 70, icon: Brain },
+  ];
+
   return (
     <div className="h-full overflow-y-auto">
       <div className="max-w-3xl mx-auto px-4 py-6 space-y-6">
+
+        {/* ── C-Level Scorecard ── */}
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {scorecardItems.map(({ label, value, ok, icon: Icon }) => (
+            <div key={label} className={cn(
+              'rounded-xl border p-3.5 flex flex-col gap-2',
+              ok ? 'border-emerald-500/25 bg-emerald-500/5' : 'border-amber-500/25 bg-amber-500/5'
+            )}>
+              <div className="flex items-center justify-between">
+                <Icon className={cn('h-4 w-4', ok ? 'text-emerald-400' : 'text-amber-400')} />
+                {ok ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" /> : <AlertTriangle className="h-3.5 w-3.5 text-amber-400" />}
+              </div>
+              <p className={cn('text-lg font-black', ok ? 'text-emerald-400' : 'text-amber-400')}>{value}</p>
+              <p className="text-[10px] text-muted-foreground font-medium">{label}</p>
+            </div>
+          ))}
+        </div>
 
         {/* ── Hero header ── */}
         <div className="rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/10 via-primary/5 to-transparent p-6">

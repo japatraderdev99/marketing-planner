@@ -3,7 +3,6 @@ import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { initialCampaigns, Campaign, CampaignStatus, Channel, ContentFormat, Priority, Funnel, KanbanStatus, ContentObjective } from '@/data/seedData';
 import { initialContents, ContentItem } from '@/data/seedData';
 
-// Local form type that uses simpler values for the UI
 interface CampaignForm {
   name: string;
   objective: string;
@@ -26,6 +25,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue
 } from '@/components/ui/select';
@@ -33,11 +34,28 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter
 } from '@/components/ui/dialog';
 import {
+  PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid,
+  Tooltip, ResponsiveContainer, RadarChart, Radar, PolarGrid,
+  PolarAngleAxis, FunnelChart, Funnel as RFunnel, LabelList, Treemap
+} from 'recharts';
+import {
   Megaphone, Plus, Sparkles, Target, Users, TrendingUp, Calendar,
   DollarSign, AlertTriangle, CheckCircle2, Loader2, ChevronRight,
   LayoutGrid, List, Brain, Zap, Copy, Eye, Trash2, PenLine,
-  ArrowRight, X, Info, RefreshCw,
+  ArrowRight, X, Info, RefreshCw, BarChart3, ArrowUpRight,
+  ArrowDownRight, Filter, Activity, TrendingDown, Layers
 } from 'lucide-react';
+
+// ─── Design tokens ────────────────────────────────────────────────────────────
+const C = {
+  orange: 'hsl(33, 100%, 50%)',
+  teal: 'hsl(185, 100%, 36%)',
+  purple: 'hsl(262, 83%, 58%)',
+  blue: 'hsl(217, 91%, 60%)',
+  green: 'hsl(142, 71%, 45%)',
+  red: 'hsl(0, 72%, 51%)',
+  amber: 'hsl(45, 93%, 47%)',
+};
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -77,18 +95,33 @@ interface AiPlan {
 
 // ─── Status / color helpers ───────────────────────────────────────────────────
 
-const STATUS_CONFIG: Record<CampaignStatus, { label: string; color: string; dot: string }> = {
-  Rascunho:   { label: 'Rascunho',   color: 'bg-muted/60 text-muted-foreground border-border',             dot: 'bg-muted-foreground' },
-  Aprovada:   { label: 'Aprovada',   color: 'bg-blue-500/15 text-blue-400 border-blue-500/25',             dot: 'bg-blue-400' },
-  Ativa:      { label: 'Ativa',      color: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/25',   dot: 'bg-emerald-400' },
-  Pausada:    { label: 'Pausada',    color: 'bg-amber-500/15 text-amber-400 border-amber-500/25',          dot: 'bg-amber-400' },
-  Finalizada: { label: 'Finalizada', color: 'bg-muted/40 text-muted-foreground/70 border-border/50',       dot: 'bg-muted-foreground/50' },
+const STATUS_CONFIG: Record<CampaignStatus, { label: string; color: string; dot: string; bg: string }> = {
+  Rascunho:   { label: 'Rascunho',   color: 'bg-muted/60 text-muted-foreground border-border',             dot: 'bg-muted-foreground',     bg: 'hsl(var(--muted))' },
+  Aprovada:   { label: 'Aprovada',   color: 'bg-blue-500/15 text-blue-400 border-blue-500/25',             dot: 'bg-blue-400',             bg: 'hsl(217, 91%, 60%)' },
+  Ativa:      { label: 'Ativa',      color: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/25',    dot: 'bg-emerald-400',          bg: 'hsl(142, 71%, 45%)' },
+  Pausada:    { label: 'Pausada',    color: 'bg-amber-500/15 text-amber-400 border-amber-500/25',           dot: 'bg-amber-400',            bg: 'hsl(45, 93%, 47%)' },
+  Finalizada: { label: 'Finalizada', color: 'bg-muted/40 text-muted-foreground/70 border-border/50',        dot: 'bg-muted-foreground/50',  bg: 'hsl(var(--border))' },
 };
 
 const PRIORITY_COLORS: Record<Priority, string> = {
   Alta:  'bg-red-500/15 text-red-400 border-red-500/25',
   Média: 'bg-amber-500/15 text-amber-400 border-amber-500/25',
   Baixa: 'bg-muted/50 text-muted-foreground border-border',
+};
+
+const CHANNEL_COLORS: Record<string, string> = {
+  Instagram: C.orange,
+  TikTok: C.teal,
+  'Meta Ads': C.purple,
+  LinkedIn: C.blue,
+  YouTube: C.red,
+  Orgânico: C.green,
+};
+
+const FUNNEL_COLORS: Record<string, string> = {
+  Topo: C.purple,
+  Meio: C.orange,
+  Fundo: C.green,
 };
 
 const ANGLE_EMOJI: Record<string, string> = {
@@ -103,7 +136,76 @@ const EMPTY_FORM = (): CampaignForm => ({
   funnel: 'Topo', responsible: '', description: '',
 });
 
-// ─── Strategy Pill (shows meta-field context) ─────────────────────────────────
+// ─── Analytics helpers ────────────────────────────────────────────────────────
+
+function buildChannelData(campaigns: Campaign[]) {
+  const map: Record<string, { count: number; budget: number; leads: number; conversions: number; roas: number[] }> = {};
+  campaigns.forEach(c => {
+    (c.channel || []).forEach(ch => {
+      if (!map[ch]) map[ch] = { count: 0, budget: 0, leads: 0, conversions: 0, roas: [] };
+      map[ch].count++;
+      map[ch].budget += c.budget || 0;
+      map[ch].leads += c.leads || 0;
+      map[ch].conversions += c.conversions || 0;
+      if (c.roas) map[ch].roas.push(c.roas);
+    });
+  });
+  return Object.entries(map).map(([name, d]) => ({
+    name,
+    campanhas: d.count,
+    budget: d.budget,
+    leads: d.leads,
+    conversions: d.conversions,
+    roas: d.roas.length ? +(d.roas.reduce((a, b) => a + b, 0) / d.roas.length).toFixed(1) : 0,
+    color: CHANNEL_COLORS[name] || C.purple,
+  }));
+}
+
+function buildFunnelData(campaigns: Campaign[]) {
+  const byFunnel: Record<string, number> = { Topo: 0, Meio: 0, Fundo: 0 };
+  campaigns.forEach(c => { if (c.funnel && byFunnel[c.funnel] !== undefined) byFunnel[c.funnel]++; });
+  const total = Object.values(byFunnel).reduce((a, b) => a + b, 0) || 1;
+  return [
+    { name: 'Topo (Awareness)', value: byFunnel['Topo'], fill: FUNNEL_COLORS['Topo'], pct: Math.round((byFunnel['Topo'] / total) * 100) },
+    { name: 'Meio (Consideração)', value: byFunnel['Meio'], fill: FUNNEL_COLORS['Meio'], pct: Math.round((byFunnel['Meio'] / total) * 100) },
+    { name: 'Fundo (Conversão)', value: byFunnel['Fundo'], fill: FUNNEL_COLORS['Fundo'], pct: Math.round((byFunnel['Fundo'] / total) * 100) },
+  ];
+}
+
+function buildStatusData(campaigns: Campaign[]) {
+  const counts: Record<string, number> = {};
+  campaigns.forEach(c => { counts[c.status] = (counts[c.status] || 0) + 1; });
+  return Object.entries(counts).map(([status, value]) => ({
+    name: status, value,
+    fill: STATUS_CONFIG[status as CampaignStatus]?.bg || C.purple,
+  }));
+}
+
+// ─── Sub-components ───────────────────────────────────────────────────────────
+
+function KpiTile({ label, value, delta, positive, icon: Icon, color }: {
+  label: string; value: string | number; delta?: string; positive?: boolean; icon: React.ElementType; color: string;
+}) {
+  return (
+    <Card className="border-border bg-card">
+      <CardContent className="p-4">
+        <div className="flex items-start justify-between mb-2">
+          <div className="rounded-lg p-2" style={{ background: `${color}18` }}>
+            <Icon className="h-4 w-4" style={{ color }} />
+          </div>
+          {delta && (
+            <div className={cn('flex items-center gap-1 text-[10px] font-semibold', positive ? 'text-green-400' : 'text-red-400')}>
+              {positive ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
+              {delta}
+            </div>
+          )}
+        </div>
+        <p className="text-2xl font-black text-foreground tracking-tight">{value}</p>
+        <p className="text-xs text-muted-foreground mt-0.5">{label}</p>
+      </CardContent>
+    </Card>
+  );
+}
 
 function StrategyPill({ label, value }: { label: string; value: string }) {
   const { toast } = useToast();
@@ -122,54 +224,78 @@ function StrategyPill({ label, value }: { label: string; value: string }) {
   );
 }
 
-// ─── Campaign Card ────────────────────────────────────────────────────────────
-
 function CampaignCard({
-  campaign,
-  onEdit,
-  onDelete,
-  onView,
+  campaign, onEdit, onDelete, onView,
 }: {
-  campaign: Campaign;
-  onEdit: () => void;
-  onDelete: () => void;
-  onView: () => void;
+  campaign: Campaign; onEdit: () => void; onDelete: () => void; onView: () => void;
 }) {
   const st = STATUS_CONFIG[campaign.status];
+  const budgetPct = campaign.budgetPaid && campaign.budget ? Math.round((campaign.budgetPaid / campaign.budget) * 100) : 0;
   return (
     <div
-      className="rounded-xl border border-border bg-card p-4 hover:border-primary/30 transition-all duration-200 group cursor-pointer"
+      className="rounded-xl border border-border bg-card p-4 hover:border-primary/30 transition-all duration-200 group cursor-pointer flex flex-col gap-3"
       onClick={onView}
     >
-      <div className="flex items-start justify-between gap-3 mb-3">
+      {/* Header */}
+      <div className="flex items-start justify-between gap-2">
         <div className="flex-1 min-w-0">
           <h3 className="text-sm font-bold text-foreground truncate">{campaign.name}</h3>
-          <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{campaign.objective}</p>
+          <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-1">{campaign.objective}</p>
         </div>
-        <div className="flex items-center gap-1.5 shrink-0">
-          <span className={cn('flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold', st.color)}>
-            <span className={cn('h-1.5 w-1.5 rounded-full', st.dot)} />
-            {st.label}
-          </span>
-        </div>
+        <span className={cn('flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold shrink-0', st.color)}>
+          <span className={cn('h-1.5 w-1.5 rounded-full', st.dot)} />
+          {st.label}
+        </span>
       </div>
 
-      <div className="flex flex-wrap gap-1.5 mb-3">
+      {/* Tags */}
+      <div className="flex flex-wrap gap-1.5">
         <span className={cn('rounded-full border px-2 py-0.5 text-[10px] font-medium', PRIORITY_COLORS[campaign.priority])}>{campaign.priority}</span>
-        {campaign.channel?.length > 0 && <span className="rounded-full border border-border bg-muted/30 px-2 py-0.5 text-[10px] text-muted-foreground">{campaign.channel[0]}</span>}
-        {campaign.funnel && <span className="rounded-full border border-border bg-muted/30 px-2 py-0.5 text-[10px] text-muted-foreground">{campaign.funnel}</span>}
+        {(campaign.channel || []).slice(0, 2).map(ch => (
+          <span key={ch} className="rounded-full border border-border bg-muted/30 px-2 py-0.5 text-[10px] text-muted-foreground flex items-center gap-1">
+            <span className="h-1.5 w-1.5 rounded-full" style={{ background: CHANNEL_COLORS[ch] || C.purple }} />
+            {ch}
+          </span>
+        ))}
+        {campaign.funnel && (
+          <span className="rounded-full border border-border bg-muted/30 px-2 py-0.5 text-[10px] text-muted-foreground">{campaign.funnel}</span>
+        )}
       </div>
 
-      {campaign.budget && (
-        <div className="flex items-center gap-1 text-xs text-muted-foreground mb-2">
-          <DollarSign className="h-3 w-3" />
-          <span>R$ {campaign.budget}</span>
+      {/* Metrics row */}
+      {(campaign.leads || campaign.conversions || campaign.roas) ? (
+        <div className="grid grid-cols-3 gap-2 border-t border-border/50 pt-2.5">
+          {[
+            { label: 'Leads', value: campaign.leads?.toLocaleString('pt-BR') || '—', color: C.orange },
+            { label: 'Conv.', value: campaign.conversions?.toLocaleString('pt-BR') || '—', color: C.teal },
+            { label: 'ROAS', value: campaign.roas ? `${campaign.roas}x` : '—', color: C.green },
+          ].map(({ label, value, color }) => (
+            <div key={label} className="text-center">
+              <p className="text-xs font-black" style={{ color }}>{value}</p>
+              <p className="text-[9px] text-muted-foreground">{label}</p>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      {/* Budget progress */}
+      {campaign.budget > 0 && (
+        <div>
+          <div className="flex justify-between text-[10px] mb-1">
+            <span className="text-muted-foreground">Budget</span>
+            <span className="font-semibold text-foreground">R${(campaign.budgetPaid || 0).toLocaleString('pt-BR')} / R${campaign.budget.toLocaleString('pt-BR')}</span>
+          </div>
+          <div className="h-1.5 w-full rounded-full bg-border overflow-hidden">
+            <div className="h-full rounded-full transition-all duration-700" style={{ width: `${budgetPct}%`, background: budgetPct > 90 ? C.red : C.orange }} />
+          </div>
         </div>
       )}
 
-      <div className="flex items-center justify-between pt-2 border-t border-border/50">
+      {/* Footer */}
+      <div className="flex items-center justify-between pt-1">
         <span className="text-[10px] text-muted-foreground/60">
           {campaign.startDate ? new Date(campaign.startDate + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }) : '—'}
+          {campaign.endDate ? ` → ${new Date(campaign.endDate + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}` : ''}
         </span>
         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
           <button onClick={onEdit} className="rounded p-1 hover:bg-muted transition-colors">
@@ -184,6 +310,293 @@ function CampaignCard({
   );
 }
 
+// ─── Analytics Panel ──────────────────────────────────────────────────────────
+
+function AnalyticsPanel({ campaigns }: { campaigns: Campaign[] }) {
+  const channelData = buildChannelData(campaigns);
+  const funnelData = buildFunnelData(campaigns);
+  const statusData = buildStatusData(campaigns);
+  const activeCampaigns = campaigns.filter(c => c.status === 'Ativa');
+  const totalBudget = campaigns.reduce((s, c) => s + (c.budget || 0), 0);
+  const totalLeads = campaigns.reduce((s, c) => s + (c.leads || 0), 0);
+  const totalConversions = campaigns.reduce((s, c) => s + (c.conversions || 0), 0);
+  const totalImpressions = campaigns.reduce((s, c) => s + (c.impressions || 0), 0);
+  const avgRoas = campaigns.filter(c => c.roas).length
+    ? +(campaigns.filter(c => c.roas).reduce((s, c) => s + (c.roas || 0), 0) / campaigns.filter(c => c.roas).length).toFixed(1)
+    : 0;
+  const ctr = totalImpressions > 0 ? ((totalLeads / totalImpressions) * 100).toFixed(2) : '0';
+
+  const CUSTOM_TOOLTIP_STYLE = {
+    background: 'hsl(var(--card))',
+    border: '1px solid hsl(var(--border))',
+    borderRadius: '8px',
+    fontSize: '11px',
+  };
+
+  return (
+    <div className="space-y-5">
+      {/* KPI strip */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+        <KpiTile label="Campanhas Ativas" value={activeCampaigns.length} icon={Megaphone} color={C.orange} delta="+2 semana" positive={true} />
+        <KpiTile label="Budget Total" value={`R$${(totalBudget/1000).toFixed(0)}k`} icon={DollarSign} color={C.blue} />
+        <KpiTile label="Leads Gerados" value={totalLeads.toLocaleString('pt-BR')} icon={TrendingUp} color={C.teal} delta="+18%" positive={true} />
+        <KpiTile label="Conversões" value={totalConversions.toLocaleString('pt-BR')} icon={Target} color={C.green} delta="+12%" positive={true} />
+        <KpiTile label="ROAS Médio" value={`${avgRoas}x`} icon={BarChart3} color={C.green} delta={avgRoas >= 3 ? 'Acima da meta' : 'Abaixo da meta'} positive={avgRoas >= 3} />
+        <KpiTile label="CTR Médio" value={`${ctr}%`} icon={Activity} color={C.purple} />
+      </div>
+
+      {/* Charts row 1 */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+
+        {/* Status pie */}
+        <Card className="border-border bg-card">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-bold flex items-center gap-2">
+              <Layers className="h-4 w-4 text-primary" /> Status das Campanhas
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center gap-4">
+              <PieChart width={130} height={130}>
+                <Pie data={statusData} cx={65} cy={65} innerRadius={38} outerRadius={58} dataKey="value" strokeWidth={0}>
+                  {statusData.map((entry, i) => <Cell key={i} fill={entry.fill} />)}
+                </Pie>
+                <Tooltip contentStyle={CUSTOM_TOOLTIP_STYLE} />
+              </PieChart>
+              <div className="space-y-1.5 flex-1">
+                {statusData.map(d => (
+                  <div key={d.name} className="flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-2">
+                      <span className="h-2 w-2 rounded-full shrink-0" style={{ background: d.fill }} />
+                      <span className="text-muted-foreground">{d.name}</span>
+                    </div>
+                    <span className="font-bold text-foreground">{d.value}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Channel pie */}
+        <Card className="border-border bg-card">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-bold flex items-center gap-2">
+              <Activity className="h-4 w-4 text-teal" /> Mix de Canais
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center gap-4">
+              <PieChart width={130} height={130}>
+                <Pie data={channelData} cx={65} cy={65} innerRadius={38} outerRadius={58} dataKey="campanhas" strokeWidth={0}>
+                  {channelData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
+                </Pie>
+                <Tooltip contentStyle={CUSTOM_TOOLTIP_STYLE} formatter={(v, n, p) => [v, p.payload.name]} />
+              </PieChart>
+              <div className="space-y-1.5 flex-1">
+                {channelData.map(d => (
+                  <div key={d.name} className="flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-2">
+                      <span className="h-2 w-2 rounded-full shrink-0" style={{ background: d.color }} />
+                      <span className="text-muted-foreground">{d.name}</span>
+                    </div>
+                    <span className="font-bold text-foreground">{d.campanhas}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Funnel distribution */}
+        <Card className="border-border bg-card">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-bold flex items-center gap-2">
+              <Target className="h-4 w-4 text-orange-400" /> Distribuição no Funil
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2.5">
+            {funnelData.map((f, i) => (
+              <div key={f.name}>
+                <div className="flex justify-between text-xs mb-1">
+                  <span className="text-muted-foreground">{f.name}</span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-bold text-foreground">{f.value}</span>
+                    <span className="text-muted-foreground/50">({f.pct}%)</span>
+                  </div>
+                </div>
+                <div className="h-5 w-full rounded-md bg-border overflow-hidden">
+                  <div
+                    className="h-full rounded-md flex items-center px-2 transition-all duration-700"
+                    style={{ width: `${Math.max(f.pct, 5)}%`, background: f.fill }}
+                  >
+                    {f.pct > 15 && <span className="text-[9px] font-bold text-white">{f.pct}%</span>}
+                  </div>
+                </div>
+                {i < funnelData.length - 1 && f.value > 0 && funnelData[i + 1].value > 0 && (
+                  <p className="text-right text-[9px] text-muted-foreground mt-0.5">
+                    → {Math.round((funnelData[i + 1].value / f.value) * 100)}% seguem para próxima etapa
+                  </p>
+                )}
+              </div>
+            ))}
+            <div className="border-t border-border pt-2">
+              <p className="text-[10px] text-muted-foreground text-center">
+                Ideal: 40% Topo · 35% Meio · 25% Fundo
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Charts row 2 */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+
+        {/* Channel performance bar */}
+        <Card className="border-border bg-card">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-bold flex items-center gap-2">
+              <BarChart3 className="h-4 w-4 text-primary" /> Performance por Canal — Leads
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {channelData.length > 0 ? (
+              <ResponsiveContainer width="100%" height={180}>
+                <BarChart data={channelData} margin={{ left: 0, right: 4, top: 4, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                  <XAxis dataKey="name" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }} />
+                  <YAxis tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }} />
+                  <Tooltip contentStyle={CUSTOM_TOOLTIP_STYLE} />
+                  <Bar dataKey="leads" radius={[4, 4, 0, 0]} name="Leads">
+                    {channelData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex flex-col items-center justify-center h-44 text-muted-foreground/40 text-sm">
+                <BarChart3 className="h-8 w-8 mb-2 opacity-30" />
+                Nenhuma campanha com dados de canal
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Budget vs leads scatter-like bar */}
+        <Card className="border-border bg-card">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-bold flex items-center gap-2">
+              <DollarSign className="h-4 w-4 text-amber-400" /> Budget × ROAS por Canal
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {channelData.length > 0 ? (
+              <div className="space-y-2.5">
+                {channelData.sort((a, b) => b.roas - a.roas).map(d => (
+                  <div key={d.name}>
+                    <div className="flex items-center justify-between text-xs mb-1">
+                      <div className="flex items-center gap-2">
+                        <span className="h-2 w-2 rounded-full" style={{ background: d.color }} />
+                        <span className="text-foreground font-medium">{d.name}</span>
+                      </div>
+                      <div className="flex items-center gap-3 text-muted-foreground">
+                        <span>R${d.budget.toLocaleString('pt-BR')}</span>
+                        <span className="font-bold" style={{ color: d.roas >= 3 ? C.green : d.roas > 0 ? C.amber : 'hsl(var(--muted-foreground))' }}>
+                          {d.roas > 0 ? `${d.roas}x ROAS` : 'N/A'}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="h-2 w-full rounded-full bg-border overflow-hidden">
+                      <div
+                        className="h-full rounded-full"
+                        style={{
+                          width: `${Math.min((d.budget / (Math.max(...channelData.map(x => x.budget)) || 1)) * 100, 100)}%`,
+                          background: d.color,
+                        }}
+                      />
+                    </div>
+                  </div>
+                ))}
+                <p className="text-[10px] text-muted-foreground text-center pt-1 border-t border-border">
+                  Barra = % do budget total · Cor = canal · Meta ROAS: 3.0x
+                </p>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center h-44 text-muted-foreground/40 text-sm">
+                <DollarSign className="h-8 w-8 mb-2 opacity-30" />
+                Nenhuma campanha com dados de budget
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Priority accountability table */}
+      <Card className="border-border bg-card">
+        <CardHeader className="pb-2 flex flex-row items-center justify-between">
+          <CardTitle className="text-sm font-bold flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4 text-red-400" /> Accountability — Campanhas Ativas
+          </CardTitle>
+          <Badge className="bg-primary/15 text-primary border-primary/30 text-[10px]">C-Level View</Badge>
+        </CardHeader>
+        <CardContent>
+          {activeCampaigns.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-border">
+                    {['Campanha', 'Canal', 'Prioridade', 'Budget', 'ROAS', 'Leads', 'Status'].map(h => (
+                      <th key={h} className="pb-2.5 text-left font-semibold text-muted-foreground pr-4 whitespace-nowrap">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {activeCampaigns.map(c => (
+                    <tr key={c.id} className="border-b border-border/40 hover:bg-muted/20 transition-colors">
+                      <td className="py-2.5 pr-4 font-medium text-foreground max-w-[160px] truncate">{c.name}</td>
+                      <td className="py-2.5 pr-4">
+                        <div className="flex items-center gap-1.5">
+                          {(c.channel || []).slice(0, 1).map(ch => (
+                            <span key={ch} className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                              <span className="h-1.5 w-1.5 rounded-full" style={{ background: CHANNEL_COLORS[ch] || C.purple }} />
+                              {ch}
+                            </span>
+                          ))}
+                        </div>
+                      </td>
+                      <td className="py-2.5 pr-4">
+                        <span className={cn('rounded-full border px-1.5 py-0.5 text-[9px] font-bold', PRIORITY_COLORS[c.priority])}>{c.priority}</span>
+                      </td>
+                      <td className="py-2.5 pr-4 text-foreground">
+                        {c.budget ? `R$${c.budget.toLocaleString('pt-BR')}` : '—'}
+                      </td>
+                      <td className="py-2.5 pr-4 font-bold" style={{ color: c.roas && c.roas >= 3 ? C.green : c.roas ? C.amber : 'hsl(var(--muted-foreground))' }}>
+                        {c.roas ? `${c.roas}x` : '—'}
+                      </td>
+                      <td className="py-2.5 pr-4 font-semibold" style={{ color: C.teal }}>
+                        {c.leads?.toLocaleString('pt-BR') || '—'}
+                      </td>
+                      <td className="py-2.5">
+                        <span className={cn('flex items-center gap-1 rounded-full border px-2 py-0.5 text-[9px] font-semibold w-fit', STATUS_CONFIG[c.status].color)}>
+                          <span className={cn('h-1.5 w-1.5 rounded-full', STATUS_CONFIG[c.status].dot)} />
+                          {c.status}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="text-center py-8 text-muted-foreground/40 text-sm">
+              Nenhuma campanha ativa no momento
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 export default function Campanhas() {
@@ -194,18 +607,18 @@ export default function Campanhas() {
 
   const [view, setView] = useState<'grid' | 'list'>('grid');
   const [filterStatus, setFilterStatus] = useState<string>('all');
+  const [filterChannel, setFilterChannel] = useState<string>('all');
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [form, setForm] = useState<CampaignForm>(EMPTY_FORM());
+  const [activeTab, setActiveTab] = useState('campanhas');
 
-  // AI state
   const [generating, setGenerating] = useState(false);
   const [aiPlan, setAiPlan] = useState<AiPlan | null>(null);
   const [extraInstructions, setExtraInstructions] = useState('');
   const [showAiPanel, setShowAiPanel] = useState(false);
 
-  // Meta-fields from strategy
   const [metafields, setMetafields] = useState<MetaFields | null>(null);
   useEffect(() => {
     try {
@@ -214,7 +627,6 @@ export default function Campanhas() {
     } catch { /* noop */ }
   }, []);
 
-  // Auto-fill form from meta-fields
   const autofillFromStrategy = () => {
     if (!metafields) return;
     setForm(prev => ({
@@ -264,8 +676,7 @@ export default function Campanhas() {
     const ch: Channel = form.channel;
     if (editingId) {
       setCampaigns(prev => prev.map(c => c.id === editingId ? {
-        ...c,
-        name: form.name, objective: form.objective,
+        ...c, name: form.name, objective: form.objective,
         channel: [ch], budget: Number(form.budget) || 0,
         startDate: form.startDate, endDate: form.endDate,
         priority: form.priority, status: form.status,
@@ -293,11 +704,9 @@ export default function Campanhas() {
     setShowModal(false);
   };
 
-  // ── AI generation ──────────────────────────────────────────────────────────
-
   const handleGenerateAI = async () => {
     if (!form.name?.trim()) {
-      toast({ title: 'Dê um nome para a campanha', description: 'Pelo menos o nome é necessário para a IA gerar o plano.', variant: 'destructive' });
+      toast({ title: 'Dê um nome para a campanha', variant: 'destructive' });
       return;
     }
     setGenerating(true);
@@ -310,7 +719,7 @@ export default function Campanhas() {
       if (result?.error) throw new Error(result.error);
       setAiPlan(result.plan as AiPlan);
       setShowAiPanel(true);
-      toast({ title: 'Plano de campanha gerado ✅', description: 'Revise e aplique as sugestões ao Kanban e Calendário.' });
+      toast({ title: 'Plano de campanha gerado ✅' });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Erro desconhecido';
       toast({ title: 'Erro ao gerar plano', description: msg, variant: 'destructive' });
@@ -319,14 +728,10 @@ export default function Campanhas() {
     }
   };
 
-  // Apply AI plan → Kanban + Calendar
   const handleApplyPlan = () => {
     if (!aiPlan) return;
-
     const startMs = form.startDate ? new Date(form.startDate + 'T12:00:00').getTime() : Date.now();
     const ch: Channel = form.channel;
-
-    // First save the campaign
     const savedId = editingId || `camp-${Date.now()}`;
     const campaignName = form.name;
     if (editingId) {
@@ -351,50 +756,34 @@ export default function Campanhas() {
       };
       setCampaigns(prev => [...prev, newC]);
     }
-
-    // Add kanban tasks
     const kanbanItems: Campaign[] = (aiPlan.kanbanTasks || []).map((t, i) => ({
-      id: `camp-${Date.now()}-k${i}`,
-      name: `[${campaignName}] ${t.title}`,
-      objective: t.description,
-      channel: [t.channel], kanbanStatus: t.status,
-      category: 'Awareness' as ContentObjective,
-      avatar: 'TM',
-      budget: 0,
+      id: `camp-${Date.now()}-k${i}`, name: `[${campaignName}] ${t.title}`,
+      objective: t.description, channel: [t.channel], kanbanStatus: t.status,
+      category: 'Awareness' as ContentObjective, avatar: 'TM', budget: 0,
       startDate: new Date(startMs + t.daysFromStart * 86400000).toISOString().split('T')[0],
-      endDate: '', priority: t.priority,
-      status: 'Rascunho' as CampaignStatus,
-      funnel: form.funnel,
-      responsible: form.responsible || 'Time Marketing',
-      description: t.description, audience: '',
-      subtasks: [], links: [],
-      history: [],
+      endDate: '', priority: t.priority, status: 'Rascunho' as CampaignStatus,
+      funnel: form.funnel, responsible: form.responsible || 'Time Marketing',
+      description: t.description, audience: '', subtasks: [], links: [], history: [],
     }));
     setKanbanCampaigns(prev => [...prev, ...kanbanItems]);
-
-    // Add calendar entries
     const calItems: ContentItem[] = (aiPlan.calendarEntries || []).map((e, i) => ({
-      id: `cont-${Date.now()}-c${i}`,
-      title: e.title, format: e.format, channel: e.channel,
+      id: `cont-${Date.now()}-c${i}`, title: e.title, format: e.format, channel: e.channel,
       date: new Date(startMs + e.daysFromStart * 86400000).toISOString().split('T')[0],
       status: 'Rascunho' as ContentItem['status'],
-      responsible: e.responsible || 'Time Marketing',
-      copy: e.copy || '',
+      responsible: e.responsible || 'Time Marketing', copy: e.copy || '',
     }));
     setContents(prev => [...prev, ...calItems]);
-
-    toast({
-      title: '🚀 Campanha aplicada!',
-      description: `${kanbanItems.length} tarefas no Kanban · ${calItems.length} entradas no Calendário`,
-    });
+    toast({ title: '🚀 Campanha aplicada!', description: `${kanbanItems.length} tarefas no Kanban · ${calItems.length} entradas no Calendário` });
     setShowModal(false);
   };
 
-  // ── Filters ────────────────────────────────────────────────────────────────
-
-  const filtered = campaigns.filter(c =>
-    filterStatus === 'all' || c.status === filterStatus
-  );
+  // Filtered campaigns
+  const allChannels = Array.from(new Set(campaigns.flatMap(c => c.channel || [])));
+  const filtered = campaigns.filter(c => {
+    const statusOk = filterStatus === 'all' || c.status === filterStatus;
+    const channelOk = filterChannel === 'all' || (c.channel || []).includes(filterChannel as Channel);
+    return statusOk && channelOk;
+  });
 
   const grouped = (Object.keys(STATUS_CONFIG) as CampaignStatus[]).reduce<Record<CampaignStatus, Campaign[]>>(
     (acc, st) => { acc[st] = filtered.filter(c => c.status === st); return acc; },
@@ -405,9 +794,9 @@ export default function Campanhas() {
 
   return (
     <div className="h-full overflow-y-auto">
-      <div className="max-w-6xl mx-auto px-4 py-6 space-y-6">
+      <div className="max-w-7xl mx-auto px-4 py-6 space-y-5">
 
-        {/* ── Header ─────────────────────────────────────────────────────── */}
+        {/* Header */}
         <div className="flex items-start gap-4">
           <div className="rounded-xl bg-primary/15 p-3 border border-primary/20">
             <Megaphone className="h-5 w-5 text-primary" />
@@ -420,30 +809,18 @@ export default function Campanhas() {
                 : 'Preencha a aba Estratégia para a IA gerar campanhas mais precisas'}
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            <div className="flex rounded-lg border border-border overflow-hidden">
-              <button onClick={() => setView('grid')} className={cn('p-2 transition-colors', view === 'grid' ? 'bg-primary/20 text-primary' : 'text-muted-foreground hover:text-foreground')}>
-                <LayoutGrid className="h-4 w-4" />
-              </button>
-              <button onClick={() => setView('list')} className={cn('p-2 transition-colors', view === 'list' ? 'bg-primary/20 text-primary' : 'text-muted-foreground hover:text-foreground')}>
-                <List className="h-4 w-4" />
-              </button>
-            </div>
-            <Button onClick={openCreate} className="bg-primary text-primary-foreground hover:bg-primary/90 gap-2">
-              <Plus className="h-4 w-4" /> Nova campanha
-            </Button>
-          </div>
+          <Button onClick={openCreate} className="bg-primary text-primary-foreground hover:bg-primary/90 gap-2 shrink-0">
+            <Plus className="h-4 w-4" /> Nova campanha
+          </Button>
         </div>
 
-        {/* ── Strategy context banner ────────────────────────────────────── */}
+        {/* Strategy context banner */}
         {hasStrategy && metafields && (
           <div className="rounded-xl border border-primary/20 bg-gradient-to-br from-primary/8 to-transparent p-4">
             <div className="flex items-center gap-2 mb-3">
               <Brain className="h-4 w-4 text-primary" />
               <p className="text-sm font-bold text-foreground">Meta-Fields Ativos da Estratégia</p>
-              <span className="ml-auto rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-bold text-primary">
-                Score {metafields.completenessScore}%
-              </span>
+              <span className="ml-auto rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-bold text-primary">Score {metafields.completenessScore}%</span>
             </div>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
               {metafields.brandEssence && <StrategyPill label="Essência" value={metafields.brandEssence} />}
@@ -456,73 +833,128 @@ export default function Campanhas() {
           </div>
         )}
 
-        {/* ── Filter bar ─────────────────────────────────────────────────── */}
-        <div className="flex items-center gap-2 flex-wrap">
-          {['all', ...Object.keys(STATUS_CONFIG)].map(st => (
-            <button
-              key={st}
-              onClick={() => setFilterStatus(st)}
-              className={cn(
-                'rounded-full border px-3 py-1 text-xs font-semibold transition-colors',
-                filterStatus === st
-                  ? 'bg-primary/20 text-primary border-primary/30'
-                  : 'border-border text-muted-foreground hover:text-foreground'
+        {/* Tabs: Analytics | Campanhas */}
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
+          <TabsList className="bg-card border border-border h-auto p-1 gap-1">
+            <TabsTrigger value="campanhas" className="text-xs px-4 py-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+              Campanhas ({campaigns.length})
+            </TabsTrigger>
+            <TabsTrigger value="analytics" className="text-xs px-4 py-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+              Analytics & Relatório
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="campanhas" className="mt-4 space-y-4">
+            {/* Filter bar */}
+            <div className="flex flex-wrap items-center gap-2">
+              <Filter className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+              <div className="flex flex-wrap gap-1.5">
+                {['all', ...Object.keys(STATUS_CONFIG)].map(st => (
+                  <button
+                    key={st}
+                    onClick={() => setFilterStatus(st)}
+                    className={cn(
+                      'rounded-full border px-3 py-1 text-xs font-semibold transition-colors',
+                      filterStatus === st
+                        ? 'bg-primary/20 text-primary border-primary/30'
+                        : 'border-border text-muted-foreground hover:text-foreground'
+                    )}
+                  >
+                    {st === 'all' ? `Todas (${campaigns.length})` : `${st} (${grouped[st as CampaignStatus]?.length ?? 0})`}
+                  </button>
+                ))}
+              </div>
+              {allChannels.length > 0 && (
+                <>
+                  <div className="w-px h-4 bg-border mx-1" />
+                  <div className="flex flex-wrap gap-1.5">
+                    <button
+                      onClick={() => setFilterChannel('all')}
+                      className={cn('rounded-full border px-2.5 py-1 text-[10px] font-semibold transition-colors', filterChannel === 'all' ? 'bg-muted text-foreground border-border' : 'border-border text-muted-foreground hover:text-foreground')}
+                    >
+                      Todos canais
+                    </button>
+                    {allChannels.map(ch => (
+                      <button
+                        key={ch}
+                        onClick={() => setFilterChannel(filterChannel === ch ? 'all' : ch)}
+                        className={cn('rounded-full border px-2.5 py-1 text-[10px] font-semibold transition-colors flex items-center gap-1', filterChannel === ch ? 'border-primary/30 text-primary bg-primary/10' : 'border-border text-muted-foreground hover:text-foreground')}
+                      >
+                        <span className="h-1.5 w-1.5 rounded-full" style={{ background: CHANNEL_COLORS[ch] || C.purple }} />
+                        {ch}
+                      </button>
+                    ))}
+                  </div>
+                </>
               )}
-            >
-              {st === 'all' ? `Todas (${campaigns.length})` : `${st} (${grouped[st as CampaignStatus]?.length ?? 0})`}
-            </button>
-          ))}
-        </div>
+              <div className="ml-auto flex rounded-lg border border-border overflow-hidden">
+                <button onClick={() => setView('grid')} className={cn('p-2 transition-colors', view === 'grid' ? 'bg-primary/20 text-primary' : 'text-muted-foreground hover:text-foreground')}>
+                  <LayoutGrid className="h-4 w-4" />
+                </button>
+                <button onClick={() => setView('list')} className={cn('p-2 transition-colors', view === 'list' ? 'bg-primary/20 text-primary' : 'text-muted-foreground hover:text-foreground')}>
+                  <List className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
 
-        {/* ── Campaign grid / list ───────────────────────────────────────── */}
-        {view === 'grid' ? (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {filtered.map(c => (
-              <CampaignCard
-                key={c.id}
-                campaign={c}
-                onEdit={() => openEdit(c)}
-                onDelete={() => handleDelete(c.id)}
-                onView={() => setDetailId(c.id)}
-              />
-            ))}
-            <button
-              onClick={openCreate}
-              className="flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-primary/30 hover:border-primary/60 hover:bg-primary/5 transition-all min-h-[140px] text-sm text-muted-foreground hover:text-primary"
-            >
-              <Plus className="h-5 w-5" />
-              Nova campanha
-            </button>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {filtered.map(c => {
-              const st = STATUS_CONFIG[c.status];
-              return (
-                <div key={c.id} className="flex items-center gap-4 rounded-xl border border-border bg-card px-4 py-3 hover:border-primary/30 transition-colors group cursor-pointer" onClick={() => setDetailId(c.id)}>
-                  <div className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border', c.priority === 'Alta' ? 'border-red-500/30 bg-red-500/10' : 'border-border bg-muted/30')}>
-                    <Megaphone className={cn('h-4 w-4', c.priority === 'Alta' ? 'text-red-400' : 'text-muted-foreground')} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-foreground truncate">{c.name}</p>
-                    <p className="text-xs text-muted-foreground truncate">{c.objective}</p>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span className={cn('flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold', st.color)}>
-                      <span className={cn('h-1.5 w-1.5 rounded-full', st.dot)} />{st.label}
-                    </span>
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
-                      <button onClick={() => openEdit(c)} className="rounded p-1 hover:bg-muted transition-colors"><PenLine className="h-3.5 w-3.5 text-muted-foreground" /></button>
-                      <button onClick={() => handleDelete(c.id)} className="rounded p-1 hover:bg-destructive/15 transition-colors group/del"><Trash2 className="h-3.5 w-3.5 text-muted-foreground group-hover/del:text-destructive" /></button>
+            {/* Campaign grid / list */}
+            {view === 'grid' ? (
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {filtered.map(c => (
+                  <CampaignCard key={c.id} campaign={c} onEdit={() => openEdit(c)} onDelete={() => handleDelete(c.id)} onView={() => setDetailId(c.id)} />
+                ))}
+                <button
+                  onClick={openCreate}
+                  className="flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-primary/30 hover:border-primary/60 hover:bg-primary/5 transition-all min-h-[160px] text-sm text-muted-foreground hover:text-primary"
+                >
+                  <Plus className="h-5 w-5" />
+                  Nova campanha
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {filtered.map(c => {
+                  const st = STATUS_CONFIG[c.status];
+                  return (
+                    <div key={c.id} className="flex items-center gap-4 rounded-xl border border-border bg-card px-4 py-3 hover:border-primary/30 transition-colors group cursor-pointer" onClick={() => setDetailId(c.id)}>
+                      <div className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border', c.priority === 'Alta' ? 'border-red-500/30 bg-red-500/10' : 'border-border bg-muted/30')}>
+                        <Megaphone className={cn('h-4 w-4', c.priority === 'Alta' ? 'text-red-400' : 'text-muted-foreground')} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-foreground truncate">{c.name}</p>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          {(c.channel || []).slice(0, 2).map(ch => (
+                            <span key={ch} className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                              <span className="h-1.5 w-1.5 rounded-full" style={{ background: CHANNEL_COLORS[ch] || C.purple }} />
+                              {ch}
+                            </span>
+                          ))}
+                          {c.roas && <span className="text-[10px] font-bold text-green-400">ROAS {c.roas}x</span>}
+                          {c.leads && <span className="text-[10px] text-muted-foreground">{c.leads.toLocaleString('pt-BR')} leads</span>}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className={cn('flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold', st.color)}>
+                          <span className={cn('h-1.5 w-1.5 rounded-full', st.dot)} />{st.label}
+                        </span>
+                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
+                          <button onClick={() => openEdit(c)} className="rounded p-1 hover:bg-muted transition-colors"><PenLine className="h-3.5 w-3.5 text-muted-foreground" /></button>
+                          <button onClick={() => handleDelete(c.id)} className="rounded p-1 hover:bg-destructive/15 transition-colors group/del"><Trash2 className="h-3.5 w-3.5 text-muted-foreground group-hover/del:text-destructive" /></button>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
+                  );
+                })}
+              </div>
+            )}
+          </TabsContent>
 
-        {/* ── Create / Edit Modal ────────────────────────────────────────── */}
+          <TabsContent value="analytics" className="mt-4">
+            <AnalyticsPanel campaigns={campaigns} />
+          </TabsContent>
+        </Tabs>
+
+        {/* ── Create / Edit Modal ── */}
         <Dialog open={showModal} onOpenChange={v => { if (!v) setShowModal(false); }}>
           <DialogContent className="max-w-2xl bg-card border-border overflow-y-auto max-h-[90vh]">
             <DialogHeader>
@@ -538,48 +970,25 @@ export default function Campanhas() {
             </DialogHeader>
 
             <div className="space-y-5">
-
-              {/* Strategy auto-fill hint */}
               {hasStrategy && (
                 <div className="flex items-center justify-between rounded-lg bg-primary/8 border border-primary/20 px-3 py-2.5">
                   <div className="flex items-center gap-2">
                     <Sparkles className="h-3.5 w-3.5 text-primary" />
                     <p className="text-xs text-foreground/80">Quer pré-preencher com a estratégia ativa?</p>
                   </div>
-                  <button onClick={autofillFromStrategy} className="text-xs font-bold text-primary hover:underline">
-                    Preencher →
-                  </button>
+                  <button onClick={autofillFromStrategy} className="text-xs font-bold text-primary hover:underline">Preencher →</button>
                 </div>
               )}
 
-              {/* Form */}
               <div className="space-y-4">
                 <div>
                   <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">Nome da campanha *</label>
-                  <Input
-                    placeholder="Ex: Campanha Prestadores — Fevereiro 2026"
-                    value={form.name || ''}
-                    onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                    className="bg-muted/20 border-border/60"
-                  />
+                  <Input placeholder="Ex: Campanha Prestadores — Fevereiro 2026" value={form.name || ''} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} className="bg-muted/20 border-border/60" />
                 </div>
-
                 <div>
-                  <label className="text-xs font-semibold text-muted-foreground mb-1.5 block flex items-center gap-1">
-                    Objetivo
-                    {metafields?.currentCampaignFocus && (
-                      <span className="text-[9px] text-primary/70 font-normal ml-1">(sugestão: {metafields.currentCampaignFocus.slice(0, 40)}...)</span>
-                    )}
-                  </label>
-                  <Textarea
-                    placeholder="O que essa campanha precisa alcançar? Seja específico com números e prazo."
-                    value={form.objective || ''}
-                    onChange={e => setForm(f => ({ ...f, objective: e.target.value }))}
-                    rows={2}
-                    className="bg-muted/20 border-border/60 resize-none text-sm"
-                  />
+                  <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">Objetivo</label>
+                  <Textarea placeholder="O que essa campanha precisa alcançar? Seja específico com números e prazo." value={form.objective || ''} onChange={e => setForm(f => ({ ...f, objective: e.target.value }))} rows={2} className="bg-muted/20 border-border/60 resize-none text-sm" />
                 </div>
-
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">Canal principal</label>
@@ -600,7 +1009,6 @@ export default function Campanhas() {
                     </Select>
                   </div>
                 </div>
-
                 <div className="grid grid-cols-3 gap-3">
                   <div>
                     <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">Prioridade</label>
@@ -630,7 +1038,6 @@ export default function Campanhas() {
                     </Select>
                   </div>
                 </div>
-
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">Início</label>
@@ -641,7 +1048,6 @@ export default function Campanhas() {
                     <Input type="date" value={form.endDate || ''} onChange={e => setForm(f => ({ ...f, endDate: e.target.value }))} className="bg-muted/20 border-border/60" />
                   </div>
                 </div>
-
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">Orçamento (R$)</label>
@@ -652,19 +1058,13 @@ export default function Campanhas() {
                     <Input placeholder="Ex: Guilherme" value={form.responsible || ''} onChange={e => setForm(f => ({ ...f, responsible: e.target.value }))} className="bg-muted/20 border-border/60" />
                   </div>
                 </div>
-
                 <div>
                   <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">Público-alvo</label>
-                  <Input
-                    placeholder={metafields?.targetPersona?.profile || 'Descreva quem é o público desta campanha'}
-                    value={form.targetAudience || ''}
-                    onChange={e => setForm(f => ({ ...f, targetAudience: e.target.value }))}
-                    className="bg-muted/20 border-border/60"
-                  />
+                  <Input placeholder={metafields?.targetPersona?.profile || 'Descreva quem é o público desta campanha'} value={form.targetAudience || ''} onChange={e => setForm(f => ({ ...f, targetAudience: e.target.value }))} className="bg-muted/20 border-border/60" />
                 </div>
               </div>
 
-              {/* ── AI Generation section ─────────────────────────────── */}
+              {/* AI Generation */}
               <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 space-y-3">
                 <div className="flex items-center gap-2">
                   <div className="rounded-lg bg-primary/15 p-1.5 border border-primary/20">
@@ -677,29 +1077,19 @@ export default function Campanhas() {
                     </p>
                   </div>
                 </div>
-
                 <Textarea
-                  placeholder="Instruções adicionais (opcional) — Ex: 'Foco em vídeos curtos no TikTok, tom mais urgente, usar dado da comissão de 10%'"
+                  placeholder="Instruções adicionais (opcional)"
                   value={extraInstructions}
                   onChange={e => setExtraInstructions(e.target.value)}
                   rows={2}
                   className="bg-muted/20 border-border/60 resize-none text-sm placeholder:text-muted-foreground/40"
                 />
-
-                <Button
-                  onClick={handleGenerateAI}
-                  disabled={generating}
-                  variant="outline"
-                  className="w-full border-primary/40 text-primary hover:bg-primary/10 hover:border-primary/60 gap-2 font-bold"
-                >
-                  {generating
-                    ? <><Loader2 className="h-4 w-4 animate-spin" /> Gerando plano com IA...</>
-                    : <><Sparkles className="h-4 w-4" /> Gerar plano com IA</>
-                  }
+                <Button onClick={handleGenerateAI} disabled={generating} variant="outline" className="w-full border-primary/40 text-primary hover:bg-primary/10 hover:border-primary/60 gap-2 font-bold">
+                  {generating ? <><Loader2 className="h-4 w-4 animate-spin" /> Gerando plano com IA...</> : <><Sparkles className="h-4 w-4" /> Gerar plano com IA</>}
                 </Button>
               </div>
 
-              {/* ── AI Plan result ────────────────────────────────────── */}
+              {/* AI Plan result */}
               {aiPlan && showAiPanel && (
                 <div className="rounded-xl border border-emerald-500/25 bg-emerald-500/5 p-4 space-y-4">
                   <div className="flex items-center justify-between">
@@ -712,22 +1102,15 @@ export default function Campanhas() {
                         </span>
                       )}
                     </div>
-                    <button onClick={() => setShowAiPanel(false)} className="text-muted-foreground hover:text-foreground">
-                      <X className="h-4 w-4" />
-                    </button>
+                    <button onClick={() => setShowAiPanel(false)} className="text-muted-foreground hover:text-foreground"><X className="h-4 w-4" /></button>
                   </div>
-
-                  <p className="text-xs text-foreground/80 leading-relaxed bg-muted/30 rounded-lg px-3 py-2">
-                    {aiPlan.campaignSummary}
-                  </p>
-
+                  <p className="text-xs text-foreground/80 leading-relaxed bg-muted/30 rounded-lg px-3 py-2">{aiPlan.campaignSummary}</p>
                   {aiPlan.keyMessage && (
                     <div className="rounded-lg bg-muted/30 px-3 py-2">
                       <p className="text-[10px] font-bold text-muted-foreground/60 mb-0.5 uppercase tracking-wider">Mensagem Central</p>
                       <p className="text-xs font-semibold text-foreground">{aiPlan.keyMessage}</p>
                     </div>
                   )}
-
                   {aiPlan.hooks && aiPlan.hooks.length > 0 && (
                     <div>
                       <p className="text-[10px] font-bold text-muted-foreground/60 uppercase tracking-wider mb-1.5">Hooks sugeridos</p>
@@ -741,7 +1124,6 @@ export default function Campanhas() {
                       </div>
                     </div>
                   )}
-
                   <div className="grid grid-cols-2 gap-2 text-center">
                     {aiPlan.kanbanTasks && (
                       <div className="rounded-lg bg-blue-500/10 border border-blue-500/20 px-3 py-2">
@@ -756,24 +1138,14 @@ export default function Campanhas() {
                       </div>
                     )}
                   </div>
-
                   {aiPlan.warnings && aiPlan.warnings.length > 0 && (
                     <div className="flex items-start gap-2 rounded-lg bg-amber-500/10 border border-amber-500/20 px-3 py-2">
                       <AlertTriangle className="h-3.5 w-3.5 text-amber-400 shrink-0 mt-0.5" />
-                      <div>
-                        {aiPlan.warnings.map((w, i) => (
-                          <p key={i} className="text-[11px] text-amber-400">{w}</p>
-                        ))}
-                      </div>
+                      <div>{aiPlan.warnings.map((w, i) => <p key={i} className="text-[11px] text-amber-400">{w}</p>)}</div>
                     </div>
                   )}
-
-                  <Button
-                    onClick={handleApplyPlan}
-                    className="w-full bg-emerald-600 hover:bg-emerald-600/90 text-white font-bold gap-2"
-                  >
-                    <Zap className="h-4 w-4" />
-                    Aplicar plano → Kanban + Calendário
+                  <Button onClick={handleApplyPlan} className="w-full bg-emerald-600 hover:bg-emerald-600/90 text-white font-bold gap-2">
+                    <Zap className="h-4 w-4" /> Aplicar plano → Kanban + Calendário
                   </Button>
                 </div>
               )}
@@ -788,10 +1160,10 @@ export default function Campanhas() {
           </DialogContent>
         </Dialog>
 
-        {/* ── Detail drawer ─────────────────────────────────────────────── */}
+        {/* Detail drawer */}
         {detailCampaign && (
           <Dialog open={!!detailId} onOpenChange={v => { if (!v) setDetailId(null); }}>
-            <DialogContent className="max-w-lg bg-card border-border">
+            <DialogContent className="max-w-xl bg-card border-border">
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-2">
                   <Megaphone className="h-4 w-4 text-primary" />
@@ -808,12 +1180,27 @@ export default function Campanhas() {
                   {detailCampaign.funnel && <span className="rounded-full border border-border bg-muted/30 px-2 py-0.5 text-xs">{detailCampaign.funnel}</span>}
                 </div>
                 {detailCampaign.objective && <p className="text-sm text-foreground/85 leading-relaxed">{detailCampaign.objective}</p>}
-                {detailCampaign.description && detailCampaign.description !== detailCampaign.objective && (
-                  <p className="text-xs text-muted-foreground leading-relaxed border-t border-border pt-3">{detailCampaign.description}</p>
-                )}
+
+                {/* Metrics grid */}
+                {(detailCampaign.leads || detailCampaign.conversions || detailCampaign.roas || detailCampaign.impressions) ? (
+                  <div className="grid grid-cols-4 gap-2 border border-border rounded-xl p-3">
+                    {[
+                      { label: 'Impressões', value: detailCampaign.impressions?.toLocaleString('pt-BR') || '—', color: C.purple },
+                      { label: 'Leads', value: detailCampaign.leads?.toLocaleString('pt-BR') || '—', color: C.orange },
+                      { label: 'Conv.', value: detailCampaign.conversions?.toLocaleString('pt-BR') || '—', color: C.teal },
+                      { label: 'ROAS', value: detailCampaign.roas ? `${detailCampaign.roas}x` : '—', color: C.green },
+                    ].map(({ label, value, color }) => (
+                      <div key={label} className="text-center">
+                        <p className="text-sm font-black" style={{ color }}>{value}</p>
+                        <p className="text-[10px] text-muted-foreground">{label}</p>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+
                 <div className="grid grid-cols-2 gap-3 text-xs">
                   {detailCampaign.channel?.length > 0 && <div><p className="text-muted-foreground/60 mb-0.5">Canal</p><p className="font-medium">{detailCampaign.channel.join(', ')}</p></div>}
-                  {detailCampaign.budget > 0 && <div><p className="text-muted-foreground/60 mb-0.5">Orçamento</p><p className="font-medium">R$ {detailCampaign.budget}</p></div>}
+                  {detailCampaign.budget > 0 && <div><p className="text-muted-foreground/60 mb-0.5">Orçamento</p><p className="font-medium">R$ {detailCampaign.budget.toLocaleString('pt-BR')}</p></div>}
                   {detailCampaign.responsible && <div><p className="text-muted-foreground/60 mb-0.5">Responsável</p><p className="font-medium">{detailCampaign.responsible}</p></div>}
                   {detailCampaign.startDate && <div><p className="text-muted-foreground/60 mb-0.5">Início</p><p className="font-medium">{new Date(detailCampaign.startDate + 'T12:00:00').toLocaleDateString('pt-BR')}</p></div>}
                   {detailCampaign.endDate && <div><p className="text-muted-foreground/60 mb-0.5">Término</p><p className="font-medium">{new Date(detailCampaign.endDate + 'T12:00:00').toLocaleDateString('pt-BR')}</p></div>}
