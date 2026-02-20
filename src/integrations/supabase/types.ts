@@ -14,6 +14,42 @@ export type Database = {
   }
   public: {
     Tables: {
+      media_library: {
+        Row: {
+          category: string | null
+          created_at: string
+          description: string | null
+          file_size: number | null
+          filename: string
+          id: string
+          tags: string[] | null
+          url: string
+          user_id: string
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string
+          description?: string | null
+          file_size?: number | null
+          filename: string
+          id?: string
+          tags?: string[] | null
+          url: string
+          user_id: string
+        }
+        Update: {
+          category?: string | null
+          created_at?: string
+          description?: string | null
+          file_size?: number | null
+          filename?: string
+          id?: string
+          tags?: string[] | null
+          url?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string | null

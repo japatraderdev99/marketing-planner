@@ -1,1 +1,7 @@
 project_id = "jufcbtmikmdboaoacegt"
+
+[functions.categorize-media]
+verify_jwt = false
+
+[functions.suggest-media]
+verify_jwt = false
