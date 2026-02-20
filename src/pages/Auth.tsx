@@ -7,13 +7,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import logoSvg from '@/assets/logo.svg';
-import { Loader2, Mail, Lock, Eye, EyeOff } from 'lucide-react';
+import { Loader2, User, Lock, Eye, EyeOff } from 'lucide-react';
 
 export default function Auth() {
   const { user, loading } = useAuth();
   const { toast } = useToast();
-  const [mode, setMode] = useState<'login' | 'signup'>('login');
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -33,26 +32,34 @@ export default function Auth() {
     setSubmitting(true);
 
     try {
-      if (mode === 'login') {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) throw error;
-        toast({ title: 'Bem-vindo de volta! 🚀', description: 'Login realizado com sucesso.' });
-      } else {
-        const { error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: { emailRedirectTo: window.location.origin },
-        });
-        if (error) throw error;
-        toast({
-          title: 'Conta criada! 🎉',
-          description: 'Verifique seu e-mail para confirmar o cadastro.',
-        });
+      // Look up email by username
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('email')
+        .ilike('username', username.trim())
+        .maybeSingle();
+
+      if (profileError) throw profileError;
+
+      if (!profile) {
+        throw new Error('Usuário não encontrado. Verifique o nome digitado.');
       }
+
+      const { error } = await supabase.auth.signInWithPassword({
+        email: profile.email,
+        password,
+      });
+
+      if (error) throw error;
+
+      toast({ title: `Bem-vindo, ${username}! 🚀`, description: 'Login realizado com sucesso.' });
     } catch (err: any) {
       toast({
-        title: 'Erro',
-        description: err.message ?? 'Ocorreu um erro. Tente novamente.',
+        title: 'Erro ao entrar',
+        description:
+          err.message === 'Invalid login credentials'
+            ? 'Senha incorreta. Tente novamente.'
+            : err.message ?? 'Ocorreu um erro. Tente novamente.',
         variant: 'destructive',
       });
     } finally {
@@ -112,29 +119,24 @@ export default function Auth() {
           </div>
 
           <div className="space-y-1">
-            <h2 className="text-2xl font-bold text-foreground">
-              {mode === 'login' ? 'Entrar na plataforma' : 'Criar conta'}
-            </h2>
-            <p className="text-muted-foreground text-sm">
-              {mode === 'login'
-                ? 'Acesse o hub de marketing da DQEF'
-                : 'Preencha os dados para começar'}
-            </p>
+            <h2 className="text-2xl font-bold text-foreground">Entrar na plataforma</h2>
+            <p className="text-muted-foreground text-sm">Acesse o hub de marketing da DQEF</p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-5">
             <div className="space-y-1.5">
-              <Label htmlFor="email">E-mail</Label>
+              <Label htmlFor="username">Seu nome</Label>
               <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
-                  id="email"
-                  type="email"
-                  placeholder="voce@dqef.com.br"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  id="username"
+                  type="text"
+                  placeholder="Gustavo, Guilherme, Marcelo..."
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
                   className="pl-9"
                   required
+                  autoComplete="username"
                 />
               </div>
             </div>
@@ -152,6 +154,7 @@ export default function Auth() {
                   className="pl-9 pr-10"
                   required
                   minLength={6}
+                  autoComplete="current-password"
                 />
                 <button
                   type="button"
@@ -168,39 +171,9 @@ export default function Auth() {
               disabled={submitting}
               className="w-full gradient-orange text-primary-foreground font-semibold h-11"
             >
-              {submitting ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : mode === 'login' ? (
-                'Entrar'
-              ) : (
-                'Criar conta'
-              )}
+              {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Entrar'}
             </Button>
           </form>
-
-          <p className="text-center text-sm text-muted-foreground">
-            {mode === 'login' ? (
-              <>
-                Não tem conta?{' '}
-                <button
-                  onClick={() => setMode('signup')}
-                  className="text-primary font-medium hover:underline"
-                >
-                  Criar agora
-                </button>
-              </>
-            ) : (
-              <>
-                Já tem conta?{' '}
-                <button
-                  onClick={() => setMode('login')}
-                  className="text-primary font-medium hover:underline"
-                >
-                  Entrar
-                </button>
-              </>
-            )}
-          </p>
         </div>
       </div>
     </div>
