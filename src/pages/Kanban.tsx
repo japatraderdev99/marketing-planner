@@ -15,7 +15,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import {
   Plus, GripVertical, X, Edit2, Trash2, MessageSquare, Calendar,
   AlertCircle, CheckSquare, Square, Clock, Send, ChevronRight,
-  Target, Flame, BarChart2, Filter, Users,
+  Target, Flame, BarChart2, Filter, Users, ExternalLink, Link2, FolderOpen,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -245,10 +245,12 @@ function DetailPanel({
   onClose: () => void;
   onSave: (c: Campaign) => void;
 }) {
+  const [localCampaign, setLocalCampaign] = useState<Campaign>(campaign);
   const [commentText, setCommentText] = useState('');
   const [commentAuthor, setCommentAuthor] = useState<TeamMemberId>('gabriel');
   const [editingSubtask, setEditingSubtask] = useState('');
-  const [localCampaign, setLocalCampaign] = useState<Campaign>(campaign);
+  const [driveLink, setDriveLink] = useState(campaign.links?.find(l => l.label === 'drive')?.url || '');
+  const [editingDrive, setEditingDrive] = useState(false);
 
   const member = getTeamMember(localCampaign.responsible);
   const comments = localCampaign.history.filter(h => h.action.startsWith('💬'));
@@ -289,6 +291,15 @@ function DetailPanel({
     const updated = { ...localCampaign, kanbanStatus: col, history: [...localCampaign.history, entry] };
     setLocalCampaign(updated);
     onSave(updated);
+  };
+
+  const saveDriveLink = (url: string) => {
+    const otherLinks = (localCampaign.links || []).filter(l => l.label !== 'drive');
+    const newLinks = url.trim() ? [...otherLinks, { label: 'drive', url: url.trim() }] : otherLinks;
+    const updated = { ...localCampaign, links: newLinks };
+    setLocalCampaign(updated);
+    onSave(updated);
+    setEditingDrive(false);
   };
 
   const assignTo = (name: string) => {
@@ -398,6 +409,77 @@ function DetailPanel({
                 ))}
               </div>
             </div>
+          )}
+        </div>
+
+        {/* ── Google Drive link ── */}
+        <div className="px-4 py-3 border-b border-border">
+          {driveLink && !editingDrive ? (
+            <a
+              href={driveLink}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="group flex items-center gap-3 rounded-xl border border-border bg-gradient-to-r from-muted/40 to-muted/20 px-4 py-3 hover:border-primary/30 hover:from-primary/8 hover:to-transparent transition-all duration-200"
+              onClick={e => e.stopPropagation()}
+            >
+              {/* Google Drive icon */}
+              <div className="shrink-0 flex h-9 w-9 items-center justify-center rounded-xl bg-card border border-border shadow-sm">
+                <svg viewBox="0 0 87.3 78" className="h-5 w-5">
+                  <path d="M6.6 66.85l3.85 6.65c.8 1.4 1.95 2.5 3.3 3.3L27.5 53.5H0c0 1.55.4 3.1 1.2 4.5z" fill="#0066da"/>
+                  <path d="M43.65 25L29.9 1.4C28.55.6 27 .2 25.45.2c-1.55 0-3.1.4-4.45 1.2L6.6 25H43.65z" fill="#00ac47"/>
+                  <path d="M73.55 76.8c1.35-.8 2.5-1.9 3.3-3.3l1.6-2.75 7.65-13.25c.8-1.4 1.2-2.95 1.2-4.5H60.2l5.5 9.9z" fill="#ea4335"/>
+                  <path d="M43.65 25L57.4 1.4C56.05.6 54.5.2 52.95.2H34.35c-1.55 0-3.1.4-4.45 1.2z" fill="#00832d"/>
+                  <path d="M60.2 53.5H27.5L13.75 76.8c1.35.8 2.9 1.2 4.45 1.2h50.9c1.55 0 3.1-.4 4.45-1.2z" fill="#2684fc"/>
+                  <path d="M73.4 26.5l-14.45-25c-1.35-.8-2.9-1.3-4.45-1.3H34.35c-1.55 0-3.1.4-4.45 1.2L43.65 25h26.6l3.15-1.5z" fill="#ffba00"/>
+                  <path d="M43.65 25H17.05L6.6 25l17.25 28.5H60.2L43.65 25z" fill="#fff" opacity=".1"/>
+                </svg>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60 mb-0.5">Criativo · Google Drive</p>
+                <p className="text-xs font-semibold text-foreground/80 truncate group-hover:text-primary transition-colors">
+                  {driveLink.replace(/^https?:\/\/(drive\.google\.com)?/, '').slice(0, 40) || driveLink}
+                </p>
+              </div>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <button
+                  onClick={e => { e.preventDefault(); e.stopPropagation(); setEditingDrive(true); }}
+                  className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                >
+                  <Edit2 className="h-3 w-3" />
+                </button>
+                <ExternalLink className="h-3.5 w-3.5 text-muted-foreground/40 group-hover:text-primary transition-colors" />
+              </div>
+            </a>
+          ) : editingDrive ? (
+            <div className="space-y-2">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60">Link do criativo (Google Drive)</p>
+              <div className="flex gap-2">
+                <Input
+                  autoFocus
+                  placeholder="https://drive.google.com/..."
+                  value={driveLink}
+                  onChange={e => setDriveLink(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') saveDriveLink(driveLink); if (e.key === 'Escape') setEditingDrive(false); }}
+                  className="h-8 text-xs bg-muted/20 border-border/60 flex-1"
+                />
+                <Button size="sm" onClick={() => saveDriveLink(driveLink)} className="h-8 px-3 bg-primary/90 text-primary-foreground border-0 text-xs">Salvar</Button>
+                <Button size="sm" variant="ghost" onClick={() => setEditingDrive(false)} className="h-8 px-2"><X className="h-3.5 w-3.5" /></Button>
+              </div>
+            </div>
+          ) : (
+            <button
+              onClick={() => setEditingDrive(true)}
+              className="group flex w-full items-center gap-3 rounded-xl border-2 border-dashed border-border/50 px-4 py-3 hover:border-primary/40 hover:bg-primary/5 transition-all duration-200"
+            >
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-muted/40 border border-border group-hover:bg-primary/10 group-hover:border-primary/30 transition-all">
+                <FolderOpen className="h-4 w-4 text-muted-foreground/50 group-hover:text-primary transition-colors" />
+              </div>
+              <div className="text-left">
+                <p className="text-xs font-semibold text-muted-foreground group-hover:text-foreground transition-colors">Adicionar link do criativo</p>
+                <p className="text-[10px] text-muted-foreground/50">Google Drive · Pasta ou arquivo</p>
+              </div>
+              <Link2 className="ml-auto h-3.5 w-3.5 text-muted-foreground/30 group-hover:text-primary/60 transition-colors" />
+            </button>
           )}
         </div>
 
