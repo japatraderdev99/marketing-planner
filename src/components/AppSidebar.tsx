@@ -1,0 +1,107 @@
+import { useLocation, Link } from 'react-router-dom';
+import {
+  LayoutDashboard,
+  Trello,
+  CalendarDays,
+  BookOpen,
+  BarChart3,
+  Megaphone,
+  ChevronLeft,
+  ChevronRight,
+} from 'lucide-react';
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  useSidebar,
+} from '@/components/ui/sidebar';
+import { cn } from '@/lib/utils';
+
+const navItems = [
+  { title: 'Dashboard', url: '/', icon: LayoutDashboard },
+  { title: 'Kanban', url: '/kanban', icon: Trello },
+  { title: 'Calendário', url: '/calendario', icon: CalendarDays },
+  { title: 'Biblioteca', url: '/biblioteca', icon: BookOpen },
+  { title: 'Analytics', url: '/analytics', icon: BarChart3 },
+  { title: 'Campanhas', url: '/campanhas', icon: Megaphone },
+];
+
+export function AppSidebar() {
+  const location = useLocation();
+  const { state, toggleSidebar } = useSidebar();
+  const collapsed = state === 'collapsed';
+
+  return (
+    <Sidebar collapsible="icon" className="border-r border-border bg-sidebar">
+      {/* Logo */}
+      <div className={cn(
+        'flex items-center border-b border-border transition-all duration-300',
+        collapsed ? 'h-16 justify-center px-2' : 'h-16 px-4 gap-3'
+      )}>
+        <div className="gradient-orange flex h-9 w-9 shrink-0 items-center justify-center rounded-lg shadow-lg">
+          <span className="text-sm font-black text-white">DQ</span>
+        </div>
+        {!collapsed && (
+          <div className="min-w-0 flex-1 animate-fade-in">
+            <p className="text-gradient-orange truncate text-sm font-bold leading-tight">Deixa que eu faço</p>
+            <p className="truncate text-xs text-muted-foreground">Marketing Hub</p>
+          </div>
+        )}
+      </div>
+
+      <SidebarContent className="px-2 py-3">
+        <SidebarGroup>
+          <SidebarGroupContent>
+            <SidebarMenu className="gap-1">
+              {navItems.map((item) => {
+                const isActive = location.pathname === item.url ||
+                  (item.url !== '/' && location.pathname.startsWith(item.url));
+                return (
+                  <SidebarMenuItem key={item.title}>
+                    <SidebarMenuButton asChild isActive={isActive} tooltip={item.title}>
+                      <Link
+                        to={item.url}
+                        className={cn(
+                          'group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200',
+                          isActive
+                            ? 'bg-primary/15 text-primary shadow-sm'
+                            : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
+                        )}
+                      >
+                        <item.icon className={cn('h-4 w-4 shrink-0', isActive && 'text-primary')} />
+                        {!collapsed && <span className="truncate">{item.title}</span>}
+                        {isActive && !collapsed && (
+                          <div className="ml-auto h-1.5 w-1.5 rounded-full bg-primary" />
+                        )}
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                );
+              })}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+      </SidebarContent>
+
+      {/* Footer */}
+      <div className="border-t border-border p-2">
+        {!collapsed && (
+          <div className="mb-2 rounded-lg bg-primary/10 px-3 py-2 animate-fade-in">
+            <p className="text-xs font-semibold text-primary">MVP v1.0</p>
+            <p className="text-xs text-muted-foreground">Florianópolis · Q1 2026</p>
+          </div>
+        )}
+        <button
+          onClick={toggleSidebar}
+          className="flex w-full items-center justify-center rounded-lg p-2 text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+        >
+          {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+        </button>
+      </div>
+    </Sidebar>
+  );
+}
