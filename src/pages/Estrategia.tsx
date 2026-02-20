@@ -1,9 +1,10 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import {
   Target, TrendingUp, Users, Megaphone, BookOpen, AlertTriangle,
   X, Zap, FileText, PlusCircle, File, Eye, Download, Trash2,
   ImageIcon, Check, Shield, Save, ChevronDown, ChevronUp, Info,
-  Sparkles, Brain, RefreshCw, Copy,
+  Sparkles, Brain, RefreshCw, Copy, BookMarked, Loader2, CheckCircle2,
+  XCircle, Clock,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -58,6 +59,18 @@ interface MetaFields {
   promptContext: string;
   completenessScore: number;
   missingCritical: string[];
+}
+
+interface KnowledgeDoc {
+  id: string;
+  document_name: string;
+  document_url: string;
+  document_type: string | null;
+  file_size: number | null;
+  status: 'pending' | 'analyzing' | 'done' | 'error';
+  extracted_knowledge: Record<string, unknown> | null;
+  error_message: string | null;
+  created_at: string;
 }
 
 const STRATEGY_STORAGE_KEY = 'dqef_strategy_v1';
@@ -431,9 +444,103 @@ export default function Estrategia() {
     }
   });
 
+  const [knowledgeDocs, setKnowledgeDocs] = useState<KnowledgeDoc[]>([]);
+  const [brandBookUploading, setBrandBookUploading] = useState(false);
+  const [expandedKnowledge, setExpandedKnowledge] = useState<string | null>(null);
+  const brandBookInputRef = useRef<HTMLInputElement>(null);
+
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setUserId(data.user?.id ?? null));
   }, []);
+
+  const loadKnowledgeDocs = useCallback(async () => {
+    const { data: docs } = await supabase
+      .from('strategy_knowledge')
+      .select('*')
+      .order('created_at', { ascending: false });
+    if (docs) setKnowledgeDocs(docs as KnowledgeDoc[]);
+  }, []);
+
+  useEffect(() => {
+    loadKnowledgeDocs();
+  }, [loadKnowledgeDocs]);
+
+  const handleBrandBookUpload = async (files: FileList | null) => {
+    if (!files || !userId) return;
+    setBrandBookUploading(true);
+
+    for (const file of Array.from(files)) {
+      if (file.size > 20 * 1024 * 1024) {
+        toast({ title: 'Arquivo muito grande', description: `${file.name} excede 20MB.`, variant: 'destructive' });
+        continue;
+      }
+      const ext = file.name.split('.').pop()?.toLowerCase() ?? 'bin';
+      const uuid = crypto.randomUUID();
+      const storagePath = `${userId}/brandbooks/${uuid}.${ext}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('media-library')
+        .upload(storagePath, file, { contentType: file.type, upsert: false });
+
+      if (uploadError) {
+        toast({ title: 'Erro no upload', description: uploadError.message, variant: 'destructive' });
+        continue;
+      }
+
+      const { data: urlData } = supabase.storage.from('media-library').getPublicUrl(storagePath);
+
+      // Insert record in DB (pending status)
+      const { data: inserted, error: insertError } = await supabase
+        .from('strategy_knowledge')
+        .insert({
+          user_id: userId,
+          document_name: file.name,
+          document_url: urlData.publicUrl,
+          document_type: file.type,
+          file_size: file.size,
+          status: 'pending',
+        })
+        .select()
+        .single();
+
+      if (insertError || !inserted) {
+        toast({ title: 'Erro ao registrar documento', description: insertError?.message, variant: 'destructive' });
+        continue;
+      }
+
+      await loadKnowledgeDocs();
+      toast({ title: `${file.name} enviado ✅`, description: 'Clique em "Analisar com IA" para extrair o knowledge base.' });
+
+      // Auto-trigger analysis
+      await triggerAnalysis(inserted.id, urlData.publicUrl, file.name);
+    }
+
+    setBrandBookUploading(false);
+  };
+
+  const triggerAnalysis = async (knowledgeId: string, documentUrl: string, documentName: string) => {
+    setKnowledgeDocs(prev => prev.map(d => d.id === knowledgeId ? { ...d, status: 'analyzing' } : d));
+    try {
+      const { data: result, error } = await supabase.functions.invoke('analyze-brand-document', {
+        body: { knowledgeId, documentUrl, documentName },
+      });
+      if (error) throw error;
+      if (result?.error) throw new Error(result.error);
+      toast({ title: 'Brand book analisado ✅', description: `Knowledge base extraído e salvo no backend.` });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Erro desconhecido';
+      toast({ title: 'Erro na análise', description: msg, variant: 'destructive' });
+    }
+    await loadKnowledgeDocs();
+  };
+
+  const handleDeleteKnowledgeDoc = async (doc: KnowledgeDoc) => {
+    const parts = doc.document_url.split('/media-library/');
+    if (parts[1]) await supabase.storage.from('media-library').remove([parts[1]]);
+    await supabase.from('strategy_knowledge').delete().eq('id', doc.id);
+    setKnowledgeDocs(prev => prev.filter(d => d.id !== doc.id));
+    toast({ title: 'Documento removido', description: doc.document_name });
+  };
 
   const update = (field: SectionKey, value: string) => {
     setData(prev => ({ ...prev, [field]: value }));
@@ -601,7 +708,182 @@ export default function Estrategia() {
           ))}
         </div>
 
-        {/* ── Documents ── */}
+        {/* ── Brand Book / Knowledge Base ── */}
+        <div className="rounded-xl border border-primary/20 bg-card p-5 space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="rounded-lg bg-primary/15 p-2 border border-primary/20">
+                <BookMarked className="h-4 w-4 text-primary" />
+              </div>
+              <div>
+                <p className="text-sm font-bold text-foreground flex items-center gap-2">
+                  Brand Book / Playbook de Marca
+                  {knowledgeDocs.length > 0 && (
+                    <span className="rounded-full bg-primary/15 px-2 py-0.5 text-xs font-bold text-primary">
+                      {knowledgeDocs.length}
+                    </span>
+                  )}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  A IA lê o documento e extrai o knowledge base estratégico — salvo permanentemente no backend
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {knowledgeDocs.length > 0 && (
+            <div className="space-y-3">
+              {knowledgeDocs.map(doc => (
+                <div key={doc.id} className="rounded-xl border border-border bg-muted/20 overflow-hidden">
+                  <div className="flex items-center gap-3 px-3 py-3">
+                    <div className="shrink-0">
+                      {doc.document_type?.includes('pdf') ? <FileText className="h-4 w-4 text-red-400" />
+                        : doc.document_type?.startsWith('image/') ? <ImageIcon className="h-4 w-4 text-blue-400" />
+                        : <File className="h-4 w-4 text-muted-foreground" />}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-foreground truncate">{doc.document_name}</p>
+                      <p className="text-[10px] text-muted-foreground/60">
+                        {doc.file_size ? formatBytes(doc.file_size) : ''} · {new Date(doc.created_at).toLocaleDateString('pt-BR')}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {doc.status === 'pending' && (
+                        <>
+                          <span className="flex items-center gap-1 rounded-full bg-muted/60 px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                            <Clock className="h-2.5 w-2.5" /> Aguardando
+                          </span>
+                          <button onClick={() => triggerAnalysis(doc.id, doc.document_url, doc.document_name)}
+                            className="flex items-center gap-1 rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-semibold text-primary hover:bg-primary/25 transition-colors">
+                            <Sparkles className="h-2.5 w-2.5" /> Analisar
+                          </button>
+                        </>
+                      )}
+                      {doc.status === 'analyzing' && (
+                        <span className="flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-400">
+                          <Loader2 className="h-2.5 w-2.5 animate-spin" /> Analisando...
+                        </span>
+                      )}
+                      {doc.status === 'done' && (
+                        <button onClick={() => setExpandedKnowledge(expandedKnowledge === doc.id ? null : doc.id)}
+                          className="flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-400 hover:bg-emerald-500/25 transition-colors">
+                          <CheckCircle2 className="h-2.5 w-2.5" /> Extraído · {expandedKnowledge === doc.id ? 'Fechar' : 'Ver'}
+                        </button>
+                      )}
+                      {doc.status === 'error' && (
+                        <button onClick={() => triggerAnalysis(doc.id, doc.document_url, doc.document_name)}
+                          className="flex items-center gap-1 rounded-full bg-red-500/15 px-2 py-0.5 text-[10px] font-semibold text-red-400 hover:bg-red-500/25 transition-colors">
+                          <XCircle className="h-2.5 w-2.5" /> Erro · Tentar novamente
+                        </button>
+                      )}
+                      <a href={doc.document_url} target="_blank" rel="noopener noreferrer"
+                        className="rounded p-1.5 hover:bg-muted transition-colors">
+                        <Download className="h-3.5 w-3.5 text-muted-foreground" />
+                      </a>
+                      <button onClick={() => handleDeleteKnowledgeDoc(doc)}
+                        className="rounded p-1.5 hover:bg-destructive/15 transition-colors group">
+                        <Trash2 className="h-3.5 w-3.5 text-muted-foreground group-hover:text-destructive" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {doc.status === 'done' && expandedKnowledge === doc.id && doc.extracted_knowledge && (
+                    <div className="border-t border-border bg-muted/10 px-4 py-4 space-y-4">
+                      {doc.extracted_knowledge.documentSummary && (
+                        <div className="rounded-lg bg-primary/5 border border-primary/15 px-3 py-2.5">
+                          <p className="text-[10px] font-bold uppercase tracking-wider text-primary/70 mb-1">📄 Resumo do Documento</p>
+                          <p className="text-xs text-foreground/85 leading-relaxed">{String(doc.extracted_knowledge.documentSummary)}</p>
+                        </div>
+                      )}
+                      {doc.extracted_knowledge.promptContext && (
+                        <div className="rounded-lg bg-muted/40 border border-border px-3 py-2.5">
+                          <p className="text-[10px] font-bold uppercase tracking-wider text-primary/70 mb-1">🎯 System Prompt da Marca</p>
+                          <p className="text-xs text-foreground/85 leading-relaxed">{String(doc.extracted_knowledge.promptContext)}</p>
+                        </div>
+                      )}
+                      <div className="grid grid-cols-2 gap-2 text-xs">
+                        {doc.extracted_knowledge.brandName && (
+                          <div className="rounded-lg border border-border/60 bg-muted/20 px-3 py-2">
+                            <p className="text-[10px] font-bold text-muted-foreground/60 mb-0.5">MARCA</p>
+                            <p className="text-foreground">{String(doc.extracted_knowledge.brandName)}</p>
+                          </div>
+                        )}
+                        {doc.extracted_knowledge.uniqueValueProp && (
+                          <div className="rounded-lg border border-border/60 bg-muted/20 px-3 py-2">
+                            <p className="text-[10px] font-bold text-muted-foreground/60 mb-0.5">PROPOSTA DE VALOR</p>
+                            <p className="text-foreground">{String(doc.extracted_knowledge.uniqueValueProp)}</p>
+                          </div>
+                        )}
+                        {doc.extracted_knowledge.positioning && (
+                          <div className="col-span-2 rounded-lg border border-border/60 bg-muted/20 px-3 py-2">
+                            <p className="text-[10px] font-bold text-muted-foreground/60 mb-0.5">POSICIONAMENTO</p>
+                            <p className="text-foreground">{String(doc.extracted_knowledge.positioning)}</p>
+                          </div>
+                        )}
+                      </div>
+                      {Array.isArray(doc.extracted_knowledge.keyInsights) && doc.extracted_knowledge.keyInsights.length > 0 && (
+                        <div>
+                          <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60 mb-2">Insights Estratégicos</p>
+                          <div className="space-y-1">
+                            {(doc.extracted_knowledge.keyInsights as string[]).map((insight, i) => (
+                              <div key={i} className="flex items-start gap-2">
+                                <span className="text-primary text-xs mt-0.5">→</span>
+                                <p className="text-xs text-foreground/80">{insight}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {Array.isArray(doc.extracted_knowledge.contentAngles) && doc.extracted_knowledge.contentAngles.length > 0 && (
+                        <div>
+                          <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60 mb-2">Ângulos de Conteúdo</p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {(doc.extracted_knowledge.contentAngles as string[]).map((angle, i) => (
+                              <span key={i} className="rounded-full border border-border/50 bg-muted/30 px-2.5 py-1 text-[11px] text-foreground/80">{angle}</span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {typeof doc.extracted_knowledge.completenessScore === 'number' && (
+                        <div className="flex items-center gap-2">
+                          <span className="text-[11px] text-muted-foreground">Completude do documento:</span>
+                          <span className={cn('text-sm font-bold font-mono',
+                            (doc.extracted_knowledge.completenessScore as number) >= 80 ? 'text-emerald-400'
+                              : (doc.extracted_knowledge.completenessScore as number) >= 50 ? 'text-amber-400' : 'text-red-400'
+                          )}>{String(doc.extracted_knowledge.completenessScore)}%</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {doc.status === 'error' && doc.error_message && (
+                    <div className="border-t border-border bg-red-500/5 px-4 py-2">
+                      <p className="text-[11px] text-red-400">{doc.error_message}</p>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          <input ref={brandBookInputRef} type="file" multiple
+            accept=".pdf,.doc,.docx,.ppt,.pptx,.png,.jpg,.jpeg,.webp" className="hidden"
+            onChange={e => handleBrandBookUpload(e.target.files)} />
+          <button
+            onClick={() => brandBookInputRef.current?.click()}
+            disabled={brandBookUploading || !userId}
+            className="w-full flex items-center justify-center gap-2 rounded-xl border-2 border-dashed border-primary/30 hover:border-primary/60 hover:bg-primary/5 transition-all py-5 text-sm font-medium text-muted-foreground hover:text-primary disabled:opacity-40"
+          >
+            {brandBookUploading
+              ? <><Loader2 className="h-4 w-4 animate-spin" /> Enviando e analisando...</>
+              : <><BookMarked className="h-4 w-4 text-primary/60" /> Fazer upload de Brand Book ou Playbook <span className="text-[11px] text-muted-foreground/50">· PDF, PPT, DOC, imagem · máx 20MB</span></>
+            }
+          </button>
+          <p className="text-center text-[11px] text-muted-foreground/40">
+            A IA extrai posicionamento, persona, tom de voz, mensagens-chave e mais — salvo no backend para todas as gerações
+          </p>
+        </div>
+
+        {/* ── Arquivos de Referência Avulsos ── */}
         <div className="rounded-xl border border-border bg-card p-5 space-y-4">
           <div className="flex items-center gap-3">
             <div className="rounded-lg bg-muted/50 p-2 border border-border">

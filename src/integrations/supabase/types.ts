@@ -74,6 +74,48 @@ export type Database = {
         }
         Relationships: []
       }
+      strategy_knowledge: {
+        Row: {
+          created_at: string
+          document_name: string
+          document_type: string | null
+          document_url: string
+          error_message: string | null
+          extracted_knowledge: Json | null
+          file_size: number | null
+          id: string
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          document_name: string
+          document_type?: string | null
+          document_url: string
+          error_message?: string | null
+          extracted_knowledge?: Json | null
+          file_size?: number | null
+          id?: string
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          document_name?: string
+          document_type?: string | null
+          document_url?: string
+          error_message?: string | null
+          extracted_knowledge?: Json | null
+          file_size?: number | null
+          id?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
