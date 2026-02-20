@@ -318,17 +318,20 @@ interface SlideCardProps {
   onApplyLibraryImage: (slideNumber: number, url: string) => void;
   mediaLibraryCount: number;
   userId: string | null;
+  onLibraryChange: () => void;
 }
 
 function buildGenericImagePrompt(slide: SlideOutput): string {
   return `Editorial photography for a Brazilian service brand carousel slide. Style: documentary, natural light, authentic moment. The slide headline is "${slide.headline}". Create a background image that evokes this concept — no text, no overlays, no logos. The image will have a semi-transparent orange (#E8603C) overlay, so use high-contrast composition. Shot on Canon EOS R5, 35mm lens, f/2.8. Professional but human.`;
 }
 
-function SlideCard({ slide, imageUrl, isGenerating, onGenerateImage, onClearImage, onApplyLibraryImage, mediaLibraryCount, userId }: SlideCardProps) {
+function SlideCard({ slide, imageUrl, isGenerating, onGenerateImage, onClearImage, onApplyLibraryImage, mediaLibraryCount, userId, onLibraryChange }: SlideCardProps) {
   const { toast } = useToast();
   const [expanded, setExpanded] = useState(false);
   const slideRef = useRef<HTMLDivElement>(null);
+  const uploadInputRef = useRef<HTMLInputElement>(null);
   const [exporting, setExporting] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
   const [editedHeadline, setEditedHeadline] = useState(slide.headline);
   const [editedHighlight, setEditedHighlight] = useState(slide.headlineHighlight ?? '');
   const [editedSubtext, setEditedSubtext] = useState(slide.subtext ?? '');
@@ -410,6 +413,55 @@ function SlideCard({ slide, imageUrl, isGenerating, onGenerateImage, onClearImag
     }
   };
 
+  const handleDirectUpload = async (file: File) => {
+    if (!userId) return;
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      toast({ title: 'Formato inválido', description: 'Use JPG, PNG ou WEBP.', variant: 'destructive' });
+      return;
+    }
+    if (file.size > 20 * 1024 * 1024) {
+      toast({ title: 'Arquivo muito grande', description: 'Máximo 20MB.', variant: 'destructive' });
+      return;
+    }
+    setUploadingImage(true);
+    try {
+      const ext = file.name.split('.').pop()?.toLowerCase() ?? 'jpg';
+      const uuid = crypto.randomUUID();
+      const storagePath = `${userId}/${uuid}.${ext}`;
+
+      const { error: storageError } = await supabase.storage
+        .from('media-library')
+        .upload(storagePath, file, { contentType: file.type, upsert: false });
+      if (storageError) throw storageError;
+
+      const { data: urlData } = supabase.storage.from('media-library').getPublicUrl(storagePath);
+      const publicUrl = urlData.publicUrl;
+
+      // Apply to slide immediately
+      onApplyLibraryImage(slide.number, publicUrl);
+
+      // Save to DB
+      const { data: insertData, error: insertError } = await supabase
+        .from('media_library')
+        .insert({ user_id: userId, url: publicUrl, filename: file.name, file_size: file.size })
+        .select('id')
+        .single();
+      if (insertError) throw insertError;
+
+      toast({ title: 'Imagem inserida ✅', description: 'Categorizando automaticamente...' });
+      onLibraryChange();
+
+      // Categorize in background
+      supabase.functions.invoke('categorize-media', {
+        body: { imageUrl: publicUrl, mediaId: insertData.id },
+      }).then(() => onLibraryChange());
+    } catch (e: any) {
+      toast({ title: 'Erro no upload', description: e.message, variant: 'destructive' });
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
   return (
     <div className="rounded-xl border border-border overflow-hidden bg-card flex flex-col">
 
@@ -478,6 +530,16 @@ function SlideCard({ slide, imageUrl, isGenerating, onGenerateImage, onClearImag
       {/* ── Image section ── */}
       <div className="px-3 pb-3 space-y-2 border-t border-border pt-2.5">
         <p className="text-[9px] font-bold text-muted-foreground/60 tracking-[0.15em] uppercase">Imagem de fundo</p>
+
+        {/* Hidden file input for direct upload */}
+        <input
+          ref={uploadInputRef}
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          className="hidden"
+          onChange={e => { const f = e.target.files?.[0]; if (f) handleDirectUpload(f); e.target.value = ''; }}
+        />
+
         <textarea
           value={imageInstruction}
           onChange={e => setImageInstruction(e.target.value)}
@@ -485,12 +547,14 @@ function SlideCard({ slide, imageUrl, isGenerating, onGenerateImage, onClearImag
           className="w-full rounded-md border border-border bg-muted/20 px-2 py-1.5 text-xs text-foreground resize-none focus:outline-none focus:ring-1 focus:ring-primary/40"
           placeholder='Instrução: "luz dourada", "ângulo de baixo", "preto e branco"...'
         />
+
+        {/* Generate via AI */}
         <button
           onClick={() => onGenerateImage(slide.number, buildImagePrompt(), 'fast')}
-          disabled={isGenerating}
+          disabled={isGenerating || uploadingImage}
           className={cn(
             'w-full flex items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all border',
-            isGenerating
+            (isGenerating || uploadingImage)
               ? 'border-border text-muted-foreground cursor-not-allowed'
               : hasImage
                 ? 'border-border text-muted-foreground hover:bg-muted/30 hover:text-foreground'
@@ -503,6 +567,18 @@ function SlideCard({ slide, imageUrl, isGenerating, onGenerateImage, onClearImag
           {isGenerating ? 'Gerando...' : hasImage
             ? (imageInstruction.trim() ? 'Aplicar ajuste' : 'Trocar imagem')
             : 'Gerar imagem'}
+        </button>
+
+        {/* Direct upload from device */}
+        <button
+          onClick={() => uploadInputRef.current?.click()}
+          disabled={uploadingImage || isGenerating}
+          className="w-full flex items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all border border-border text-muted-foreground hover:bg-muted/30 hover:text-foreground disabled:opacity-40"
+        >
+          {uploadingImage
+            ? <span className="h-3 w-3 border border-current border-t-transparent rounded-full animate-spin" />
+            : <Upload className="h-3 w-3" />}
+          {uploadingImage ? 'Enviando...' : 'Inserir imagem do dispositivo'}
         </button>
 
         {/* Library search button — shown only when user has media */}
@@ -1311,6 +1387,7 @@ export default function AiCarrosseis() {
                       onApplyLibraryImage={handleApplyLibraryImage}
                       mediaLibraryCount={library.length}
                       userId={userId}
+                      onLibraryChange={fetchLibrary}
                     />
                   ))}
                 </div>
