@@ -604,11 +604,6 @@ export default function Estrategia() {
   };
 
   const handleExtract = async () => {
-    const filledCount = SECTIONS.filter(s => (data[s.key as SectionKey] as string).trim().length > 0).length;
-    if (filledCount < 3) {
-      toast({ title: 'Preencha mais seções', description: 'Preencha pelo menos 3 seções antes de extrair os meta-fields.', variant: 'destructive' });
-      return;
-    }
     setExtracting(true);
     try {
       const { data: result, error } = await supabase.functions.invoke('extract-strategy-metafields', {
