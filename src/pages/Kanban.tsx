@@ -1,6 +1,6 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
-import { initialCampaigns, Campaign, KanbanStatus, Channel, Priority, ContentObjective } from '@/data/seedData';
+import { initialCampaigns, Campaign, KanbanStatus, Channel, Priority, ContentObjective, SEED_VERSION } from '@/data/seedData';
 import {
   DndContext, DragEndEvent, DragStartEvent,
   PointerSensor, useSensor, useSensors, DragOverlay, closestCorners
@@ -745,6 +745,18 @@ export default function Kanban() {
   const [newCardColumn, setNewCardColumn] = useState<KanbanStatus | null>(null);
   const [filterMember, setFilterMember] = useState<string>('all');
   const [filterPriority, setFilterPriority] = useState<string>('all');
+
+  // ── Seed version guard: reset localStorage when seed changes ─────────────
+  useEffect(() => {
+    const storedVersion = localStorage.getItem('dqef-seed-version');
+    if (storedVersion !== SEED_VERSION) {
+      localStorage.removeItem('dqef-campaigns');
+      localStorage.removeItem('dqef-contents');
+      localStorage.setItem('dqef-seed-version', SEED_VERSION);
+      setCampaigns(initialCampaigns);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
 
