@@ -14,6 +14,7 @@ import {
   ChevronRight,
   Target,
   MessageSquareText,
+  Ruler,
 } from 'lucide-react';
 import {
   Sidebar,
@@ -39,6 +40,7 @@ const navItems = [
   { title: 'AI Criativo', url: '/criativo', icon: Sparkles },
   { title: 'AI Carrosséis', url: '/ai-carrosseis', icon: Layers },
   { title: 'Video IA', url: '/video-ia', icon: Clapperboard },
+  { title: 'Formatos', url: '/formatos', icon: Ruler },
 ];
 
 export function AppSidebar() {
