@@ -2,6 +2,20 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
 const AI_GATEWAY = "https://ai.gateway.lovable.dev/v1/chat/completions";
 
+// Robustly extracts JSON from model response even when there's prose before/after
+function extractJSON(raw: string): Record<string, unknown> {
+  // 1. Strip markdown code fences
+  const cleaned = raw.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+  // 2. Try direct parse
+  try { return JSON.parse(cleaned); } catch (_) { /* continue */ }
+  // 3. Extract first {...} block (handles "Sure! Here is..." prefix)
+  const match = cleaned.match(/\{[\s\S]*\}/);
+  if (match) {
+    try { return JSON.parse(match[0]); } catch (_) { /* continue */ }
+  }
+  throw new SyntaxError(`Could not extract JSON from model response. Preview: ${raw.slice(0, 200)}`);
+}
+
 const DQEF_BRAND_CONTEXT = `
 MARCA: Deixa Que Eu Faço (DQEF)
 Marketplace de serviços locais em Florianópolis
@@ -58,7 +72,6 @@ interface GenerateRequest {
   duration?: number;
   additionalContext?: string;
   imagePrompt?: string;
-  // express mode
   freeText?: string;
 }
 
@@ -84,6 +97,24 @@ Deno.serve(async (req) => {
 
     const { operation, persona, scene, contentAngle, videoModel, aspectRatio, duration, additionalContext, imagePrompt, freeText } = body;
 
+    // Helper to call AI gateway
+    const callAI = async (model: string, messages: { role: string; content: string }[], temperature = 0.75) => {
+      const res = await fetch(AI_GATEWAY, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ model, messages, temperature }),
+      });
+      if (!res.ok) {
+        const status = res.status;
+        if (status === 429) throw Object.assign(new Error("Rate limit atingido. Aguarde e tente novamente."), { status: 429 });
+        if (status === 402) throw Object.assign(new Error("Créditos insuficientes. Adicione créditos ao workspace."), { status: 402 });
+        throw new Error("Erro no serviço de IA");
+      }
+      const data = await res.json();
+      const content: string = data.choices?.[0]?.message?.content ?? "";
+      return content;
+    };
+
     // ─── 0. EXPRESS MODE ─────────────────────────────────────────────────────
     if (operation === "express_prompts") {
       const targetModel = videoModel ?? "Seedance 1.5 Pro";
@@ -97,124 +128,81 @@ ${DQEF_BRAND_CONTEXT}
 
 ${modelInstructions}
 
-O usuário vai te dar uma IDEIA, REFERÊNCIA ou TEXTO BRUTO (pode ser um roteiro de carrossel, uma ideia de campanha, um conceito visual). Você deve:
+O usuário vai te dar uma IDEIA, REFERÊNCIA ou TEXTO BRUTO. Sua tarefa:
 1. Extrair a essência visual e narrativa desse conteúdo
 2. Gerar um prompt de IMAGEM hiperdetalhado para o frame inicial (em inglês, estilo fotografia profissional)
 3. Gerar um prompt de VÍDEO hiperdetalhado no estilo de diretor de cinema (em inglês)
 
 ESTRUTURA DO PROMPT DE IMAGEM:
-[SHOT TYPE]: [lens/focal] | [Subject] | [Action/pose — frozen moment] | [Environment] | [Lighting] | [Depth of field] | [Color grading] | [Technical specs] | [Style]
+[SHOT TYPE]: [lens/focal] | [Subject] | [Action/pose] | [Environment] | [Lighting] | [Depth of field] | [Color grading] | [Technical specs] | [Style]
 
 ESTRUTURA DO PROMPT DE VÍDEO:
 OPENING FRAME → SEQUENCE BEATS [0.0s–Xs] → CAMERA movement → CHARACTER actions → ENVIRONMENT → LIGHTING → TECHNICAL → AUDIO/MOOD → STYLE references
 
-Retorne JSON exatamente neste formato:
-{
-  "imagePrompt": "prompt EN hiperdetalhado para frame inicial no Higgsfield",
-  "imagePromptPtBr": "tradução explicativa do prompt de imagem",
-  "visualNotes": "notas do diretor de arte sobre as escolhas visuais",
-  "videoPrompt": "prompt EN completo de diretor de cinema para o vídeo",
-  "videoPromptPtBr": "tradução + análise das escolhas cinematográficas",
-  "directorNotes": "raciocínio por trás de cada decisão técnica e narrativa",
-  "technicalSpecs": {
-    "model": "${targetModel}",
-    "duration": "${targetDuration}s",
-    "aspectRatio": "${targetAspect}",
-    "fixedLens": false,
-    "audio": true,
-    "resolution": "1080p"
-  },
-  "warningsAndTips": ["dica 1", "dica 2", "dica 3"],
-  "extractedScene": "resumo da cena/ideia extraída do input do usuário",
-  "suggestedAngle": "ângulo emocional detectado (Raiva/Dinheiro/Orgulho/Urgência/Alívio)"
-}`;
+REGRA CRÍTICA: Responda APENAS com JSON puro. Zero texto fora do JSON. Nenhuma explicação. Nenhum prefácio. Apenas o objeto JSON começando com { e terminando com }.
+
+JSON esperado:
+{"imagePrompt":"...","imagePromptPtBr":"...","visualNotes":"...","videoPrompt":"...","videoPromptPtBr":"...","directorNotes":"...","technicalSpecs":{"model":"${targetModel}","duration":"${targetDuration}s","aspectRatio":"${targetAspect}","fixedLens":false,"audio":true,"resolution":"1080p"},"warningsAndTips":["..."],"extractedScene":"...","suggestedAngle":"..."}`;
 
       const userContent = `IDEIA / REFERÊNCIA / TEXTO DO USUÁRIO:
 ---
 ${freeText}
 ---
 
-Modelo de vídeo alvo: ${targetModel}
-Aspecto: ${targetAspect}
-Duração: ${targetDuration}s
-${persona ? `Persona do prestador: ${persona}` : ""}
-${contentAngle ? `Ângulo emocional preferido: ${contentAngle}` : ""}
+Modelo: ${targetModel} | Aspecto: ${targetAspect} | Duração: ${targetDuration}s
+${persona ? `Persona: ${persona}` : ""}
+${contentAngle ? `Ângulo: ${contentAngle}` : ""}
 
-Analise o conteúdo acima e gere ambos os prompts (imagem + vídeo) em inglês, no estilo de diretor de cinema.`;
+Responda SOMENTE com JSON.`;
 
-      const res = await fetch(AI_GATEWAY, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: "google/gemini-2.5-pro",
-          messages: [{ role: "system", content: systemPrompt }, { role: "user", content: userContent }],
-          temperature: 0.75,
-        }),
-      });
-
-      if (!res.ok) {
-        const status = res.status;
-        if (status === 429) return new Response(JSON.stringify({ error: "Rate limit atingido. Aguarde e tente novamente." }), { status: 429, headers: CORS });
-        if (status === 402) return new Response(JSON.stringify({ error: "Créditos insuficientes. Adicione créditos ao workspace." }), { status: 402, headers: CORS });
-        return new Response(JSON.stringify({ error: "Erro no serviço de IA" }), { status: 500, headers: CORS });
+      try {
+        const raw = await callAI("google/gemini-2.5-pro", [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userContent },
+        ], 0.75);
+        const parsed = extractJSON(raw);
+        return new Response(JSON.stringify(parsed), { headers: CORS });
+      } catch (e: unknown) {
+        const err = e as { status?: number; message?: string };
+        return new Response(JSON.stringify({ error: err.message ?? String(e) }), { status: err.status ?? 500, headers: CORS });
       }
-
-      const data = await res.json();
-      const content = data.choices?.[0]?.message?.content ?? "";
-      const cleaned = content.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
-      const parsed = JSON.parse(cleaned);
-      return new Response(JSON.stringify(parsed), { headers: CORS });
     }
-
 
     // ─── 1. GENERATE IMAGE PROMPT ────────────────────────────────────────────
     if (operation === "image_prompt") {
       const systemPrompt = `Você é um diretor de fotografia e diretor de arte especialista em campanhas publicitárias brasileiras fotorrealistas.
 ${DQEF_BRAND_CONTEXT}
 
-Sua tarefa: criar um prompt de imagem HIPERDETALHADO em inglês para gerar o frame inicial de um vídeo no Higgsfield.
-O prompt deve ser a CENA ESTÁTICA PERFEITA que serve como ponto de partida para o vídeo — como uma fotografia de alto nível que congela o momento antes do movimento.
+Sua tarefa: criar um prompt de imagem HIPERDETALHADO em inglês para o frame inicial de um vídeo no Higgsfield.
 
-ESTRUTURA OBRIGATÓRIA do prompt de imagem:
+ESTRUTURA OBRIGATÓRIA:
 [SHOT TYPE]: [lens/focal] | [Subject description] | [Action/pose — frozen moment] | [Environment details] | [Lighting — angle, quality, time of day] | [Depth of field] | [Color grading] | [Technical specs] | [Style notes]
 
-Retorne JSON: { "imagePrompt": "...", "imagePromptPtBr": "...", "visualNotes": "..." }`;
+REGRA CRÍTICA: Responda APENAS com JSON puro. Nenhum texto fora do JSON.
+Formato: {"imagePrompt":"...","imagePromptPtBr":"...","visualNotes":"..."}`;
 
       const userMsg = `Persona: ${persona}
-Cena/Contexto: ${scene}
-Ângulo de conteúdo DQEF: ${contentAngle}
-Modelo de vídeo alvo: ${videoModel}
-Aspecto: ${aspectRatio}
-Duração do vídeo: ${duration}s
-${additionalContext ? `Contexto adicional: ${additionalContext}` : ""}
+Cena: ${scene}
+Ângulo: ${contentAngle}
+Modelo: ${videoModel} | Aspecto: ${aspectRatio} | Duração: ${duration}s
+${additionalContext ? `Contexto: ${additionalContext}` : ""}
 
-Gere o prompt de imagem para o frame inicial desta cena.`;
+Responda SOMENTE com JSON.`;
 
-      const res = await fetch(AI_GATEWAY, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: "google/gemini-2.5-flash",
-          messages: [{ role: "system", content: systemPrompt }, { role: "user", content: userMsg }],
-          temperature: 0.7,
-        }),
-      });
-
-      if (!res.ok) {
-        const status = res.status;
-        if (status === 429) return new Response(JSON.stringify({ error: "Rate limit atingido. Aguarde e tente novamente." }), { status: 429, headers: CORS });
-        if (status === 402) return new Response(JSON.stringify({ error: "Créditos insuficientes. Adicione créditos ao workspace." }), { status: 402, headers: CORS });
-        return new Response(JSON.stringify({ error: "Erro no serviço de IA" }), { status: 500, headers: CORS });
+      try {
+        const raw = await callAI("google/gemini-2.5-flash", [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userMsg },
+        ], 0.7);
+        const parsed = extractJSON(raw);
+        return new Response(JSON.stringify(parsed), { headers: CORS });
+      } catch (e: unknown) {
+        const err = e as { status?: number; message?: string };
+        return new Response(JSON.stringify({ error: err.message ?? String(e) }), { status: err.status ?? 500, headers: CORS });
       }
-
-      const data = await res.json();
-      const content = data.choices?.[0]?.message?.content ?? "";
-      const cleaned = content.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
-      const parsed = JSON.parse(cleaned);
-      return new Response(JSON.stringify(parsed), { headers: CORS });
     }
 
-    // ─── 2. GENERATE ACTUAL IMAGE (Nano Banana) ───────────────────────────────
+    // ─── 2. GENERATE ACTUAL IMAGE ─────────────────────────────────────────────
     if (operation === "generate_image") {
       if (!imagePrompt) return new Response(JSON.stringify({ error: "imagePrompt required" }), { status: 400, headers: CORS });
 
@@ -241,73 +229,54 @@ Gere o prompt de imagem para o frame inicial desta cena.`;
       if (!images || images.length === 0) {
         return new Response(JSON.stringify({ error: "Nenhuma imagem foi gerada" }), { status: 500, headers: CORS });
       }
-      const imageUrl = images[0].image_url.url; // data:image/png;base64,...
+      const imageUrl = images[0].image_url.url;
       return new Response(JSON.stringify({ imageUrl }), { headers: CORS });
     }
 
     // ─── 3. GENERATE VIDEO PROMPT ─────────────────────────────────────────────
     if (operation === "video_prompt") {
-      const modelInstructions = MODEL_INSTRUCTIONS[videoModel] ?? MODEL_INSTRUCTIONS["Seedance 1.5 Pro"];
+      const modelInstructions = MODEL_INSTRUCTIONS[videoModel ?? "Seedance 1.5 Pro"] ?? MODEL_INSTRUCTIONS["Seedance 1.5 Pro"];
 
-      const systemPrompt = `Você é um diretor de cinema com 20 anos de experiência em publicidade, especialista em direção de vídeos publicitários brasileiros e em prompts para geração de vídeo com IA.
+      const systemPrompt = `Você é um diretor de cinema com 20 anos de experiência em publicidade brasileira, especialista em prompts para geração de vídeo com IA.
 
 ${DQEF_BRAND_CONTEXT}
 
 ${modelInstructions}
 
 ESTRUTURA OBRIGATÓRIA do prompt de vídeo:
-1. OPENING FRAME: descrição exata do primeiro quadro
-2. SEQUENCE BEATS: timing markers [0.0s–Xs] para cada beat de ação
-3. CAMERA: movimento preciso e progressão
-4. CHARACTER: ações físicas específicas, expressões, postura
-5. ENVIRONMENT: ambiente detalhado com contexto sensorial
-6. LIGHTING: qualidade, ângulo, cor da luz em cada beat
-7. TECHNICAL: focal, f-stop, color grade, "Fixed lens: OFF/ON"
-8. AUDIO/MOOD: ambiência sonora que guia o modelo
-9. STYLE: referências cinemáticas específicas
+1. OPENING FRAME
+2. SEQUENCE BEATS: timing markers [0.0s–Xs]
+3. CAMERA: movimento preciso
+4. CHARACTER: ações físicas, expressões, postura
+5. ENVIRONMENT: ambiente detalhado
+6. LIGHTING: qualidade, ângulo, cor
+7. TECHNICAL: focal, f-stop, color grade
+8. AUDIO/MOOD: ambiência sonora
+9. STYLE: referências cinemáticas
 
-Retorne JSON:
-{
-  "videoPrompt": "prompt em inglês completo e hiperdetalhado",
-  "videoPromptPtBr": "tradução explicativa do prompt",
-  "directorNotes": "notas do diretor: por que cada escolha foi feita",
-  "technicalSpecs": { "model": "", "duration": "", "aspectRatio": "", "fixedLens": boolean, "audio": boolean, "resolution": "1080p" },
-  "warningsAndTips": ["dica 1", "dica 2"]
-}`;
+REGRA CRÍTICA: Responda APENAS com JSON puro. Nenhum texto fora do JSON.
+Formato: {"videoPrompt":"...","videoPromptPtBr":"...","directorNotes":"...","technicalSpecs":{"model":"","duration":"","aspectRatio":"","fixedLens":false,"audio":true,"resolution":"1080p"},"warningsAndTips":["..."]}`;
 
       const userMsg = `Persona: ${persona}
-Cena/Contexto: ${scene}
-Ângulo DQEF: ${contentAngle}
-Modelo: ${videoModel}
-Aspecto: ${aspectRatio}
-Duração: ${duration}s
-${additionalContext ? `Contexto adicional: ${additionalContext}` : ""}
-${imagePrompt ? `O frame inicial foi gerado com este prompt de imagem: ${imagePrompt}` : ""}
+Cena: ${scene}
+Ângulo: ${contentAngle}
+Modelo: ${videoModel} | Aspecto: ${aspectRatio} | Duração: ${duration}s
+${additionalContext ? `Contexto: ${additionalContext}` : ""}
+${imagePrompt ? `Frame inicial gerado com: ${imagePrompt}` : ""}
 
-Gere o prompt de vídeo hiperdetalhado no estilo de diretor de cinema para este conteúdo.`;
+Responda SOMENTE com JSON.`;
 
-      const res = await fetch(AI_GATEWAY, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: "google/gemini-2.5-pro",
-          messages: [{ role: "system", content: systemPrompt }, { role: "user", content: userMsg }],
-          temperature: 0.75,
-        }),
-      });
-
-      if (!res.ok) {
-        const status = res.status;
-        if (status === 429) return new Response(JSON.stringify({ error: "Rate limit atingido. Aguarde e tente novamente." }), { status: 429, headers: CORS });
-        if (status === 402) return new Response(JSON.stringify({ error: "Créditos insuficientes. Adicione créditos ao workspace." }), { status: 402, headers: CORS });
-        return new Response(JSON.stringify({ error: "Erro no serviço de IA" }), { status: 500, headers: CORS });
+      try {
+        const raw = await callAI("google/gemini-2.5-pro", [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userMsg },
+        ], 0.75);
+        const parsed = extractJSON(raw);
+        return new Response(JSON.stringify(parsed), { headers: CORS });
+      } catch (e: unknown) {
+        const err = e as { status?: number; message?: string };
+        return new Response(JSON.stringify({ error: err.message ?? String(e) }), { status: err.status ?? 500, headers: CORS });
       }
-
-      const data = await res.json();
-      const content = data.choices?.[0]?.message?.content ?? "";
-      const cleaned = content.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
-      const parsed = JSON.parse(cleaned);
-      return new Response(JSON.stringify(parsed), { headers: CORS });
     }
 
     return new Response(JSON.stringify({ error: "Invalid operation" }), { status: 400, headers: CORS });
