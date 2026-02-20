@@ -28,17 +28,16 @@ import { cn } from '@/lib/utils';
 
 const navItems = [
   { title: 'Dashboard', url: '/', icon: LayoutDashboard },
+  { title: 'Estratégia', url: '/estrategia', icon: Target, highlight: true },
+  { title: 'Campanhas', url: '/campanhas', icon: Megaphone },
   { title: 'Kanban', url: '/kanban', icon: Trello },
   { title: 'Calendário', url: '/calendario', icon: CalendarDays },
   { title: 'Biblioteca', url: '/biblioteca', icon: BookOpen },
   { title: 'Analytics', url: '/analytics', icon: BarChart3 },
-  { title: 'Campanhas', url: '/campanhas', icon: Megaphone },
   { title: 'AI Criativo', url: '/criativo', icon: Sparkles },
   { title: 'AI Carrosséis', url: '/ai-carrosseis', icon: Layers },
   { title: 'Video IA', url: '/video-ia', icon: Clapperboard },
 ];
-
-const strategyItem = { title: 'Estratégia', url: '/estrategia', icon: Target };
 
 export function AppSidebar() {
   const location = useLocation();
@@ -67,56 +66,32 @@ export function AppSidebar() {
         {/* Strategy item — pinned at top, always highlighted */}
         <SidebarGroup>
           <SidebarGroupContent>
-            <SidebarMenu className="mb-2">
-              {(() => {
-                const isActive = location.pathname === strategyItem.url;
-                return (
-                  <SidebarMenuItem>
-                    <SidebarMenuButton asChild isActive={isActive} tooltip={strategyItem.title}>
-                      <Link
-                        to={strategyItem.url}
-                        className={cn(
-                          'group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-bold transition-all duration-200 border',
-                          isActive
-                            ? 'bg-primary/15 text-primary shadow-sm border-primary/30'
-                            : 'border-primary/20 bg-primary/5 text-primary/80 hover:bg-primary/10 hover:text-primary'
-                        )}
-                      >
-                        <strategyItem.icon className="h-4 w-4 shrink-0 text-primary" />
-                        {!collapsed && <span className="truncate">{strategyItem.title}</span>}
-                        {!collapsed && (
-                          <div className="ml-auto h-1.5 w-1.5 rounded-full bg-primary/60" />
-                        )}
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                );
-              })()}
-            </SidebarMenu>
-
-            {/* Separator */}
-            {!collapsed && (
-              <div className="mx-1 mb-2 h-px bg-border/50" />
-            )}
-
             <SidebarMenu className="gap-1">
               {navItems.map((item) => {
                 const isActive = location.pathname === item.url ||
                   (item.url !== '/' && location.pathname.startsWith(item.url));
+                const isHighlight = item.highlight;
                 return (
                   <SidebarMenuItem key={item.title}>
                     <SidebarMenuButton asChild isActive={isActive} tooltip={item.title}>
                       <Link
                         to={item.url}
                         className={cn(
-                          'group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200',
-                          isActive
-                            ? 'bg-primary/15 text-primary shadow-sm'
-                            : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
+                          'group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-all duration-200',
+                          isHighlight
+                            ? isActive
+                              ? 'font-bold bg-primary/20 text-primary shadow-sm border border-primary/30'
+                              : 'font-bold border border-primary/25 bg-primary/8 text-primary/85 hover:bg-primary/15 hover:text-primary'
+                            : isActive
+                              ? 'font-medium bg-primary/15 text-primary shadow-sm'
+                              : 'font-medium text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
                         )}
                       >
-                        <item.icon className={cn('h-4 w-4 shrink-0', isActive && 'text-primary')} />
+                        <item.icon className={cn('h-4 w-4 shrink-0', (isActive || isHighlight) && 'text-primary')} />
                         {!collapsed && <span className="truncate">{item.title}</span>}
+                        {isHighlight && !collapsed && !isActive && (
+                          <div className="ml-auto h-1.5 w-1.5 rounded-full bg-primary/50 animate-pulse" />
+                        )}
                         {isActive && !collapsed && (
                           <div className="ml-auto h-1.5 w-1.5 rounded-full bg-primary" />
                         )}

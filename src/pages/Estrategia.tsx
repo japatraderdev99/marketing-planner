@@ -3,6 +3,7 @@ import {
   Target, TrendingUp, Users, Megaphone, BookOpen, AlertTriangle,
   X, Zap, FileText, PlusCircle, File, Eye, Download, Trash2,
   ImageIcon, Check, Shield, Save, ChevronDown, ChevronUp, Info,
+  Sparkles, Brain, RefreshCw, Copy,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -35,7 +36,32 @@ interface StrategyData {
   docs: StrategyDoc[];
 }
 
+interface MetaFields {
+  brandEssence: string;
+  uniqueValueProp: string;
+  targetPersona: {
+    profile: string;
+    demographics: string;
+    digitalBehavior: string;
+    biggestPain: string;
+    dream: string;
+  };
+  toneRules: { use: string[]; avoid: string[] };
+  keyMessages: string[];
+  painPoints: string[];
+  competitiveEdge: string[];
+  forbiddenTopics: string[];
+  currentCampaignFocus: string;
+  contentAngles: string[];
+  ctaStyle: string;
+  kpiPriorities: string[];
+  promptContext: string;
+  completenessScore: number;
+  missingCritical: string[];
+}
+
 const STRATEGY_STORAGE_KEY = 'dqef_strategy_v1';
+const METAFIELDS_STORAGE_KEY = 'dqef_strategy_metafields_v1';
 
 // ─── Section definitions ──────────────────────────────────────────────────────
 
@@ -242,6 +268,130 @@ function SectionCard({
   );
 }
 
+// ─── MetaFields Panel ─────────────────────────────────────────────────────────
+
+function MetaTag({ label, value }: { label: string; value: string }) {
+  const { toast } = useToast();
+  return (
+    <div
+      className="flex items-start gap-2 rounded-lg border border-border/60 bg-muted/20 px-3 py-2.5 cursor-pointer hover:bg-muted/40 transition-colors group"
+      onClick={() => { navigator.clipboard.writeText(value); toast({ title: 'Copiado ✅', description: label }); }}
+      title="Clique para copiar"
+    >
+      <div className="flex-1 min-w-0">
+        <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60 mb-0.5">{label}</p>
+        <p className="text-xs text-foreground leading-relaxed">{value}</p>
+      </div>
+      <Copy className="h-3 w-3 text-muted-foreground/40 group-hover:text-primary shrink-0 mt-0.5 transition-colors" />
+    </div>
+  );
+}
+
+function MetaTagList({ label, items }: { label: string; items: string[] }) {
+  return (
+    <div className="space-y-1">
+      <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60">{label}</p>
+      <div className="flex flex-wrap gap-1.5">
+        {items.map((item, i) => (
+          <span key={i} className="rounded-full border border-border/50 bg-muted/30 px-2.5 py-1 text-[11px] text-foreground/80">{item}</span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function MetaFieldsPanel({ metafields, onRegenerate, loading }: {
+  metafields: MetaFields | null;
+  onRegenerate: () => void;
+  loading: boolean;
+}) {
+  if (!metafields) return null;
+  const score = metafields.completenessScore;
+  const scoreColor = score >= 80 ? 'text-emerald-400' : score >= 50 ? 'text-amber-400' : 'text-red-400';
+  const scoreBarColor = score >= 80 ? 'bg-emerald-400' : score >= 50 ? 'bg-amber-400' : 'bg-red-400';
+
+  return (
+    <div className="rounded-xl border border-primary/20 bg-gradient-to-br from-primary/5 to-transparent p-5 space-y-5">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <div className="rounded-lg bg-primary/15 p-1.5 border border-primary/20">
+            <Brain className="h-4 w-4 text-primary" />
+          </div>
+          <div>
+            <p className="text-sm font-bold text-foreground">Meta-Fields Extraídos pela IA</p>
+            <p className="text-[11px] text-muted-foreground">Alimentam automaticamente campanhas, copies e carrosséis</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className={cn('text-lg font-black font-mono', scoreColor)}>{score}%</span>
+          <button
+            onClick={onRegenerate}
+            disabled={loading}
+            className="rounded-lg border border-border/60 p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors disabled:opacity-40"
+            title="Regenerar"
+          >
+            <RefreshCw className={cn('h-3.5 w-3.5', loading && 'animate-spin')} />
+          </button>
+        </div>
+      </div>
+      <div className="h-1.5 w-full rounded-full bg-muted/50 overflow-hidden">
+        <div className={cn('h-full rounded-full transition-all duration-700', scoreBarColor)} style={{ width: `${score}%` }} />
+      </div>
+      {metafields.missingCritical.length > 0 && (
+        <div className="flex items-start gap-2 rounded-lg bg-amber-500/10 border border-amber-500/20 px-3 py-2.5">
+          <AlertTriangle className="h-3.5 w-3.5 text-amber-400 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-[11px] font-semibold text-amber-400 mb-1">Preencha para melhorar a assertividade:</p>
+            <div className="flex flex-wrap gap-1">
+              {metafields.missingCritical.map((m, i) => (
+                <span key={i} className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] text-amber-400">{m}</span>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+      <div className="rounded-lg border border-primary/15 bg-primary/5 p-3 space-y-1">
+        <p className="text-[10px] font-bold uppercase tracking-wider text-primary/70">🎯 System Prompt da Marca</p>
+        <p className="text-xs text-foreground/90 leading-relaxed">{metafields.promptContext}</p>
+      </div>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <MetaTag label="Essência da Marca" value={metafields.brandEssence} />
+        <MetaTag label="Proposta de Valor Única" value={metafields.uniqueValueProp} />
+        <MetaTag label="Persona" value={metafields.targetPersona.profile} />
+        <MetaTag label="Maior Dor" value={metafields.targetPersona.biggestPain} />
+        <MetaTag label="Sonho do Público" value={metafields.targetPersona.dream} />
+        <MetaTag label="Foco Atual de Campanha" value={metafields.currentCampaignFocus} />
+        <MetaTag label="Estilo de CTA" value={metafields.ctaStyle} />
+        <MetaTag label="Perfil Demográfico" value={metafields.targetPersona.demographics} />
+      </div>
+      <MetaTagList label="Mensagens Centrais" items={metafields.keyMessages} />
+      <MetaTagList label="Ângulos de Conteúdo" items={metafields.contentAngles} />
+      <MetaTagList label="Dores Mapeadas" items={metafields.painPoints} />
+      <MetaTagList label="Vantagens Competitivas" items={metafields.competitiveEdge} />
+      <MetaTagList label="KPIs Prioritários" items={metafields.kpiPriorities} />
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-400/70 mb-1.5">✅ Tom — Pode usar</p>
+          <div className="space-y-1">
+            {metafields.toneRules.use.map((r, i) => (
+              <p key={i} className="text-[11px] text-foreground/75 pl-2 border-l border-emerald-400/30">{r}</p>
+            ))}
+          </div>
+        </div>
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-wider text-red-400/70 mb-1.5">❌ Tom — Proibido</p>
+          <div className="space-y-1">
+            {metafields.toneRules.avoid.map((r, i) => (
+              <p key={i} className="text-[11px] text-foreground/75 pl-2 border-l border-red-400/30">{r}</p>
+            ))}
+          </div>
+        </div>
+      </div>
+      <MetaTagList label="Tópicos Proibidos" items={metafields.forbiddenTopics} />
+    </div>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function Estrategia() {
@@ -251,6 +401,13 @@ export default function Estrategia() {
   const [userId, setUserId] = useState<string | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [extracting, setExtracting] = useState(false);
+  const [metafields, setMetafields] = useState<MetaFields | null>(() => {
+    try {
+      const raw = localStorage.getItem(METAFIELDS_STORAGE_KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch { return null; }
+  });
 
   const defaultData: StrategyData = {
     positioning: '',
@@ -288,6 +445,30 @@ export default function Estrategia() {
     setSaved(true);
     toast({ title: 'Playbook salvo ✅', description: 'Estratégia armazenada e pronta para alimentar a IA.' });
     setTimeout(() => setSaved(false), 4000);
+  };
+
+  const handleExtract = async () => {
+    const filledCount = SECTIONS.filter(s => (data[s.key as SectionKey] as string).trim().length > 0).length;
+    if (filledCount < 3) {
+      toast({ title: 'Preencha mais seções', description: 'Preencha pelo menos 3 seções antes de extrair os meta-fields.', variant: 'destructive' });
+      return;
+    }
+    setExtracting(true);
+    try {
+      const { data: result, error } = await supabase.functions.invoke('extract-strategy-metafields', {
+        body: { strategyData: data },
+      });
+      if (error) throw error;
+      const mf = result.metafields as MetaFields;
+      setMetafields(mf);
+      localStorage.setItem(METAFIELDS_STORAGE_KEY, JSON.stringify(mf));
+      toast({ title: 'Meta-fields extraídos ✅', description: `Score do playbook: ${mf.completenessScore}%` });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Erro desconhecido';
+      toast({ title: 'Erro ao extrair meta-fields', description: msg, variant: 'destructive' });
+    } finally {
+      setExtracting(false);
+    }
   };
 
   const handleFileUpload = async (files: FileList | null) => {
@@ -516,6 +697,28 @@ export default function Estrategia() {
               : <><PlusCircle className="h-4 w-4" /> Adicionar arquivo de referência</>
             }
           </button>
+        </div>
+
+        {/* ── AI Extract + MetaFields ── */}
+        <div className="space-y-3">
+          <Button
+            onClick={handleExtract}
+            disabled={extracting}
+            size="lg"
+            variant="outline"
+            className="w-full h-12 text-sm font-bold rounded-xl border-primary/30 hover:border-primary/60 hover:bg-primary/5 text-primary gap-2"
+          >
+            {extracting
+              ? <><RefreshCw className="h-4 w-4 animate-spin" /> Analisando playbook com IA...</>
+              : <><Sparkles className="h-4 w-4" /> {metafields ? 'Regenerar meta-fields da IA' : 'Extrair meta-fields com IA'}</>
+            }
+          </Button>
+          {!metafields && !extracting && (
+            <p className="text-center text-[11px] text-muted-foreground/50">
+              A IA analisa seu playbook e extrai campos estruturados que norteiam campanhas e copies
+            </p>
+          )}
+          <MetaFieldsPanel metafields={metafields} onRegenerate={handleExtract} loading={extracting} />
         </div>
 
         {/* ── Save ── */}
