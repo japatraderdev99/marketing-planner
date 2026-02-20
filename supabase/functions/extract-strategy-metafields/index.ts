@@ -67,21 +67,20 @@ Resumo: ${k.documentSummary || ""}`;
       // knowledge base is optional — proceed without it
     }
 
-    const hasPlaybookData = Object.values(strategyData).some((v) => typeof v === "string" && (v as string).trim().length > 10);
     const hasKnowledge = knowledgeContext.length > 0;
-
-    if (!hasPlaybookData && !hasKnowledge) {
-      throw new Error("Preencha pelo menos um campo do playbook ou envie um brand book para a IA analisar.");
-    }
+    const refDocs: Array<{ name: string; url: string; type: string }> = Array.isArray(strategyData.docs) ? strategyData.docs : [];
 
     const prompt = `Você é um estrategista de marketing sênior especializado em brand strategy e comunicação persuasiva.
 
 Analise TODAS as fontes de informação abaixo e extraia os META-FIELDS estruturados que devem nortear TODAS as campanhas, copies e comunicações da marca.
 
-${hasKnowledge ? `KNOWLEDGE BASE (documentos enviados — prioridade máxima):
+${hasKnowledge ? `KNOWLEDGE BASE ANALISADO (prioridade máxima — extraído dos documentos enviados):
 ---
 ${knowledgeContext}
 ---
+
+` : ""}${refDocs.length > 0 ? `ARQUIVOS DE REFERÊNCIA ENVIADOS (use os nomes como contexto):
+${refDocs.map(d => `- ${d.name}`).join("\n")}
 
 ` : ""}PLAYBOOK ESTRATÉGICO (campos manuais):
 ---
@@ -96,7 +95,7 @@ OBJETIVO ATUAL (30-90 dias): ${strategyData.currentObjective || "(não preenchid
 KPIs E METAS: ${strategyData.kpis || "(não preenchido)"}
 ---
 
-INSTRUÇÃO: Use TODAS as fontes disponíveis. Se um campo do playbook está vazio, busque a informação nos documentos do knowledge base. Seja específico e acionável. Prefira dados concretos a generalizações.
+INSTRUÇÃO: Use TODAS as fontes disponíveis. Se um campo do playbook está vazio, infira com base no contexto disponível. Seja específico e acionável. Prefira dados concretos a generalizações.
 
 Retorne um JSON com a seguinte estrutura exata:
 {
