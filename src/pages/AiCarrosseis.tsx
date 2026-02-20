@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { Layers, Wand2, Copy, Check, Download, ChevronDown, ChevronUp, ImageIcon, Video, Zap, RefreshCw, Image, Minimize2, Shuffle, Upload, Trash2, Library, X, Star, Target, FileText, Users, Megaphone, TrendingUp, BookOpen, AlertTriangle, PlusCircle, File, Eye } from 'lucide-react';
+import { Layers, Wand2, Copy, Check, Download, ChevronDown, ChevronUp, ImageIcon, Video, Zap, RefreshCw, Image, Minimize2, Shuffle, Upload, Trash2, Library, X, Star, Target, FileText, Users, Megaphone, TrendingUp, BookOpen, AlertTriangle, PlusCircle, File, Eye, Save, MessageSquare, Clock, CheckCircle, XCircle, Send, BookMarked, Inbox } from 'lucide-react';
 import dqfIcon from '@/assets/dqf-icon.svg';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -1636,6 +1636,354 @@ function exportCarouselHTML(carousel: CarouselOutput, slideImages: Record<number
   URL.revokeObjectURL(url);
 }
 
+// ─── Draft Types ──────────────────────────────────────────────────────────────
+
+interface FeedbackRequest {
+  id: string;
+  requested_by: string;
+  requested_by_name: string;
+  requested_to: string;
+  requested_to_name: string;
+  message: string;
+  status: 'pending' | 'approved' | 'rejected';
+  reply?: string;
+  created_at: string;
+  replied_at?: string;
+}
+
+interface CreativeDraft {
+  id: string;
+  user_id: string;
+  sigla: string;
+  name: string;
+  status: 'draft' | 'review' | 'approved' | 'rejected';
+  context?: string;
+  angle?: string;
+  persona?: string;
+  channel?: string;
+  tone?: string;
+  format_id?: string;
+  carousel_data?: CarouselOutput;
+  slide_images?: Record<number, string>;
+  feedback_requests?: FeedbackRequest[];
+  campaign_name?: string;
+  workflow_stage?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+const TEAM_MEMBERS = [
+  { name: 'Gabriel', email: 'gabriel@dqef.com.br', role: 'CMO' },
+  { name: 'Guilherme', email: 'guilherme@dqef.com.br', role: 'Diretor Criativo' },
+  { name: 'Marcelo', email: 'marcelo@dqef.com.br', role: 'CFO' },
+  { name: 'Leandro', email: 'leandro@dqef.com.br', role: 'CEO' },
+  { name: 'Gustavo', email: 'gustavo@dqef.com.br', role: 'Dev' },
+];
+
+const STATUS_CONFIG = {
+  draft: { label: 'Rascunho', color: 'bg-muted/60 text-muted-foreground border-border', icon: <Clock className="h-3 w-3" /> },
+  review: { label: 'Em revisão', color: 'bg-yellow-500/15 text-yellow-400 border-yellow-500/30', icon: <MessageSquare className="h-3 w-3" /> },
+  approved: { label: 'Aprovado', color: 'bg-green-500/15 text-green-400 border-green-500/30', icon: <CheckCircle className="h-3 w-3" /> },
+  rejected: { label: 'Rejeitado', color: 'bg-red-500/15 text-red-400 border-red-500/30', icon: <XCircle className="h-3 w-3" /> },
+};
+
+// ─── DraftsPanel ──────────────────────────────────────────────────────────────
+
+interface DraftsPanelProps {
+  userId: string | null;
+  currentUserName: string;
+  onLoadDraft: (draft: CreativeDraft) => void;
+  refreshTrigger: number;
+}
+
+function DraftsPanel({ userId, currentUserName, onLoadDraft, refreshTrigger }: DraftsPanelProps) {
+  const { toast } = useToast();
+  const [drafts, setDrafts] = useState<CreativeDraft[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedDraft, setSelectedDraft] = useState<CreativeDraft | null>(null);
+  const [feedbackMessage, setFeedbackMessage] = useState('');
+  const [selectedReviewer, setSelectedReviewer] = useState('');
+  const [sendingFeedback, setSendingFeedback] = useState(false);
+  const [replyText, setReplyText] = useState<Record<string, string>>({});
+  const [replyingTo, setReplyingTo] = useState<string | null>(null);
+
+  const fetchDrafts = useCallback(async () => {
+    setLoading(true);
+    const { data, error } = await supabase
+      .from('creative_drafts')
+      .select('*')
+      .order('updated_at', { ascending: false });
+    if (!error && data) setDrafts(data as unknown as CreativeDraft[]);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { fetchDrafts(); }, [fetchDrafts, refreshTrigger]);
+
+  const handleDelete = async (draft: CreativeDraft) => {
+    if (draft.user_id !== userId) {
+      toast({ title: 'Sem permissão', description: 'Apenas o criador pode excluir o draft.', variant: 'destructive' });
+      return;
+    }
+    await supabase.from('creative_drafts').delete().eq('id', draft.id);
+    toast({ title: 'Draft excluído', description: draft.sigla });
+    setSelectedDraft(null);
+    fetchDrafts();
+  };
+
+  const handleRequestFeedback = async () => {
+    if (!selectedDraft || !feedbackMessage.trim() || !selectedReviewer) return;
+    setSendingFeedback(true);
+    try {
+      const reviewer = TEAM_MEMBERS.find(m => m.name === selectedReviewer)!;
+      const newRequest: FeedbackRequest = {
+        id: crypto.randomUUID(),
+        requested_by: userId!,
+        requested_by_name: currentUserName,
+        requested_to: reviewer.name,
+        requested_to_name: reviewer.name,
+        message: feedbackMessage.trim(),
+        status: 'pending',
+        created_at: new Date().toISOString(),
+      };
+
+      const existingRequests = selectedDraft.feedback_requests ?? [];
+      const updatedRequests = [...existingRequests, newRequest];
+
+      const { error } = await supabase
+        .from('creative_drafts')
+        .update({ feedback_requests: updatedRequests as any, status: 'review' })
+        .eq('id', selectedDraft.id);
+
+      if (error) throw error;
+
+      toast({ title: `Feedback solicitado ✅`, description: `${reviewer.name} (${reviewer.role}) foi notificado.` });
+      setFeedbackMessage('');
+      setSelectedReviewer('');
+      fetchDrafts();
+      setSelectedDraft(prev => prev ? { ...prev, feedback_requests: updatedRequests, status: 'review' } : null);
+    } catch (e: any) {
+      toast({ title: 'Erro', description: e.message, variant: 'destructive' });
+    } finally {
+      setSendingFeedback(false);
+    }
+  };
+
+  const handleReply = async (draft: CreativeDraft, requestId: string, status: 'approved' | 'rejected') => {
+    const reply = replyText[requestId]?.trim() ?? '';
+    const updatedRequests = (draft.feedback_requests ?? []).map(r =>
+      r.id === requestId
+        ? { ...r, status, reply, replied_at: new Date().toISOString() }
+        : r
+    );
+
+    const allApproved = updatedRequests.every(r => r.status === 'approved');
+    const anyRejected = updatedRequests.some(r => r.status === 'rejected');
+    const newDraftStatus = allApproved ? 'approved' : anyRejected ? 'rejected' : 'review';
+
+    const { error } = await supabase
+      .from('creative_drafts')
+      .update({ feedback_requests: updatedRequests as any, status: newDraftStatus })
+      .eq('id', draft.id);
+
+    if (!error) {
+      toast({ title: status === 'approved' ? 'Aprovado ✅' : 'Rejeitado', description: `Resposta registrada.` });
+      setReplyingTo(null);
+      fetchDrafts();
+      setSelectedDraft(prev => prev ? { ...prev, feedback_requests: updatedRequests, status: newDraftStatus } : null);
+    }
+  };
+
+  if (loading) {
+    return <div className="space-y-3">{[...Array(3)].map((_, i) => <div key={i} className="h-16 rounded-xl bg-muted/20 animate-pulse" />)}</div>;
+  }
+
+  if (drafts.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12 gap-3 text-center">
+        <div className="rounded-2xl bg-muted/30 p-4"><BookMarked className="h-8 w-8 text-muted-foreground/40" /></div>
+        <p className="text-sm font-medium text-muted-foreground">Nenhum draft salvo ainda</p>
+        <p className="text-xs text-muted-foreground/60">Gere um carrossel e clique em "Salvar Draft"</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {drafts.map(draft => {
+        const cfg = STATUS_CONFIG[draft.status];
+        const pendingForMe = (draft.feedback_requests ?? []).filter(
+          r => r.requested_to_name === currentUserName && r.status === 'pending'
+        );
+        const isSelected = selectedDraft?.id === draft.id;
+
+        return (
+          <div key={draft.id} className={cn('rounded-xl border transition-all', isSelected ? 'border-primary bg-card' : 'border-border bg-card/50 hover:border-border/80')}>
+            {/* Draft header */}
+            <button className="w-full text-left px-4 py-3" onClick={() => setSelectedDraft(isSelected ? null : draft)}>
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-mono text-[10px] font-bold tracking-widest text-primary bg-primary/10 px-1.5 py-0.5 rounded">{draft.sigla}</span>
+                    <span className={cn('inline-flex items-center gap-1 text-[10px] font-semibold border rounded-full px-2 py-0.5', cfg.color)}>
+                      {cfg.icon}{cfg.label}
+                    </span>
+                    {pendingForMe.length > 0 && (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 rounded-full px-2 py-0.5">
+                        <Inbox className="h-2.5 w-2.5" />
+                        {pendingForMe.length} para você
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs font-semibold text-foreground mt-1 truncate">{draft.name}</p>
+                  {draft.carousel_data && (
+                    <p className="text-[10px] text-muted-foreground/60 truncate mt-0.5">
+                      {draft.carousel_data.angle} · {draft.channel ?? draft.carousel_data.channel} · {draft.carousel_data.slides?.length ?? 0} slides
+                    </p>
+                  )}
+                </div>
+                <div className="text-right flex-shrink-0">
+                  <p className="text-[9px] text-muted-foreground/50">{new Date(draft.updated_at).toLocaleDateString('pt-BR')}</p>
+                  {isSelected ? <ChevronUp className="h-3 w-3 text-muted-foreground ml-auto mt-1" /> : <ChevronDown className="h-3 w-3 text-muted-foreground ml-auto mt-1" />}
+                </div>
+              </div>
+            </button>
+
+            {/* Draft detail */}
+            {isSelected && (
+              <div className="border-t border-border px-4 pb-4 pt-3 space-y-4">
+                {/* Actions */}
+                <div className="flex flex-wrap gap-2">
+                  {draft.carousel_data && (
+                    <Button size="sm" variant="outline" className="text-xs h-7 gap-1" onClick={() => onLoadDraft(draft)}>
+                      <Eye className="h-3 w-3" /> Carregar draft
+                    </Button>
+                  )}
+                  {draft.user_id === userId && (
+                    <Button size="sm" variant="outline" className="text-xs h-7 gap-1 border-destructive/30 text-destructive hover:bg-destructive/10" onClick={() => handleDelete(draft)}>
+                      <Trash2 className="h-3 w-3" /> Excluir
+                    </Button>
+                  )}
+                </div>
+
+                {/* Campaign link info */}
+                {draft.campaign_name && (
+                  <div className="rounded-lg bg-muted/30 border border-border px-3 py-2">
+                    <p className="text-[9px] font-bold text-muted-foreground/60 tracking-widest uppercase mb-0.5">Campanha</p>
+                    <p className="text-xs text-foreground font-medium">{draft.campaign_name}</p>
+                    {draft.workflow_stage && <p className="text-[10px] text-muted-foreground">Etapa: {draft.workflow_stage}</p>}
+                  </div>
+                )}
+
+                {/* Feedback requests list */}
+                {(draft.feedback_requests ?? []).length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-[9px] font-bold text-muted-foreground/60 tracking-widest uppercase">Histórico de Feedback</p>
+                    {(draft.feedback_requests ?? []).map(req => {
+                      const isForMe = req.requested_to_name === currentUserName && req.status === 'pending';
+                      const reqCfg = req.status === 'approved'
+                        ? { bg: 'bg-green-500/10 border-green-500/20', icon: <CheckCircle className="h-3 w-3 text-green-400" /> }
+                        : req.status === 'rejected'
+                        ? { bg: 'bg-red-500/10 border-red-500/20', icon: <XCircle className="h-3 w-3 text-red-400" /> }
+                        : { bg: 'bg-yellow-500/10 border-yellow-500/20', icon: <Clock className="h-3 w-3 text-yellow-400" /> };
+
+                      return (
+                        <div key={req.id} className={cn('rounded-lg border px-3 py-2.5 space-y-2', reqCfg.bg)}>
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                {reqCfg.icon}
+                                <span className="text-[10px] font-semibold text-foreground">{req.requested_to_name}</span>
+                                <span className="text-[9px] text-muted-foreground/60">solicitado por {req.requested_by_name}</span>
+                              </div>
+                              <p className="text-[10px] text-muted-foreground mt-1 italic">"{req.message}"</p>
+                              {req.reply && (
+                                <p className="text-[10px] text-foreground mt-1.5 border-l-2 border-primary pl-2">{req.reply}</p>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Reply area (shown if pending and it's for the current user) */}
+                          {isForMe && (
+                            <div className="space-y-1.5">
+                              {replyingTo === req.id ? (
+                                <>
+                                  <textarea
+                                    value={replyText[req.id] ?? ''}
+                                    onChange={e => setReplyText(prev => ({ ...prev, [req.id]: e.target.value }))}
+                                    placeholder="Escreva sua resposta..."
+                                    rows={2}
+                                    className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-xs text-foreground resize-none focus:outline-none focus:ring-1 focus:ring-primary/40"
+                                  />
+                                  <div className="flex gap-1.5">
+                                    <Button size="sm" className="text-[10px] h-6 px-2 gap-1 bg-green-600 hover:bg-green-700 text-white" onClick={() => handleReply(draft, req.id, 'approved')}>
+                                      <CheckCircle className="h-2.5 w-2.5" /> Aprovar
+                                    </Button>
+                                    <Button size="sm" variant="outline" className="text-[10px] h-6 px-2 gap-1 border-red-500/40 text-red-400 hover:bg-red-500/10" onClick={() => handleReply(draft, req.id, 'rejected')}>
+                                      <XCircle className="h-2.5 w-2.5" /> Rejeitar
+                                    </Button>
+                                    <Button size="sm" variant="ghost" className="text-[10px] h-6 px-2 text-muted-foreground" onClick={() => setReplyingTo(null)}>
+                                      Cancelar
+                                    </Button>
+                                  </div>
+                                </>
+                              ) : (
+                                <Button size="sm" className="text-[10px] h-6 px-2 gap-1 bg-primary hover:bg-primary/90 text-primary-foreground" onClick={() => setReplyingTo(req.id)}>
+                                  <MessageSquare className="h-2.5 w-2.5" /> Responder
+                                </Button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Request new feedback form */}
+                <div className="space-y-2 rounded-xl border border-dashed border-border p-3">
+                  <p className="text-[9px] font-bold text-muted-foreground/60 tracking-widest uppercase">Solicitar opinião</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {TEAM_MEMBERS.filter(m => m.name !== currentUserName).map(m => (
+                      <button
+                        key={m.name}
+                        onClick={() => setSelectedReviewer(selectedReviewer === m.name ? '' : m.name)}
+                        className={cn(
+                          'rounded-full px-2.5 py-1 text-[10px] font-medium border transition-all',
+                          selectedReviewer === m.name
+                            ? 'bg-primary/15 border-primary text-primary'
+                            : 'border-border text-muted-foreground hover:text-foreground'
+                        )}
+                      >
+                        {m.name} <span className="opacity-60">· {m.role}</span>
+                      </button>
+                    ))}
+                  </div>
+                  <textarea
+                    value={feedbackMessage}
+                    onChange={e => setFeedbackMessage(e.target.value)}
+                    placeholder="O que precisa ser avaliado? Ex: 'Validar se o tom está alinhado com o pitch...'"
+                    rows={2}
+                    className="w-full rounded-md border border-border bg-muted/20 px-2 py-1.5 text-xs text-foreground resize-none focus:outline-none focus:ring-1 focus:ring-primary/40"
+                  />
+                  <Button
+                    size="sm"
+                    disabled={!feedbackMessage.trim() || !selectedReviewer || sendingFeedback}
+                    onClick={handleRequestFeedback}
+                    className="w-full h-7 text-xs gap-1 bg-primary hover:bg-primary/90 text-primary-foreground disabled:opacity-40"
+                  >
+                    {sendingFeedback ? <span className="h-3 w-3 border border-current border-t-transparent rounded-full animate-spin" /> : <Send className="h-3 w-3" />}
+                    Solicitar feedback
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function AiCarrosseis() {
@@ -1656,11 +2004,23 @@ export default function AiCarrosseis() {
   // Media library state
   const [library, setLibrary] = useState<MediaItem[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
+  const [currentUserName, setCurrentUserName] = useState('');
 
-  // Fetch current user id
+  // Drafts
+  const [savingDraft, setSavingDraft] = useState(false);
+  const [draftName, setDraftName] = useState('');
+  const [showSaveDraftModal, setShowSaveDraftModal] = useState(false);
+  const [draftsRefreshTrigger, setDraftsRefreshTrigger] = useState(0);
+  const [lastSavedSigla, setLastSavedSigla] = useState<string | null>(null);
+
+  // Fetch current user id + profile name
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
+    supabase.auth.getUser().then(async ({ data }) => {
       setUserId(data.user?.id ?? null);
+      if (data.user?.id) {
+        const { data: profile } = await supabase.from('profiles').select('username').eq('user_id', data.user.id).single();
+        if (profile?.username) setCurrentUserName(profile.username);
+      }
     });
   }, []);
 
@@ -1678,6 +2038,72 @@ export default function AiCarrosseis() {
   useEffect(() => {
     fetchLibrary();
   }, [fetchLibrary]);
+
+  // Save draft handler
+  const handleSaveDraft = async () => {
+    if (!userId || !result) return;
+    setSavingDraft(true);
+    try {
+      // Generate sigla via DB function
+      const { data: siglaData, error: siglaErr } = await supabase.rpc('generate_draft_sigla');
+      if (siglaErr) throw siglaErr;
+      const sigla = siglaData as string;
+
+      const name = draftName.trim() || result.carousel.title;
+
+      const { error } = await supabase
+        .from('creative_drafts')
+        .insert({
+          user_id: userId,
+          sigla,
+          name,
+          status: 'draft',
+          context,
+          angle,
+          persona,
+          channel,
+          tone,
+          format_id: selectedFormat.id,
+          carousel_data: result.carousel as any,
+          slide_images: slideImages as any,
+          feedback_requests: [] as any,
+        });
+
+      if (error) throw error;
+
+      setLastSavedSigla(sigla);
+      setShowSaveDraftModal(false);
+      setDraftName('');
+      setDraftsRefreshTrigger(t => t + 1);
+      toast({
+        title: `Draft salvo! ✅`,
+        description: `Sigla: ${sigla} — disponível na aba Drafts.`,
+      });
+    } catch (e: any) {
+      toast({ title: 'Erro ao salvar', description: e.message, variant: 'destructive' });
+    } finally {
+      setSavingDraft(false);
+    }
+  };
+
+  // Load draft
+  const handleLoadDraft = useCallback((draft: CreativeDraft) => {
+    if (draft.carousel_data) {
+      setResult({ carousel: draft.carousel_data, autonomous: false });
+      setSlideImages(draft.slide_images ?? {});
+      if (draft.context !== undefined) setContext(draft.context ?? '');
+      if (draft.angle !== undefined) setAngle(draft.angle ?? '');
+      if (draft.persona !== undefined) setPersona(draft.persona ?? '');
+      if (draft.channel !== undefined) setChannel(draft.channel ?? 'Instagram Feed');
+      if (draft.tone !== undefined) setTone(draft.tone ?? 'Peer-to-peer');
+      if (draft.format_id) {
+        const fmt = CREATIVE_FORMATS.find(f => f.id === draft.format_id);
+        if (fmt) setSelectedFormat(fmt);
+      }
+      setLastSavedSigla(draft.sigla);
+      toast({ title: `Draft "${draft.sigla}" carregado ✅`, description: draft.name });
+    }
+  }, [toast]);
 
   const handleGenerate = async () => {
     setLoading(true);
@@ -1772,19 +2198,23 @@ export default function AiCarrosseis() {
           {/* ── LEFT: Briefing + Biblioteca tabs ── */}
           <div className="space-y-4">
             <Tabs defaultValue="briefing">
-              <TabsList className="w-full grid grid-cols-3 mb-4">
-                <TabsTrigger value="briefing">Briefing</TabsTrigger>
-                <TabsTrigger value="estrategia" className="flex items-center gap-1">
+              <TabsList className="w-full grid grid-cols-4 mb-4">
+                <TabsTrigger value="briefing" className="text-xs">Briefing</TabsTrigger>
+                <TabsTrigger value="estrategia" className="flex items-center gap-1 text-xs">
                   <Target className="h-3 w-3" />
                   Estratégia
                 </TabsTrigger>
-                <TabsTrigger value="biblioteca" className="flex items-center gap-1.5">
+                <TabsTrigger value="biblioteca" className="flex items-center gap-1.5 text-xs">
                   Biblioteca
                   {library.length > 0 && (
                     <span className="inline-flex items-center justify-center rounded-full bg-primary text-primary-foreground text-[9px] font-bold min-w-[16px] h-4 px-1">
                       {library.length}
                     </span>
                   )}
+                </TabsTrigger>
+                <TabsTrigger value="drafts" className="flex items-center gap-1 text-xs">
+                  <BookMarked className="h-3 w-3" />
+                  Drafts
                 </TabsTrigger>
               </TabsList>
 
@@ -1993,6 +2423,27 @@ export default function AiCarrosseis() {
                   />
                 </div>
               </TabsContent>
+
+              {/* ── DRAFTS TAB ── */}
+              <TabsContent value="drafts">
+                <div className="rounded-xl border border-border bg-card p-5">
+                  <div className="flex items-center gap-2 mb-4">
+                    <div className="rounded-lg bg-primary/10 p-1.5">
+                      <BookMarked className="h-4 w-4 text-primary" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-foreground">Meus Drafts</p>
+                      <p className="text-[10px] text-muted-foreground">Rascunhos salvos e revisões do time</p>
+                    </div>
+                  </div>
+                  <DraftsPanel
+                    userId={userId}
+                    currentUserName={currentUserName}
+                    onLoadDraft={handleLoadDraft}
+                    refreshTrigger={draftsRefreshTrigger}
+                  />
+                </div>
+              </TabsContent>
             </Tabs>
           </div>
 
@@ -2089,6 +2540,16 @@ export default function AiCarrosseis() {
                     </Button>
                     <Button
                       size="sm"
+                      variant="outline"
+                      className="gap-1.5 border-primary/40 text-primary hover:bg-primary/10"
+                      onClick={() => setShowSaveDraftModal(true)}
+                    >
+                      <Save className="h-3.5 w-3.5" />
+                      Salvar Draft
+                      {lastSavedSigla && <span className="text-[9px] opacity-70">({lastSavedSigla})</span>}
+                    </Button>
+                    <Button
+                      size="sm"
                       className="bg-primary hover:bg-primary/90 text-primary-foreground"
                       onClick={() => exportCarouselHTML(result.carousel, slideImages)}
                     >
@@ -2097,6 +2558,66 @@ export default function AiCarrosseis() {
                     </Button>
                   </div>
                 </div>
+
+                {/* Save Draft Modal */}
+                {showSaveDraftModal && (
+                  <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+                    <div className="w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-2xl space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className="rounded-lg bg-primary/10 p-1.5">
+                            <Save className="h-4 w-4 text-primary" />
+                          </div>
+                          <div>
+                            <p className="text-sm font-bold text-foreground">Salvar Draft</p>
+                            <p className="text-[10px] text-muted-foreground">Uma sigla única será gerada automaticamente</p>
+                          </div>
+                        </div>
+                        <button onClick={() => setShowSaveDraftModal(false)} className="rounded-full p-1 hover:bg-muted transition-colors">
+                          <X className="h-4 w-4 text-muted-foreground" />
+                        </button>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <p className="text-[10px] font-bold text-muted-foreground/60 tracking-widest uppercase">Nome do draft</p>
+                        <input
+                          value={draftName}
+                          onChange={e => setDraftName(e.target.value)}
+                          placeholder={result.carousel.title}
+                          className="w-full rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40"
+                        />
+                        <p className="text-[10px] text-muted-foreground/50">Se vazio, usará o título do carrossel</p>
+                      </div>
+
+                      <div className="rounded-lg bg-muted/30 border border-border px-3 py-2.5 space-y-1">
+                        <p className="text-[9px] font-bold text-muted-foreground/60 tracking-widest uppercase">O que será salvo</p>
+                        <div className="text-[10px] text-muted-foreground space-y-0.5">
+                          <p>✅ Carrossel completo ({result.carousel.slides.length} slides)</p>
+                          <p>✅ Caption e lógica viral</p>
+                          <p>✅ Briefing (ângulo, persona, canal, tom)</p>
+                          <p>✅ Formato selecionado ({selectedFormat.label})</p>
+                          {Object.keys(slideImages).length > 0 && <p>✅ {Object.keys(slideImages).length} imagem(ns) aplicada(s)</p>}
+                        </div>
+                      </div>
+
+                      <div className="flex gap-2 pt-1">
+                        <Button variant="outline" className="flex-1" onClick={() => setShowSaveDraftModal(false)}>
+                          Cancelar
+                        </Button>
+                        <Button
+                          disabled={savingDraft}
+                          onClick={handleSaveDraft}
+                          className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground gap-1.5"
+                        >
+                          {savingDraft
+                            ? <span className="h-3.5 w-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                            : <Save className="h-3.5 w-3.5" />}
+                          {savingDraft ? 'Salvando...' : 'Salvar Draft'}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
