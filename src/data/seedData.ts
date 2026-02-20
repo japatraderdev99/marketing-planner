@@ -8,6 +8,20 @@ export type CampaignStatus = 'Rascunho' | 'Aprovada' | 'Ativa' | 'Pausada' | 'Fi
 export type Funnel = 'Topo' | 'Meio' | 'Fundo';
 export type ContentFormat = 'Post' | 'Reels' | 'Stories' | 'Carrossel' | 'Ads' | 'Shorts';
 export type ContentObjective = 'Awareness' | 'Engajamento' | 'Conversão' | 'Retenção';
+export type VideoFormat = 'Reels 9:16' | 'Shorts 9:16' | 'Feed 1:1' | 'Carrossel' | 'Stories 9:16' | 'Horizontal 16:9';
+export type ViralMechanism = 'Choque financeiro' | 'Reconhecimento emocional' | 'POV imersivo' | 'ASMR sensorial' | 'Desafio/Challenge' | 'Humor cômica' | 'Indignação coletiva' | 'Prova social';
+export type AITool = 'VEO 3.1' | 'Sora' | 'Seedance' | 'Midjourney' | 'Runway' | 'CapCut' | 'Manual';
+
+export interface CampaignFrame {
+  id: string;
+  label: string; // ex: "Frame 01.A"
+  title: string;
+  subtitle: string;
+  timing: string; // ex: "0s — 4s"
+  purpose: string;
+  prompt: string;
+  type: 'setup' | 'disaster' | 'resolution' | 'hero' | 'cta';
+}
 
 export interface Campaign {
   id: string;
@@ -26,10 +40,28 @@ export interface Campaign {
   objective: string;
   audience: string;
   description: string;
+  // Campos criativos
+  videoFormat?: VideoFormat;
+  duration?: number; // segundos
+  aiTool?: AITool[];
+  viralMechanism?: ViralMechanism;
+  cta?: string;
+  hook?: string;
+  caption?: string;
+  frames?: CampaignFrame[];
+  // Métricas
   impressions?: number;
   clicks?: number;
   leads?: number;
   conversions?: number;
+  cpc?: number;
+  cpl?: number;
+  roas?: number;
+  // Distribuição
+  budgetPaid?: number;
+  budgetOrganic?: number;
+  targetReach?: number;
+  // Gestão
   subtasks: { id: string; title: string; done: boolean }[];
   links: { label: string; url: string }[];
   history: { date: string; action: string; user: string }[];
@@ -94,6 +126,17 @@ export interface EstrategiaPublico {
   channels: Channel[];
 }
 
+// Variação Ninja — série de frames para AI video generation
+export interface NinjaVariacao {
+  id: string;
+  title: string;
+  servico: string;
+  descricao: string;
+  duracao: string;
+  color: string;
+  frames: CampaignFrame[];
+}
+
 // ===== CAMPANHAS =====
 export const initialCampaigns: Campaign[] = [
   {
@@ -113,10 +156,23 @@ export const initialCampaigns: Campaign[] = [
     objective: 'Gerar awareness entre prestadores de serviço em Florianópolis',
     audience: 'Prestadores autônomos 28-50 anos, Florianópolis',
     description: 'Série de vídeos ASMR mostrando serviços sendo executados com perfeição — som dos instrumentos, precisão das mãos, satisfação do trabalho bem feito.',
+    videoFormat: 'Reels 9:16',
+    duration: 8,
+    aiTool: ['VEO 3.1'],
+    viralMechanism: 'ASMR sensorial',
+    hook: 'Zero rosto. Zero texto. Só o som do serviço perfeito.',
+    cta: 'Link na bio → Cadastro grátis',
+    caption: 'O som do trabalho bem feito. 🔧 Qual é o seu? Comenta abaixo.',
     impressions: 45000,
     clicks: 2800,
     leads: 340,
     conversions: 87,
+    cpc: 1.25,
+    cpl: 10.29,
+    roas: 2.4,
+    budgetPaid: 2800,
+    budgetOrganic: 700,
+    targetReach: 80000,
     subtasks: [
       { id: 'st-1', title: 'Roteiro do vídeo eletricista', done: true },
       { id: 'st-2', title: 'Gravação com piscineiro', done: true },
@@ -150,10 +206,23 @@ export const initialCampaigns: Campaign[] = [
     objective: 'Desafio viral: prestador calcula quanto a plataforma concorrente tirou dele',
     audience: 'Prestadores que usam GetNinja, Triider, plataformas concorrentes',
     description: 'A DQEF lança um desafio viral simples e devastador: mostre quanto a plataforma tirou de você. Um único vídeo seed mostra o cálculo. O prestador faz a conta ao vivo.',
+    videoFormat: 'Reels 9:16',
+    duration: 30,
+    aiTool: ['CapCut', 'Manual'],
+    viralMechanism: 'Desafio/Challenge',
+    hook: 'Faz a conta. Quanto ficou com você esse mês? 🔢',
+    cta: 'Comenta o número e marca um amigo prestador',
+    caption: 'Faz a conta. Quanto ficou com você esse mês? 🔢 Link na bio.',
     impressions: 120000,
     clicks: 8400,
     leads: 1200,
     conversions: 320,
+    cpc: 0.60,
+    cpl: 4.17,
+    roas: 6.4,
+    budgetPaid: 3500,
+    budgetOrganic: 1500,
+    targetReach: 250000,
     subtasks: [
       { id: 'st-5', title: 'Vídeo seed gravado', done: true },
       { id: 'st-6', title: 'Hashtag configurada', done: true },
@@ -182,10 +251,23 @@ export const initialCampaigns: Campaign[] = [
     objective: 'Mostrar a frustração de pagar por lead que não converte',
     audience: 'Eletricistas e prestadores que usaram GetNinja ou Triider',
     description: 'WhatsApp em tela cheia. Conversa real com cliente fictício. Mensagem enviada, dois checks cinzas. Nunca respondeu. Contraste brutal com "pagou e não recebeu nada".',
+    videoFormat: 'Reels 9:16',
+    duration: 15,
+    aiTool: ['Manual'],
+    viralMechanism: 'Reconhecimento emocional',
+    hook: 'Você pagou. Ele nunca respondeu.',
+    cta: 'Comenta o número de leads que sumiram',
+    caption: 'Quantas vezes isso aconteceu com você? 😤 Comenta o número de leads que sumiram.',
     impressions: 28000,
     clicks: 1900,
     leads: 210,
     conversions: 45,
+    cpc: 1.47,
+    cpl: 13.33,
+    roas: 1.6,
+    budgetPaid: 2000,
+    budgetOrganic: 800,
+    targetReach: 60000,
     subtasks: [
       { id: 'st-9', title: 'Script aprovado', done: true },
       { id: 'st-10', title: 'Gravação concluída', done: true },
@@ -211,10 +293,20 @@ export const initialCampaigns: Campaign[] = [
     objective: 'Câmera subjetiva 100%. Você é o prestador. Imersão total.',
     audience: 'Prestadores 25-45 anos, alta identificação com conteúdo POV',
     description: 'Câmera 100% POV — você é o prestador. Sem mostrar rosto. Sequência imersiva: acorda, olha celular (agenda vazia), vai ao serviço, faz o trabalho, PIX recebido.',
+    videoFormat: 'Reels 9:16',
+    duration: 45,
+    aiTool: ['VEO 3.1', 'Seedance'],
+    viralMechanism: 'POV imersivo',
+    hook: 'POV: você é o prestador. Câmera subjetiva 100%.',
+    cta: 'Cadastra grátis e começa a construir sua agenda',
+    caption: 'POV: você construiu algo hoje. E recebeu pelo que vale. 💪',
     impressions: 0,
     clicks: 0,
     leads: 0,
     conversions: 0,
+    budgetPaid: 3500,
+    budgetOrganic: 700,
+    targetReach: 150000,
     subtasks: [
       { id: 'st-12', title: 'Roteiro finalizado', done: true },
       { id: 'st-13', title: 'Equipamento reservado', done: false },
@@ -241,10 +333,20 @@ export const initialCampaigns: Campaign[] = [
     objective: 'Valorização emocional do trabalho manual — identidade e orgulho',
     audience: 'Prestadores de todos os perfis, conteúdo de identidade',
     description: 'Puramente visual. Sem texto. Sem narração. Série de closes em câmera lenta: mãos de diferentes prestadores trabalhando. Música instrumental. Final: logo DQEF em laranja.',
+    videoFormat: 'Reels 9:16',
+    duration: 30,
+    aiTool: ['Runway', 'VEO 3.1'],
+    viralMechanism: 'Reconhecimento emocional',
+    hook: 'Você faz com as mãos o que ninguém sabe fazer.',
+    cta: 'Salva e marca outro prestador',
+    caption: 'Cada serviço tem uma história. A sua começa aqui. 🧡 @deixaqueeufaco',
     impressions: 0,
     clicks: 0,
     leads: 0,
     conversions: 0,
+    budgetPaid: 1200,
+    budgetOrganic: 600,
+    targetReach: 50000,
     subtasks: [],
     links: [],
     history: [],
@@ -266,10 +368,23 @@ export const initialCampaigns: Campaign[] = [
     objective: 'Captação de prestadores via formulário de cadastro',
     audience: 'Prestadores autônomos Florianópolis, 28-55 anos',
     description: 'Campanha de tráfego pago no Meta direcionada para landing page de cadastro de prestadores.',
+    videoFormat: 'Feed 1:1',
+    duration: 15,
+    aiTool: ['Midjourney', 'CapCut'],
+    viralMechanism: 'Choque financeiro',
+    hook: 'Prestador de serviço em Floripa? Chega de pagar para aparecer.',
+    cta: 'Se inscreva agora →',
+    caption: 'Prestador de serviço em Floripa? Cadastro grátis. Link na bio.',
     impressions: 280000,
     clicks: 14000,
     leads: 2800,
     conversions: 890,
+    cpc: 0.57,
+    cpl: 2.86,
+    roas: 11.1,
+    budgetPaid: 8000,
+    budgetOrganic: 0,
+    targetReach: 500000,
     subtasks: [
       { id: 'st-14', title: 'Criativos rodando', done: true },
       { id: 'st-15', title: 'A/B test configurado', done: true },
@@ -299,11 +414,259 @@ export const initialCampaigns: Campaign[] = [
     objective: 'Posicionamento institucional e atração de investidores/parceiros',
     audience: 'Empreendedores, investidores, gestores de RH — LinkedIn',
     description: 'Série de posts institucionais sobre o problema do mercado de serviços e a solução DQEF.',
+    videoFormat: 'Horizontal 16:9',
+    hook: 'O mercado de serviços residenciais no Brasil movimenta R$180 bilhões por ano.',
+    cta: 'Se você trabalha com serviços residenciais, vem conversar.',
     impressions: 0,
     clicks: 0,
     leads: 0,
     conversions: 0,
+    budgetPaid: 800,
+    budgetOrganic: 400,
+    targetReach: 20000,
     subtasks: [],
+    links: [],
+    history: [],
+  },
+  // ===== SÉRIE O NINJA — 6 variações =====
+  {
+    id: 'camp-ninja-01',
+    name: 'O Ninja na Piscina',
+    channel: ['TikTok', 'Instagram', 'YouTube'],
+    status: 'Aprovada',
+    kanbanStatus: 'aprovado',
+    priority: 'Alta',
+    category: 'Awareness',
+    responsible: 'Ana Lima',
+    avatar: 'AL',
+    startDate: '2026-03-01',
+    endDate: '2026-03-31',
+    budget: 3000,
+    funnel: 'Topo',
+    objective: 'Humor viral — ninja destrói piscina, piscineiro DQEF resolve',
+    audience: 'Prestadores piscineiros e proprietários com piscina — Florianópolis',
+    description: 'Ninja é chamado pra tratar piscina verde. Analisa. Tira a espada. Corta o tubo do filtro em três pedaços. Água espirra pra todo lado. Piscineiro DQEF chega, olha o estrago, e diz a frase.',
+    videoFormat: 'Reels 9:16',
+    duration: 30,
+    aiTool: ['VEO 3.1', 'Sora'],
+    viralMechanism: 'Humor cômica',
+    hook: '🏊 O ninja foi chamado pra tratar a piscina...',
+    cta: 'Na DQEF você acha o piscineiro certo. Sem espada.',
+    caption: 'Deixa que eu faço. 🧡 O ninja tentou. #DQEF #Piscineiro #Floripa',
+    impressions: 0,
+    clicks: 0,
+    leads: 0,
+    conversions: 0,
+    budgetPaid: 2500,
+    budgetOrganic: 500,
+    targetReach: 200000,
+    frames: [
+      {
+        id: 'frame-n01-a',
+        label: 'Frame 01.A',
+        title: 'A Piscina Verde',
+        subtitle: 'Setup · Problema visível',
+        timing: '0s — 4s',
+        purpose: 'Estabelece o problema. Piscina completamente verde, equipamento de filtro visível ao lado. O prestador está esperando, chave na mão, ansioso.',
+        prompt: 'Wide shot, 28mm lens, f/4.0. Small rectangular Brazilian residential backyard pool (5x3 meters) — water completely opaque dark green, thick algae bloom covering surface, waterline tiles stained dark brown-green. Pool deck: wet grey concrete, one plastic chair overturned. Beside the pool: a pool pump and filter unit visible against wall, plus a bucket of pool chemicals unopened, a long cleaning pole leaning. Standing at pool edge: Brazilian male pool technician (32 years, pardo skin, dark hair, work shorts and simple t-shirt, rubber sandals) — holding a water testing kit in both hands, staring at the green water with professional concern, brow furrowed. Lighting: midday sun, harsh overhead, green water reflecting strange light upward onto faces. Tropical vegetation over fence in background. Photorealistic, 4K. Still frame. No motion blur.',
+        type: 'setup',
+      },
+      {
+        id: 'frame-n01-b',
+        label: 'Frame 01.B',
+        title: 'A Espadada no Tubo',
+        subtitle: 'O Desastre · Cena principal',
+        timing: '12s — 18s',
+        purpose: 'O ninja examina o filtro, não entende nada, tira a espada e corta o tubo. A cena mais engraçada da variação — precisa de impacto máximo.',
+        prompt: 'Medium shot, 35mm lens, f/2.8. The ninja character — full black ninja costume, cloth mask, visible only eyes — crouching beside the pool pump and filter system against a white garden wall. He has pulled out his sword and is mid-swing, the blade connecting with the main PVC pipe that feeds the filter — the pipe is in the process of being severed, a jet of green water already spraying outward from the cut point in a dramatic arc. The ninja\'s expression (eyes only): focused and confident, as if this was the correct technical solution. His free hand holds a small notepad as if he was consulting it. Surrounding detail: the pool technician who was waiting is visible in background, hands raised in horror. FROZEN MOMENT: the split-second the pipe breaks. Water mid-air, crystallized. Photorealistic comedy, 4K. Still frame. No motion blur.',
+        type: 'disaster',
+      },
+      {
+        id: 'frame-n01-c',
+        label: 'Frame 01.C',
+        title: 'O Ninja Saindo Molhado',
+        subtitle: 'Saída cômica · Dignidade mantida',
+        timing: '20s — 24s',
+        purpose: 'O ninja sai completamente encharcado mas em bico de pé, postura ereta, como se nada tivesse acontecido. A dignidade dele é o humor.',
+        prompt: 'Wide shot from behind, 35mm lens, f/3.5. The ninja character walking away from the pool area toward a garden gate — completely soaking wet, ninja costume drenched and clinging to body, water dripping from every surface, a small puddle trail following his steps. Despite this, his posture is perfectly upright, head held high, shoulders back, arms swinging with purpose — he is walking on his tiptoes as if still being stealthy, completely unbothered. In his right hand: the sword in its scabbard, water dripping from the tip. Behind him: total chaos visible — broken pipe still spraying green water across the pool deck. FROZEN MOMENT: mid-stride. Still frame. Photorealistic comedy, 4K.',
+        type: 'resolution',
+      },
+      {
+        id: 'frame-n01-d',
+        label: 'Frame 01.D',
+        title: 'Piscineiro DQEF Chega',
+        subtitle: 'Resolução · A frase final',
+        timing: '25s — 30s',
+        purpose: 'O piscineiro DQEF aparece no portão do jardim. Olha o estrago. Olha pro dono. Sem pressa. Sem susto. Já viu pior.',
+        prompt: 'Eye-level medium shot, 35mm lens, f/2.5. Brazilian male pool technician (36 years, Black skin, athletic build, clean short hair, warm expression) standing at the open wooden gate of a residential garden. He wears a teal/turquoise work shirt (#00A7B5), dark shorts, rubber work sandals. He carries a professional pool chemical kit bag over one shoulder and a water testing kit in his hand. He has just arrived and is surveying the scene: the chaotic pool area — green water, broken pipe still dripping, wet concrete — with an expression of calm professional assessment. Not surprised. Not alarmed. The face of a man who has seen this before and knows exactly what to do. FROZEN MOMENT: he is taking his first breath before speaking. Photorealistic, 4K. Still frame. No motion blur.',
+        type: 'hero',
+      },
+    ],
+    subtasks: [
+      { id: 'st-n01-1', title: 'Gerar frames no VEO 3.1', done: false },
+      { id: 'st-n01-2', title: 'Edição e montagem', done: false },
+      { id: 'st-n01-3', title: 'Aprovação criativa', done: false },
+      { id: 'st-n01-4', title: 'Publicar em todos os canais', done: false },
+    ],
+    links: [],
+    history: [
+      { date: '2026-02-20', action: 'Variação criada — O Ninja na Piscina', user: 'Ana Lima' },
+    ],
+  },
+  {
+    id: 'camp-ninja-02',
+    name: 'O Ninja na Encanação',
+    channel: ['TikTok', 'Instagram'],
+    status: 'Aprovada',
+    kanbanStatus: 'desenvolvimento',
+    priority: 'Alta',
+    category: 'Awareness',
+    responsible: 'Carlos Mendes',
+    avatar: 'CM',
+    startDate: '2026-03-05',
+    endDate: '2026-04-05',
+    budget: 2800,
+    funnel: 'Topo',
+    objective: 'Torneira pingando — ninja corta o cano, chafariz na cozinha',
+    audience: 'Moradores de apartamento com problemas hidráulicos, Florianópolis',
+    description: 'Torneira pingando há meses. Ninja analisa o cano sob a pia. Corta com a espada. Chafariz de água pela cozinha toda. Ninja sai pela janela com um parkour improvisado e sem graça. Marido de aluguel DQEF chega pela porta.',
+    videoFormat: 'Reels 9:16',
+    duration: 28,
+    aiTool: ['VEO 3.1', 'Seedance'],
+    viralMechanism: 'Humor cômica',
+    hook: '🚿 A torneira estava pingando. O ninja foi resolver...',
+    cta: 'Marido de aluguel DQEF: sem espada, sem chafariz.',
+    caption: 'Deixa que eu faço. 🧡 #DQEF #MaridoDeAluguel #Encanador',
+    impressions: 0,
+    clicks: 0,
+    leads: 0,
+    conversions: 0,
+    budgetPaid: 2200,
+    budgetOrganic: 600,
+    targetReach: 180000,
+    frames: [
+      {
+        id: 'frame-n02-a',
+        label: 'Frame 02.A',
+        title: 'A Torneira Pingando',
+        subtitle: 'Setup · A dor conhecida',
+        timing: '0s — 4s',
+        purpose: 'A torneira pingando. O dono olhando. Esse frame deve provocar identificação imediata — qualquer um já viveu isso.',
+        prompt: 'Close-up shot, 50mm lens, f/2.2. Brazilian kitchen sink area — small apartment kitchen, beige ceramic tiles on wall, stainless steel single-basin sink, old chrome faucet with visible green mineral deposit buildup at base, slightly crooked handle. A single large water drop suspended in perfect mid-fall, 4cm below the faucet spout, crystallized in the air. Counter surface around sink: clean but with permanent water ring stains from months of dripping. Partially visible: apartment owner\'s crossed arms at frame bottom, posture of someone who has made peace with this situation. FROZEN MOMENT: the drop mid-fall. Still frame. No motion blur. Photorealistic, 4K. The drop must be crystal sharp.',
+        type: 'setup',
+      },
+      {
+        id: 'frame-n02-b',
+        label: 'Frame 02.B',
+        title: 'Chafariz na Cozinha',
+        subtitle: 'O Desastre · Cena principal',
+        timing: '13s — 18s',
+        purpose: 'O resultado da espadada no cano sob a pia. Água em arco alto pela cozinha. O ninja está encharcado mas ainda em posição de análise.',
+        prompt: 'Wide shot, 24mm lens, f/3.5. Small Brazilian apartment kitchen in chaos. A powerful jet of water shoots upward and outward from under the kitchen sink — the cut pipe is visible beneath the open cabinet doors, water erupting in a thick stream that hits the ceiling and cascades down across the entire kitchen. The ninja is standing directly beside the sink — completely soaked from head to toe, ninja costume drenched — but his posture is completely upright and his expression (eyes only) is one of calm academic interest. He holds the sword pointing downward, water dripping from the blade. FROZEN MOMENT: water stream at peak arc. Photorealistic comedy, 4K. Still frame. No motion blur.',
+        type: 'disaster',
+      },
+      {
+        id: 'frame-n02-c',
+        label: 'Frame 02.C',
+        title: 'O Parkour Sem Graça',
+        subtitle: 'Saída cômica · Pela janela',
+        timing: '19s — 23s',
+        purpose: 'O ninja sai pela janela da cozinha com o que acha ser parkour elegante mas na verdade é uma saída de lado e desajeitada.',
+        prompt: 'Medium shot from inside kitchen looking toward window, 35mm lens, f/3.2. Small Brazilian apartment kitchen window — white aluminum frame, partially open. The ninja character is in the process of exiting through the window: one leg already outside, body twisted at an awkward angle, arms gripping the window frame. His expression (eyes): intense focus, as if this is a highly skilled maneuver. In reality, his body position is graceless — one shoulder jammed against the frame, knee hitting the counter below the window, soaking wet clothes making everything harder. FROZEN MOMENT: mid-exit, peak awkwardness. Still frame. No motion blur. Photorealistic comedy, 4K.',
+        type: 'resolution',
+      },
+      {
+        id: 'frame-n02-d',
+        label: 'Frame 02.D',
+        title: 'Marido de Aluguel DQEF',
+        subtitle: 'Resolução · A frase final',
+        timing: '24s — 28s',
+        purpose: 'O marido de aluguel DQEF entra pela porta da frente. Molha o pé no corredor. Olha para o dono. A expressão é de "já sei o que aconteceu".',
+        prompt: 'Medium shot, eye-level, 35mm lens, f/2.5. Brazilian male handyman (38 years, mixed race, short beard, friendly face) standing in the front doorway of the apartment. He wears a teal/turquoise work shirt (#00A7B5), dark cargo pants, work boots. One foot is mid-step, about to enter the apartment — the water from the kitchen has flowed to the entrance hallway and is lapping at his boot. He is looking at the apartment owner with an expression of patient, knowing professionalism. His tool bag is over one shoulder, a pipe wrench visible at the top. FROZEN MOMENT: the exact second his boot touches the water. Photorealistic, 4K. Still frame.',
+        type: 'hero',
+      },
+    ],
+    subtasks: [
+      { id: 'st-n02-1', title: 'Gerar frames no VEO 3.1', done: false },
+      { id: 'st-n02-2', title: 'Edição e montagem', done: false },
+    ],
+    links: [],
+    history: [
+      { date: '2026-02-20', action: 'Variação criada — O Ninja na Encanação', user: 'Carlos Mendes' },
+    ],
+  },
+  {
+    id: 'camp-ninja-03',
+    name: 'O Ninja na Pintura',
+    channel: ['TikTok', 'Instagram'],
+    status: 'Rascunho',
+    kanbanStatus: 'ideia',
+    priority: 'Média',
+    category: 'Awareness',
+    responsible: 'Juliana Costa',
+    avatar: 'JC',
+    startDate: '2026-03-10',
+    endDate: '2026-04-10',
+    budget: 2500,
+    funnel: 'Topo',
+    objective: 'Parede com mancha — ninja pinta tudo de preto, pintor DQEF corrige',
+    audience: 'Proprietários com serviços de pintura e reforma — Florianópolis',
+    description: 'Parede com uma única mancha pequena. Ninja analisa. Pinta a parede inteira de preto fosco. Com rolo rápido e determinado. Pintor DQEF chega, olha, suspira, e começa a trabalhar.',
+    videoFormat: 'Reels 9:16',
+    duration: 30,
+    aiTool: ['VEO 3.1'],
+    viralMechanism: 'Humor cômica',
+    hook: '🎨 A parede tinha só uma manchinha...',
+    cta: 'Pintor DQEF: a cor certa, do jeito certo.',
+    caption: 'Deixa que eu faço. 🧡 #DQEF #Pintor #Reforma',
+    impressions: 0,
+    clicks: 0,
+    leads: 0,
+    conversions: 0,
+    budgetPaid: 2000,
+    budgetOrganic: 500,
+    targetReach: 150000,
+    subtasks: [
+      { id: 'st-n03-1', title: 'Roteiro aprovado', done: false },
+    ],
+    links: [],
+    history: [],
+  },
+  {
+    id: 'camp-ninja-04',
+    name: 'O Ninja na Tomada',
+    channel: ['TikTok', 'Instagram', 'YouTube'],
+    status: 'Rascunho',
+    kanbanStatus: 'ideia',
+    priority: 'Alta',
+    category: 'Awareness',
+    responsible: 'Ana Lima',
+    avatar: 'AL',
+    startDate: '2026-03-15',
+    endDate: '2026-04-15',
+    budget: 3200,
+    funnel: 'Topo',
+    objective: 'Tomada com faísca — ninja corta fio principal, apagão total',
+    audience: 'Moradores com problemas elétricos — eletricistas como público alvo',
+    description: 'Tomada fazendo faísca. Ninja analisa com atenção. Tira espada. Corta o fio principal da casa. Apagão total. Ninja sai andando no escuro, colidindo com tudo. Eletricista DQEF aparece com lanterna.',
+    videoFormat: 'Reels 9:16',
+    duration: 30,
+    aiTool: ['VEO 3.1', 'Sora'],
+    viralMechanism: 'Humor cômica',
+    hook: '⚡ A tomada estava faiscando. O ninja foi dar uma olhada...',
+    cta: 'Eletricista DQEF: sem apagão, sem espada.',
+    caption: 'Deixa que eu faço. 🧡 #DQEF #Eletricista #Apagão',
+    impressions: 0,
+    clicks: 0,
+    leads: 0,
+    conversions: 0,
+    budgetPaid: 2700,
+    budgetOrganic: 500,
+    targetReach: 250000,
+    subtasks: [
+      { id: 'st-n04-1', title: 'Roteiro aprovado', done: false },
+      { id: 'st-n04-2', title: 'Frames gerados', done: false },
+    ],
     links: [],
     history: [],
   },
@@ -636,6 +999,16 @@ export const initialIdeias: IdeiaDisruptiva[] = [
     whyViral: 'Formato de longa duração cria conexão profunda. Prestador vira personagem identificável.',
     status: 'Descartada',
     impact: 'Médio',
+  },
+  {
+    id: 'ideia-009',
+    title: 'Série "O Ninja" — 6 Variações AI Video',
+    format: 'AI Video Series / VEO 3.1',
+    channel: ['TikTok', 'Instagram', 'YouTube'],
+    concept: 'Série humorística: Ninja incompetente destrói serviço (piscina, encanação, pintura, tomada, gesso, portão). Prestador DQEF entra e resolve. Cada episódio 28-30s gerado no VEO 3.1/Sora.',
+    whyViral: 'Humor + AI video generation = custo baixo, escala alta. Personagem recorrente cria expectativa de série.',
+    status: 'Aprovada',
+    impact: 'Alto',
   },
 ];
 
