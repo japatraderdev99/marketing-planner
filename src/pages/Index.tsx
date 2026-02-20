@@ -11,7 +11,8 @@ import {
   Clock, CheckCircle2, AlertCircle, Zap, Target,
   Users, BarChart3, Activity, ArrowUpRight, ArrowDownRight,
   Flame, ShieldAlert, Eye, MousePointerClick, Wallet,
-  ChevronRight, CircleDot, TrendingDown, Star
+  ChevronRight, CircleDot, TrendingDown, Star, Wrench,
+  ChevronDown, Lightbulb, Gauge, BarChart2
 } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -29,6 +30,50 @@ const C = {
   red: 'hsl(0, 72%, 51%)',
   amber: 'hsl(45, 93%, 47%)',
 };
+
+// ── Marketplace data (static, ready for DB integration)
+const MARKETPLACE = {
+  prestadoresAtivos: 470,
+  clientesAtivos: 1450,
+  solicitacoesAtivas: 980,
+  taxaMatch: 70,
+  gmv: 62000,
+  cac: 40.50,
+};
+
+const clienteFunnel = [
+  { etapa: 'Visitantes', valor: 15420, pct: 100 },
+  { etapa: 'Cadastros', valor: 3855, pct: 25 },
+  { etapa: 'Busca Serviço', valor: 2313, pct: 60 },
+  { etapa: 'Solicitação', valor: 925, pct: 40 },
+  { etapa: 'Contratação', valor: 463, pct: 50 },
+];
+
+const prestadorFunnel = [
+  { etapa: 'Visitantes', valor: 8750, pct: 100 },
+  { etapa: 'Cadastros', valor: 1750, pct: 20 },
+  { etapa: 'Perfil Completo', valor: 1050, pct: 60 },
+  { etapa: 'Proposta Enviada', valor: 420, pct: 40 },
+  { etapa: 'Serviço Realizado', valor: 294, pct: 70 },
+];
+
+const aiInsights = [
+  {
+    impact: 'Alto' as const,
+    title: 'CAC do Meta Ads aumentou 23%',
+    detail: 'Custo por aquisição subiu de R$32 para R$40. Revisar segmentação de público e criativos — possível saturação da audiência atual.',
+  },
+  {
+    impact: 'Médio' as const,
+    title: 'Taxa de conversão de cadastro caiu 8pp',
+    detail: 'Onboarding com fricção detectada na etapa de confirmação de e-mail. A/B test com cadastro via Google pode recuperar 15% dos leads perdidos.',
+  },
+  {
+    impact: 'Oportunidade' as const,
+    title: 'LinkedIn Ads com ROAS acima da média',
+    detail: 'ROAS de 8.2x vs média de 4.1x. Canal sub-investido. Aumentar budget em R$2.000/mês pode gerar +340 prestadores qualificados.',
+  },
+];
 
 // ── Static data
 const revenueData = [
@@ -148,7 +193,6 @@ function KpiCard({ label, value, delta, positive, icon: Icon, color, bg, sub }: 
 
 function GoalBar({ label, current, target, color }: { label: string; current: number; target: number; color: string }) {
   const pct = Math.min(Math.round((current / target) * 100), 100);
-  const isFormatted = current > 1000;
   const fmt = (v: number) => v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v.toString();
   return (
     <div className="space-y-1.5">
@@ -161,10 +205,7 @@ function GoalBar({ label, current, target, color }: { label: string; current: nu
         </div>
       </div>
       <div className="h-2 w-full rounded-full bg-border overflow-hidden">
-        <div
-          className="h-full rounded-full transition-all duration-700"
-          style={{ width: `${pct}%`, background: color }}
-        />
+        <div className="h-full rounded-full transition-all duration-700" style={{ width: `${pct}%`, background: color }} />
       </div>
     </div>
   );
@@ -175,10 +216,67 @@ function SeverityDot({ severity }: { severity: string }) {
   return <span className={`inline-block h-2 w-2 rounded-full shrink-0 ${map[severity]}`} />;
 }
 
+function ImpactBadge({ impact }: { impact: 'Alto' | 'Médio' | 'Oportunidade' }) {
+  const styles = {
+    Alto: 'bg-red-500/15 text-red-400 border-red-500/30',
+    Médio: 'bg-amber-500/15 text-amber-400 border-amber-500/30',
+    Oportunidade: 'bg-teal/15 text-teal border-teal/30',
+  };
+  return (
+    <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${styles[impact]}`}>
+      {impact}
+    </span>
+  );
+}
+
+function FunnelColumn({ title, icon: Icon, color, items }: {
+  title: string; icon: React.ElementType; color: string;
+  items: { etapa: string; valor: number; pct: number }[];
+}) {
+  const maxVal = items[0].valor;
+  return (
+    <div className="flex-1 space-y-2">
+      <div className="flex items-center gap-1.5 mb-3">
+        <Icon className="h-4 w-4" style={{ color }} />
+        <span className="text-xs font-bold text-foreground">{title}</span>
+      </div>
+      {items.map((item, i) => {
+        const barPct = (item.valor / maxVal) * 100;
+        const convPct = i > 0 ? Math.round((item.valor / items[i - 1].valor) * 100) : 100;
+        return (
+          <div key={item.etapa}>
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[10px] text-muted-foreground truncate pr-1">{item.etapa}</span>
+              <span className="text-[10px] font-bold shrink-0" style={{ color }}>
+                {item.valor.toLocaleString('pt-BR')}
+              </span>
+            </div>
+            <div className="h-4 w-full rounded bg-border overflow-hidden">
+              <div
+                className="h-full rounded flex items-center px-1.5 transition-all duration-700"
+                style={{ width: `${barPct}%`, background: color, minWidth: '4%' }}
+              >
+                {barPct > 20 && (
+                  <span className="text-[8px] font-bold text-white">{item.pct}%</span>
+                )}
+              </div>
+            </div>
+            {i > 0 && (
+              <p className="text-right text-[9px] text-muted-foreground mt-0.5">→ {convPct}% conv.</p>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function Index() {
   const navigate = useNavigate();
   const [campaigns] = useLocalStorage<Campaign[]>('dqef-campaigns', initialCampaigns);
   const [contents] = useLocalStorage<ContentItem[]>('dqef-contents', initialContents);
+  const [period, setPeriod] = useState<'7d' | '30d' | '90d'>('30d');
+  const [expandedInsight, setExpandedInsight] = useState<number | null>(null);
 
   // ── Derived metrics
   const activeCampaigns = campaigns.filter(c => c.status === 'Ativa').length;
@@ -214,6 +312,12 @@ export default function Index() {
   const totalTeamDone = teamDemands.reduce((s, m) => s + m.done, 0);
   const totalOverdue = teamDemands.reduce((s, m) => s + m.overdue, 0);
 
+  // Marketplace liquidity
+  const liquidityRatio = MARKETPLACE.prestadoresAtivos / (MARKETPLACE.solicitacoesAtivas / 10);
+  const liquidityPct = Math.min(Math.round(liquidityRatio * 50), 100);
+  const liquidityLabel = liquidityRatio < 0.8 ? 'Falta Oferta' : liquidityRatio < 1.2 ? 'Equilibrado' : 'Sobra Oferta';
+  const liquidityColor = liquidityRatio < 0.8 ? C.red : liquidityRatio < 1.2 ? C.green : C.amber;
+
   const FORMAT_COLORS: Record<string, string> = {
     Post: 'bg-blue-500/20 text-blue-400',
     Reels: 'bg-primary/20 text-primary',
@@ -225,6 +329,28 @@ export default function Index() {
 
   return (
     <div className="space-y-5 animate-fade-in">
+
+      {/* ── HEADER: Period Selector ── */}
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-xs text-muted-foreground">Pré-inauguração · 15/03/2026</p>
+        </div>
+        <div className="flex items-center rounded-lg border border-border bg-card p-0.5 gap-0.5">
+          {(['7d', '30d', '90d'] as const).map(p => (
+            <button
+              key={p}
+              onClick={() => setPeriod(p)}
+              className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-all ${
+                period === p
+                  ? 'bg-primary text-primary-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              {p === '7d' ? '7 dias' : p === '30d' ? '30 dias' : '90 dias'}
+            </button>
+          ))}
+        </div>
+      </div>
 
       {/* ── TOP STRIP: Health + Quick Stats ── */}
       <div className="flex flex-col gap-4 lg:flex-row lg:items-stretch">
@@ -258,8 +384,8 @@ export default function Index() {
           </CardContent>
         </Card>
 
-        {/* KPI Grid */}
-        <div className="flex-1 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {/* KPI Grid — 10 KPIs (2 rows × 5) */}
+        <div className="flex-1 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
           <KpiCard
             label="Impressões Totais"
             value={`${(totalImpressions / 1000).toFixed(0)}k`}
@@ -301,16 +427,6 @@ export default function Index() {
             sub={`Total: R$${(totalBudget / 1000).toFixed(1)}k`}
           />
           <KpiCard
-            label="Campanhas Ativas"
-            value={activeCampaigns}
-            delta="+2 esta semana"
-            positive={true}
-            icon={Megaphone}
-            color="text-orange-400"
-            bg="bg-orange-400/10"
-            sub={`${campaigns.filter(c => c.status === 'Aprovada').length} aprovadas`}
-          />
-          <KpiCard
             label="ROAS Médio"
             value={`${avgROAS.toFixed(1)}x`}
             delta="Acima da meta"
@@ -320,30 +436,61 @@ export default function Index() {
             bg="bg-green-400/10"
             sub="Meta: 3.0x"
           />
+          {/* Row 2 — Marketplace KPIs */}
           <KpiCard
-            label="Posts Publicados"
-            value={publishedPosts}
-            delta="+5 este mês"
+            label="Prestadores Ativos"
+            value={MARKETPLACE.prestadoresAtivos.toLocaleString('pt-BR')}
+            delta="+34 esta semana"
             positive={true}
-            icon={FileText}
-            color="text-violet-400"
-            bg="bg-violet-400/10"
-            sub={`${contents.filter(c => c.status === 'Em produção').length} em produção`}
-          />
-          <KpiCard
-            label="Cliques Totais"
-            value={`${(campaigns.reduce((s, c) => s + (c.clicks ?? 0), 0) / 1000).toFixed(1)}k`}
-            delta="+9% semana"
-            positive={true}
-            icon={MousePointerClick}
+            icon={Wrench}
             color="text-amber-400"
             bg="bg-amber-400/10"
-            sub="Todos os canais"
+            sub="Meta: 500 no launch"
+          />
+          <KpiCard
+            label="Clientes Ativos"
+            value={MARKETPLACE.clientesAtivos.toLocaleString('pt-BR')}
+            delta="+112 esta semana"
+            positive={true}
+            icon={Users}
+            color="text-teal"
+            bg="bg-teal/10"
+            sub="Meta: 2.000 no launch"
+          />
+          <KpiCard
+            label="GMV Acumulado"
+            value={`R$${(MARKETPLACE.gmv / 1000).toFixed(0)}k`}
+            delta="+18% mês"
+            positive={true}
+            icon={BarChart2}
+            color="text-orange-400"
+            bg="bg-orange-400/10"
+            sub="Volume de serviços"
+          />
+          <KpiCard
+            label="CAC Médio"
+            value={`R$${MARKETPLACE.cac.toFixed(2)}`}
+            delta="-12% vs mês ant."
+            positive={true}
+            icon={Zap}
+            color="text-violet-400"
+            bg="bg-violet-400/10"
+            sub="Custo aquisição"
+          />
+          <KpiCard
+            label="Campanhas Ativas"
+            value={activeCampaigns}
+            delta="+2 esta semana"
+            positive={true}
+            icon={Megaphone}
+            color="text-red-400"
+            bg="bg-red-400/10"
+            sub={`${campaigns.filter(c => c.status === 'Aprovada').length} aprovadas`}
           />
         </div>
       </div>
 
-      {/* ── ROW 2: Revenue + Funnel ── */}
+      {/* ── ROW 2: Revenue + Dual Funnel ── */}
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
 
         {/* Revenue Chart */}
@@ -390,7 +537,7 @@ export default function Index() {
               {[
                 { label: 'Receita Fev', val: 'R$81k', delta: '+19%', up: true },
                 { label: 'Margem Bruta', val: '61.7%', delta: '+4pp', up: true },
-                { label: 'CAC Médio', val: 'R$23,1', delta: '-12%', up: true },
+                { label: 'CAC Médio', val: `R$${MARKETPLACE.cac.toFixed(2)}`, delta: '-12%', up: true },
               ].map(({ label, val, delta, up }) => (
                 <div key={label} className="px-3 text-center first:pl-0 last:pr-0">
                   <p className="text-xs text-muted-foreground">{label}</p>
@@ -402,44 +549,33 @@ export default function Index() {
           </CardContent>
         </Card>
 
-        {/* Conversion Funnel */}
+        {/* Dual Conversion Funnel */}
         <Card className="border-border bg-card">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-bold flex items-center gap-2">
               <Target className="h-4 w-4 text-teal" />
-              Funil de Conversão
+              Funis de Conversão
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-2.5">
-            {funnelStages.map((stage, i) => (
-              <div key={stage.label}>
-                <div className="flex items-center justify-between mb-1">
-                  <div className="flex items-center gap-1.5">
-                    <CircleDot className="h-3 w-3" style={{ color: stage.color }} />
-                    <span className="text-xs font-medium text-foreground">{stage.label}</span>
-                  </div>
-                  <span className="text-xs font-bold" style={{ color: stage.color }}>
-                    {stage.value.toLocaleString('pt-BR')}
-                  </span>
-                </div>
-                <div className="h-5 w-full rounded-md bg-border overflow-hidden">
-                  <div
-                    className="h-full rounded-md flex items-center px-2 transition-all duration-700"
-                    style={{ width: `${stage.pct}%`, background: stage.color, minWidth: stage.pct > 0 ? '4%' : '0' }}
-                  >
-                    {stage.pct > 8 && <span className="text-[9px] font-bold text-white">{stage.pct}%</span>}
-                  </div>
-                </div>
-                {i < funnelStages.length - 1 && (
-                  <p className="text-right text-[9px] text-muted-foreground mt-0.5">
-                    → {((funnelStages[i + 1].value / stage.value) * 100).toFixed(1)}% taxa
-                  </p>
-                )}
-              </div>
-            ))}
+          <CardContent>
+            <div className="flex gap-4">
+              <FunnelColumn
+                title="Clientes"
+                icon={Users}
+                color={C.teal}
+                items={clienteFunnel}
+              />
+              <div className="w-px bg-border shrink-0" />
+              <FunnelColumn
+                title="Prestadores"
+                icon={Wrench}
+                color={C.orange}
+                items={prestadorFunnel}
+              />
+            </div>
 
-            {/* Breakdown canais */}
-            <div className="pt-2 border-t border-border">
+            {/* Channel mix */}
+            <div className="pt-3 mt-3 border-t border-border">
               <p className="text-[10px] text-muted-foreground mb-2 font-semibold uppercase tracking-wider">Mix de Canais</p>
               <div className="flex items-center gap-2">
                 <PieChart width={64} height={64}>
@@ -466,7 +602,131 @@ export default function Index() {
         </Card>
       </div>
 
-      {/* ── ROW 3: Team Demands + Bottlenecks ── */}
+      {/* ── ROW 3: AI Insights + Marketplace Liquidity ── */}
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+
+        {/* AI Insights Panel */}
+        <Card className="border-border bg-card">
+          <CardHeader className="pb-2 flex flex-row items-center justify-between">
+            <CardTitle className="text-sm font-bold flex items-center gap-2">
+              <Lightbulb className="h-4 w-4 text-amber-400" />
+              AI Insights — Top 3 Prioridades
+            </CardTitle>
+            <Badge className="bg-primary/15 text-primary border-primary/30 text-[9px]">IA</Badge>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {aiInsights.map((insight, i) => (
+              <div
+                key={i}
+                className="rounded-lg border border-border bg-muted/20 overflow-hidden transition-all duration-200"
+              >
+                <button
+                  className="w-full flex items-center gap-3 p-3 text-left hover:bg-muted/30 transition-colors"
+                  onClick={() => setExpandedInsight(expandedInsight === i ? null : i)}
+                >
+                  <ImpactBadge impact={insight.impact} />
+                  <span className="flex-1 text-xs font-semibold text-foreground">{insight.title}</span>
+                  <ChevronDown
+                    className={`h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform duration-200 ${expandedInsight === i ? 'rotate-180' : ''}`}
+                  />
+                </button>
+                {expandedInsight === i && (
+                  <div className="px-3 pb-3 border-t border-border/50">
+                    <p className="text-[11px] text-muted-foreground mt-2 leading-relaxed">{insight.detail}</p>
+                    <button
+                      onClick={() => navigate('/analytics')}
+                      className="mt-2 flex items-center gap-1 text-[10px] font-semibold text-primary hover:underline"
+                    >
+                      Ver analytics <ArrowRight className="h-3 w-3" />
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+
+        {/* Marketplace Liquidity */}
+        <Card className="border-border bg-card">
+          <CardHeader className="pb-2 flex flex-row items-center justify-between">
+            <CardTitle className="text-sm font-bold flex items-center gap-2">
+              <Gauge className="h-4 w-4 text-teal" />
+              Liquidez do Marketplace
+            </CardTitle>
+            <span
+              className="text-xs font-bold px-2 py-0.5 rounded-full"
+              style={{ color: liquidityColor, background: `${liquidityColor}20` }}
+            >
+              {liquidityLabel}
+            </span>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Gauge bar */}
+            <div>
+              <div className="flex justify-between text-[10px] text-muted-foreground mb-1.5">
+                <span>Falta Oferta</span>
+                <span>Equilibrado</span>
+                <span>Sobra Oferta</span>
+              </div>
+              <div className="h-3 w-full rounded-full bg-border overflow-hidden relative">
+                <div
+                  className="h-full rounded-full transition-all duration-700"
+                  style={{ width: `${liquidityPct}%`, background: `linear-gradient(90deg, ${C.red}, ${C.green}, ${C.amber})` }}
+                />
+                <div
+                  className="absolute top-0 h-full w-0.5 bg-white/50"
+                  style={{ left: '50%' }}
+                />
+              </div>
+              <div className="flex justify-between text-[9px] text-muted-foreground/50 mt-1">
+                <span>0</span>
+                <span>Ratio ideal: 1:1</span>
+                <span>∞</span>
+              </div>
+            </div>
+
+            {/* Stats grid */}
+            <div className="grid grid-cols-3 gap-3">
+              {[
+                { label: 'Prestadores', value: MARKETPLACE.prestadoresAtivos.toLocaleString('pt-BR'), color: C.orange, icon: Wrench },
+                { label: 'Solicitações', value: MARKETPLACE.solicitacoesAtivas.toLocaleString('pt-BR'), color: C.teal, icon: Users },
+                { label: 'Taxa Match', value: `${MARKETPLACE.taxaMatch}%`, color: C.green, icon: CheckCircle2 },
+              ].map(({ label, value, color, icon: Icon }) => (
+                <div key={label} className="rounded-lg border border-border bg-muted/20 p-2.5 text-center">
+                  <Icon className="h-3.5 w-3.5 mx-auto mb-1" style={{ color }} />
+                  <p className="text-sm font-black" style={{ color }}>{value}</p>
+                  <p className="text-[9px] text-muted-foreground">{label}</p>
+                </div>
+              ))}
+            </div>
+
+            {/* Match rate bar */}
+            <div>
+              <div className="flex justify-between text-xs mb-1.5">
+                <span className="text-muted-foreground font-medium">Taxa de Match</span>
+                <span className="font-bold text-green-400">{MARKETPLACE.taxaMatch}%</span>
+              </div>
+              <div className="h-2 w-full rounded-full bg-border overflow-hidden">
+                <div
+                  className="h-full rounded-full transition-all duration-700"
+                  style={{ width: `${MARKETPLACE.taxaMatch}%`, background: C.green }}
+                />
+              </div>
+              <p className="text-[10px] text-muted-foreground mt-1">
+                {Math.round(MARKETPLACE.solicitacoesAtivas * MARKETPLACE.taxaMatch / 100)} de {MARKETPLACE.solicitacoesAtivas} solicitações matched
+              </p>
+            </div>
+
+            {/* Category insight */}
+            <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-2.5">
+              <p className="text-[10px] font-semibold text-amber-400">⚠ Limpeza e Elétrica com maior gap de oferta</p>
+              <p className="text-[10px] text-muted-foreground mt-0.5">Considere campanhas de aquisição de prestadores nessas categorias.</p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* ── ROW 4: Team Demands + Bottlenecks ── */}
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
 
         {/* Team Workload */}
@@ -485,12 +745,10 @@ export default function Index() {
               const pct = Math.round((m.done / m.total) * 100);
               return (
                 <div key={m.member} className="flex items-center gap-3">
-                  {/* Avatar */}
                   <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ring-2 ${m.ring} ${m.bg} text-xs font-black`}
                     style={{ color: m.color }}>
                     {m.initials}
                   </div>
-                  {/* Info */}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between mb-1">
                       <div>
@@ -508,10 +766,7 @@ export default function Index() {
                       </div>
                     </div>
                     <div className="h-1.5 w-full rounded-full bg-border overflow-hidden">
-                      <div
-                        className="h-full rounded-full transition-all duration-700"
-                        style={{ width: `${pct}%`, background: m.color }}
-                      />
+                      <div className="h-full rounded-full transition-all duration-700" style={{ width: `${pct}%`, background: m.color }} />
                     </div>
                   </div>
                 </div>
@@ -567,7 +822,7 @@ export default function Index() {
         </Card>
       </div>
 
-      {/* ── ROW 4: Goals + ROAS + Timeline ── */}
+      {/* ── ROW 5: Goals + ROAS + Timeline ── */}
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
 
         {/* Monthly Goals */}
@@ -667,6 +922,37 @@ export default function Index() {
           </CardContent>
         </Card>
       </div>
+
+      {/* ── FOOTER: Quick Actions ── */}
+      <div className="flex items-center gap-3 rounded-xl border border-border bg-card p-4">
+        <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider shrink-0">Ações Rápidas</span>
+        <div className="flex flex-wrap gap-2">
+          {[
+            { label: 'Ver Gargalos', icon: Flame, style: 'bg-red-500/10 text-red-400 border-red-500/20 hover:bg-red-500/20', path: null },
+            { label: 'Ver Canais', icon: BarChart3, style: 'bg-primary/10 text-primary border-primary/20 hover:bg-primary/20', path: '/analytics' },
+            { label: 'Ver Marketplace', icon: Gauge, style: 'bg-teal/10 text-teal border-teal/20 hover:bg-teal/20', path: '/analytics' },
+          ].map(({ label, icon: Icon, style, path }) => (
+            <button
+              key={label}
+              onClick={() => path && navigate(path)}
+              className={`flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-semibold transition-all ${style}`}
+            >
+              <Icon className="h-3.5 w-3.5" />
+              {label}
+            </button>
+          ))}
+        </div>
+        <div className="ml-auto">
+          <button
+            onClick={() => navigate('/analytics')}
+            className="flex items-center gap-1.5 rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs font-semibold text-muted-foreground hover:text-foreground hover:border-border/80 transition-all"
+          >
+            <FileText className="h-3.5 w-3.5" />
+            Gerar Relatório
+          </button>
+        </div>
+      </div>
+
     </div>
   );
 }
