@@ -7,6 +7,7 @@ import {
   BookOpen,
   BarChart3,
   Megaphone,
+  Sparkles,
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react';
@@ -29,6 +30,7 @@ const navItems = [
   { title: 'Biblioteca', url: '/biblioteca', icon: BookOpen },
   { title: 'Analytics', url: '/analytics', icon: BarChart3 },
   { title: 'Campanhas', url: '/campanhas', icon: Megaphone },
+  { title: 'AI Criativo', url: '/criativo', icon: Sparkles },
 ];
 
 export function AppSidebar() {
