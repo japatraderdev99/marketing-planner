@@ -1,191 +1,178 @@
 
-# AI Carrosséis — Geração de Imagem por Lâmina + Export PNG
+# Biblioteca de Mídias + Sugestão Inteligente por Lâmina
 
-## O Problema Identificado na Screenshot
+## O Problema
 
-A tela atual mostra que os slides com `needsMedia: true` renderizam um placeholder escuro com ícone no topo da lâmina, criando um overlay que atrapalha a legibilidade do texto. O objetivo é:
+O fluxo atual gera imagens via IA a cada uso, consumindo tokens e créditos desnecessariamente. O usuário já possui uma coleção de imagens criadas por modelos de IA que poderiam ser reutilizadas nos carrosséis, com curadoria inteligente por categoria e relevância de copy.
 
-1. **Gerar a imagem de fundo** via IA usando o `imagePrompt` já produzido pelo edge function
-2. **Exibir como background real** da lâmina, com o texto DQEF sobreposto
-3. **Exportar cada lâmina como PNG** em alta resolução
+## Arquitetura da Solução
 
----
-
-## Tecnologias Confirmadas na Pesquisa
-
-### Geração de Imagem
-A Lovable AI Gateway suporta nativamente:
-- `google/gemini-2.5-flash-image` — mais rápido (bom para preview)
-- `google/gemini-3-pro-image-preview` — maior qualidade
-
-O retorno é um `data:image/png;base64,...` que pode ser usado diretamente como `background-image` no CSS.
-
-### Export PNG por Slide
-A biblioteca **`html-to-image`** (npm, MIT License) converte qualquer `div` React em PNG usando SVG + Canvas:
-```ts
-import { toPng } from 'html-to-image';
-toPng(ref.current, { pixelRatio: 2 }) // 2x para alta resolução
-  .then(dataUrl => { /* download */ });
-```
-É superior ao `html2canvas` para este caso porque lida melhor com fontes customizadas e CSS moderno.
-
----
-
-## Arquitetura das Mudanças
+### Banco de Dados — 1 nova tabela
 
 ```text
-NOVO: supabase/functions/generate-slide-image/index.ts
-   ↳ Recebe { imagePrompt: string, quality: 'fast' | 'high' }
-   ↳ Chama gemini-2.5-flash-image (fast) ou gemini-3-pro-image-preview (high)
-   ↳ Retorna { imageUrl: "data:image/png;base64,..." }
-
-MODIFICADO: src/pages/AiCarrosseis.tsx
-   ↳ Instala html-to-image (nova dependência npm)
-   ↳ Estado por lâmina: slideImages: Record<number, string>
-   ↳ Estado de loading por lâmina: generatingImage: Record<number, boolean>
-   ↳ SlidePreview: aceita imageUrl? prop → renderiza como background-image com gradient overlay
-   ↳ SlideCard: adiciona botões Gerar Imagem / Trocar / Baixar PNG
-   ↳ Cada slide tem um ref para o elemento DOM → usado pelo toPng()
+media_library
+├── id            uuid PK
+├── user_id       uuid (auth)
+├── url           text          ← URL pública no Storage bucket
+├── filename      text          ← nome original do arquivo
+├── category      text          ← gerada pela IA ao fazer upload
+├── tags          text[]        ← array de tags geradas pela IA
+├── description   text          ← descrição em português gerada pela IA
+├── created_at    timestamptz
+└── file_size     integer
 ```
 
----
+- RLS: cada usuário vê e gerencia apenas as próprias imagens
+- Storage bucket: `media-library` (público para leitura de URLs, privado para listagem)
+
+### Fluxo de Upload com Categorização Automática
+
+```
+Usuário sobe imagem (JPG/PNG/WEBP)
+        ↓
+Upload → Storage bucket media-library/{user_id}/{uuid}.jpg
+        ↓
+Edge function "categorize-media" chamada automaticamente
+        ↓
+Gemini 2.5 Flash analisa a imagem:
+  - Detecta categoria: pessoas, ambiente, ferramenta, produto, ação, abstrato, outdoor, indoor
+  - Gera tags relevantes: ["mãos", "ferramenta", "trabalho braçal", "luz natural"]
+  - Escreve descrição concisa em português
+        ↓
+Salva category + tags + description na tabela media_library
+```
+
+### Fluxo de Sugestão por Lâmina
+
+```
+Usuário clica "Buscar na biblioteca" no SlideCard
+        ↓
+Edge function "suggest-media" recebe:
+  - headline + subtext + imagePrompt da lâmina
+  - user_id para filtrar mídia do usuário
+        ↓
+1. Filtro rápido por categoria (baseado no tipo do slide: hook→pessoa, setup→ambiente, cta→marca)
+2. Gemini analisa o subconjunto filtrado e ranqueia por relevância textual com a copy
+        ↓
+Retorna top 3-4 imagens ranqueadas com score de relevância
+        ↓
+Modal mostra as sugestões com thumbnail → usuário clica para aplicar
+```
+
+## Nova Edge Function: `categorize-media`
+
+Recebe a URL pública da imagem e usa Gemini Vision (multimodal) para:
+1. Classificar em categoria principal
+2. Gerar array de tags descritivas
+3. Escrever descrição resumida em português
+
+Retorna `{ category, tags, description }` e salva no banco.
+
+## Nova Edge Function: `suggest-media`
+
+Recebe `{ slideHeadline, slideSubtext, slideImagePrompt, userId }` e:
+1. Busca imagens do usuário no banco filtrando por categoria compatível com o tipo do slide
+2. Envia a copy da lâmina + as descrições/tags das imagens para o Gemini
+3. Pede ao modelo que ranqueie de 1 a 10 cada imagem por relevância
+4. Retorna as top 4 ordenadas por score
+
+## Mudanças na UI
+
+### Aba "Biblioteca" no painel esquerdo
+
+O painel de briefing ganha uma segunda aba: "Briefing" | "Biblioteca"
+
+Na aba Biblioteca:
+- Botão de upload de imagens (múltiplas por vez, aceita JPG, PNG, WEBP)
+- Grid de thumbnails com badge de categoria e tags
+- Indicador de loading durante categorização automática
+- Opção de excluir imagem da biblioteca
+
+### Botão "Buscar na biblioteca" em cada SlideCard
+
+Abaixo das opções "Gerar imagem" e "Tirar imagem", um novo botão aparece quando o usuário tem imagens na biblioteca.
+
+Ao clicar, abre um modal compacto inline (dentro do próprio card) com:
+- 3-4 thumbnails sugeridos com barra de relevância
+- 1 clique para aplicar como background da lâmina
+- Link "Ver mais" para abrir a biblioteca completa em modal
+
+## Diagrama de Fluxo de Dados
+
+```text
+UPLOAD                         USO NO CARROSSEL
+─────────────────────          ─────────────────────────────────
+1. Usuário sobe imagem         1. SlideCard mostra "Buscar na biblioteca"
+2. → Storage bucket            2. → suggest-media edge fn
+3. → categorize-media edge fn  3. → Gemini ranqueia por relevância
+4. → salva na media_library    4. → modal mostra top 4 sugestões
+5. → grid atualiza             5. → usuário aplica com 1 clique
+```
 
 ## Detalhes Técnicos
 
-### 1. Novo Edge Function: `generate-slide-image`
+### Modelo IA para categorização
+`google/gemini-2.5-flash` com input multimodal (imagem + texto) para categorização. Rápido, barato, preciso para visão computacional simples.
 
-Endpoint simples e focado. Recebe o `imagePrompt` da lâmina e retorna base64:
+### Modelo IA para sugestão
+`google/gemini-2.5-flash-lite` para o ranqueio de relevância (só texto — descrições + copy da lâmina). Mais barato porque não precisa processar a imagem novamente, apenas comparar strings.
 
-```ts
-// Entrada
-{ imagePrompt: string, quality: 'fast' | 'high' }
+### Categorias predefinidas
+`pessoa`, `ambiente`, `ferramenta`, `ação`, `produto`, `outdoor`, `indoor`, `abstrato`, `equipe`
 
-// Lógica
-const model = quality === 'high'
-  ? 'google/gemini-3-pro-image-preview'
-  : 'google/gemini-2.5-flash-image';
+Mapeamento por tipo de slide:
+- `hook` → pessoa, ação
+- `setup` → ambiente, indoor, outdoor
+- `data` → abstrato, produto
+- `contrast` → pessoa, ação
+- `validation` → equipe, pessoa
+- `cta` → marca (sem filtro específico)
 
-// Resposta AI Gateway
-const imageUrl = response.choices[0].message.images[0].image_url.url;
-// → "data:image/png;base64,..."
-
-// Saída
-{ imageUrl: string }
-```
-
-### 2. Overlay da Imagem na Lâmina
-
-Quando `imageUrl` existe, o `SlidePreview` renderiza:
-```
-[Div laranja #E8603C — fundo]
-  └── [background-image: url(imageUrl), object-fit: cover, opacity: 0.55]
-  └── [gradient: linear-gradient(to top, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0.1) 50%)]
-  └── [Texto DQEF — z-index acima, sem mudança]
-```
-
-O fundo laranja permanece visível nos slides sem imagem — a identidade da marca não quebra. Quando há imagem, ela fica como background com opacity controlada para que o texto branco Montserrat 900 continue legível.
-
-O usuário pode ajustar manualmente clicando "Trocar" para regenerar apenas aquela lâmina.
-
-### 3. UX dos Botões por Lâmina
-
-Cada `SlideCard` ganha uma barra de ações abaixo do slide:
-
-```
-┌─────────────────────────────────────┐
-│ [SLIDE PREVIEW com imagem de fundo] │
-└─────────────────────────────────────┘
-│ [🖼 Gerar Imagem ↓]  [Trocar]  [⬇ PNG] │
-└─────────────────────────────────────────┘
-```
-
-- **"Gerar Imagem"** — aparece quando `needsMedia: true` e ainda não há imagem gerada. Mostra spinner individual por slide enquanto gera.
-- **"Trocar"** (com ícone de refresh) — aparece quando imagem já foi gerada. Envia o mesmo prompt e substitui a imagem.
-- **"⬇ PNG"** — disponível para TODOS os slides (com ou sem imagem). Usa `html-to-image` com `pixelRatio: 2` para gerar PNG em alta resolução (equivalente a ~800x1000px para um slide 4:5).
-
-### 4. Fluxo de Geração de Imagem (UX)
-
-```
-Usuário clica "Gerar Imagem" no Slide 2
-    ↓
-Spinner aparece no botão do Slide 2 (só nele)
-    ↓
-supabase.functions.invoke('generate-slide-image', { imagePrompt, quality: 'fast' })
-    ↓
-base64 recebido → slideImages[2] = "data:image/png;base64,..."
-    ↓
-SlidePreview re-renderiza com a imagem de fundo real
-    ↓
-Botão muda para "Trocar" + ícone refresh
-```
-
-### 5. Export PNG por Lâmina
-
-```ts
-// Cada SlidePreview tem um ref
-const slideRef = useRef<HTMLDivElement>(null);
-
-// Ao clicar "⬇ PNG"
-const handleExportPng = async () => {
-  if (!slideRef.current) return;
-  const dataUrl = await toPng(slideRef.current, {
-    pixelRatio: 2,          // 2x resolução
-    cacheBust: true,
-  });
-  const link = document.createElement('a');
-  link.download = `dqef-slide-${slide.number}.png`;
-  link.href = dataUrl;
-  link.click();
-};
-```
-
-O PNG gerado reflete exatamente o que está na tela — com ou sem imagem de fundo, com o texto Montserrat 900 e o watermark DQEF.
-
----
-
-## O Que Não Muda
-
-- O fluxo de geração do carrossel (briefing + edge function principal)
-- A identidade visual laranja #E8603C nos slides sem imagem
-- O botão "Exportar HTML" (mantido para exportar todos os slides com prompts)
-- A tipografia Montserrat 900 e o watermark DQEF
-- O sistema de copy dos prompts imagePrompt / veoPrompt
-
----
+### Storage
+Bucket `media-library` com política RLS:
+- Upload permitido apenas para o próprio `user_id`
+- Leitura pública via URL (para carregar nos `<img>`)
+- Delete permitido apenas para o próprio usuário
 
 ## Arquivos Modificados / Criados
 
 | Arquivo | Ação |
 |---|---|
-| `supabase/functions/generate-slide-image/index.ts` | NOVO — edge function de geração de imagem |
-| `src/pages/AiCarrosseis.tsx` | MODIFICADO — estado de imagens, botões, SlidePreview com background, export PNG |
-| `package.json` | MODIFICADO — adicionar `html-to-image` |
+| `supabase/migrations/[timestamp]_media_library.sql` | NOVA tabela + storage bucket + RLS |
+| `supabase/functions/categorize-media/index.ts` | NOVA — categorização automática via Gemini Vision |
+| `supabase/functions/suggest-media/index.ts` | NOVA — sugestão por relevância textual |
+| `src/pages/AiCarrosseis.tsx` | MODIFICADO — aba Biblioteca, botão upload, botão buscar, modal de sugestões |
 
----
-
-## Exemplo Visual do Resultado Esperado
+## Resultado Esperado
 
 ```
-Slide sem imagem gerada:          Slide com imagem gerada:
-┌──────────────────────┐          ┌──────────────────────┐
-│ 01 · GANCHO          │          │ 02 · SETUP           │
-│                      │          │ [foto real de mãos   │
-│                      │          │  com ferramentas,    │
-│  TU É BOM NO         │          │  escurecida com      │
-│  QUE FAZI.           │          │  gradient]           │
-│  O PROBLEMA          │          │  15 ANOS DE          │
-│  NÃO É TU.           │          │  PROFISSÃO.          │
-│               DQEF   │          │  NINGUÉM TE          │
-└──────────────────────┘          │  ENSINOU.     DQEF   │
-[Gerar Imagem] [⬇ PNG]           └──────────────────────┘
-                                  [Trocar 🔄] [⬇ PNG]
+PAINEL ESQUERDO (tabs):
+┌──────────────────────────────────┐
+│  [Briefing]  [Biblioteca 12]     │
+├──────────────────────────────────┤
+│  ╔════════╗ ╔════════╗           │
+│  ║ img01  ║ ║ img02  ║           │
+│  ║ pessoa ║ ║ outdoor║           │
+│  ╚════════╝ ╚════════╝           │
+│  [+ Upload imagens]              │
+└──────────────────────────────────┘
+
+CARD DA LÂMINA:
+┌──────────────────────────┐
+│ [preview com imagem]     │
+├──────────────────────────┤
+│ [Trocar imagem] [PNG]    │
+│ [Buscar na biblioteca ↓] │  ← novo
+├──────────────────────────┤
+│ ╔══╗ ╔══╗ ╔══╗           │  ← sugestões inline
+│ ║  ║ ║  ║ ║  ║  relevância│
+│ ╚══╝ ╚══╝ ╚══╝           │
+└──────────────────────────┘
 ```
 
----
+## Por que essa arquitetura é eficiente
 
-## Impacto Esperado
-
-- Slides com `needsMedia: true` passam a ter imagem real gerada via IA em vez de placeholder
-- Cada lâmina pode ser exportada como PNG pronto para uso em templates ou Canva
-- O fluxo "Gerar → Trocar se não gostar → Baixar PNG" resolve a dor do designer de forma direta
-- A combinação texto branco Montserrat 900 + imagem com opacity + fundo laranja cria a identidade DQEF mesmo com foto
+1. **Zero tokens desperdicados**: categorização acontece 1 única vez no upload, não a cada uso
+2. **Filtro por categoria antes do ranqueio**: o Gemini só analisa 5-10 imagens pré-filtradas, não toda a biblioteca
+3. **Reutilização máxima**: a mesma foto pode ser usada em múltiplos carrosséis sem custo adicional de geração
+4. **Escala bem**: mesmo com 200 imagens na biblioteca, o suggest-media filtra para ~10-15 antes de chamar a IA
