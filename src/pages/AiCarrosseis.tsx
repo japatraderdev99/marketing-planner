@@ -1,5 +1,5 @@
-import { useState, useRef, useCallback } from 'react';
-import { Layers, Wand2, Copy, Check, Download, ChevronDown, ChevronUp, ImageIcon, Video, Zap, RefreshCw, Image, Minimize2, Shuffle } from 'lucide-react';
+import { useState, useRef, useCallback, useEffect } from 'react';
+import { Layers, Wand2, Copy, Check, Download, ChevronDown, ChevronUp, ImageIcon, Video, Zap, RefreshCw, Image, Minimize2, Shuffle, Upload, Trash2, Library, X, Star } from 'lucide-react';
 import dqfIcon from '@/assets/dqf-icon.svg';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -7,6 +7,8 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 import { toPng } from 'html-to-image';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Badge } from '@/components/ui/badge';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -41,6 +43,22 @@ interface CarouselOutput {
   slides: SlideOutput[];
 }
 
+interface MediaItem {
+  id: string;
+  url: string;
+  filename: string;
+  category: string | null;
+  tags: string[] | null;
+  description: string | null;
+  file_size: number | null;
+  created_at: string;
+}
+
+interface MediaSuggestion extends MediaItem {
+  score: number;
+  reason: string;
+}
+
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const ANGLES = [
@@ -60,7 +78,7 @@ const PERSONAS = [
 const CHANNELS = ['Instagram Feed', 'Stories', 'TikTok', 'LinkedIn'];
 const TONES = ['Peer-to-peer', 'Editorial', 'Direto ao ponto'];
 
-const SLIDE_BG = '#E8603C'; // Laranja DQEF — caixa de texto recortável
+const SLIDE_BG = '#E8603C';
 
 const BG_COLORS: Record<string, string> = {
   dark: SLIDE_BG,
@@ -76,6 +94,18 @@ const TYPE_LABELS: Record<string, string> = {
   contrast: 'CONTRASTE',
   validation: 'VALIDAÇÃO',
   cta: 'CTA',
+};
+
+const CATEGORY_COLORS: Record<string, string> = {
+  pessoa: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
+  ambiente: 'bg-green-500/20 text-green-400 border-green-500/30',
+  ferramenta: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
+  ação: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
+  produto: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
+  outdoor: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
+  indoor: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30',
+  abstrato: 'bg-pink-500/20 text-pink-400 border-pink-500/30',
+  equipe: 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30',
 };
 
 // ─── Inject Google Fonts ──────────────────────────────────────────────────────
@@ -125,7 +155,6 @@ function SlidePreview({ slide, imageUrl, slideRef }: SlidePreviewProps) {
   const isDataSlide = slide.layout === 'number-dominant';
   const isCTA = slide.layout === 'cta-clean';
 
-  // Render headline with highlight — orange color when image behind, box when no image
   const renderHeadline = (headline: string, highlight?: string) => {
     if (!highlight || !headline.toLowerCase().includes(highlight.toLowerCase())) {
       return <span style={{ color: '#FFFFFF' }}>{headline}</span>;
@@ -134,7 +163,6 @@ function SlidePreview({ slide, imageUrl, slideRef }: SlidePreviewProps) {
     const before = headline.slice(0, idx);
     const word = headline.slice(idx, idx + highlight.length);
     const after = headline.slice(idx + highlight.length);
-    // When image is behind, use orange text for contrast (no box); otherwise semi-transparent white box
     const highlightStyle = imageUrl
       ? { color: '#E8603C' }
       : { color: '#FFFFFF', backgroundColor: 'rgba(255,255,255,0.22)', borderRadius: '2px', padding: '0 3px' };
@@ -165,7 +193,6 @@ function SlidePreview({ slide, imageUrl, slideRef }: SlidePreviewProps) {
         boxSizing: 'border-box',
       }}
     >
-      {/* Background image overlay when image is generated */}
       {imageUrl && (
         <>
           <div style={{
@@ -177,7 +204,6 @@ function SlidePreview({ slide, imageUrl, slideRef }: SlidePreviewProps) {
             opacity: 0.52,
             zIndex: 0,
           }} />
-          {/* Gradient for text legibility */}
           <div style={{
             position: 'absolute',
             inset: 0,
@@ -187,7 +213,6 @@ function SlidePreview({ slide, imageUrl, slideRef }: SlidePreviewProps) {
         </>
       )}
 
-      {/* CTA Layout */}
       {isCTA && (
         <div style={{ textAlign: 'center', width: '100%', position: 'relative', zIndex: 10 }}>
           <div style={{
@@ -214,7 +239,6 @@ function SlidePreview({ slide, imageUrl, slideRef }: SlidePreviewProps) {
         </div>
       )}
 
-      {/* Data/Number dominant layout */}
       {isDataSlide && !isCTA && (
         <div style={{ width: '100%', textAlign: 'left', position: 'relative', zIndex: 10 }}>
           <div style={{
@@ -243,7 +267,6 @@ function SlidePreview({ slide, imageUrl, slideRef }: SlidePreviewProps) {
         </div>
       )}
 
-      {/* Standard text layout */}
       {!isDataSlide && !isCTA && (
         <div style={{ width: '100%', position: 'relative', zIndex: 10 }}>
           <div style={{
@@ -271,7 +294,6 @@ function SlidePreview({ slide, imageUrl, slideRef }: SlidePreviewProps) {
         </div>
       )}
 
-      {/* DQF logo watermark — bottom right */}
       <div style={{
         position: 'absolute',
         bottom: '10px',
@@ -285,7 +307,7 @@ function SlidePreview({ slide, imageUrl, slideRef }: SlidePreviewProps) {
   );
 }
 
-// ─── SlideCard (preview + image generation + PNG export) ──────────────────────
+// ─── SlideCard ─────────────────────────────────────────────────────────────────
 
 interface SlideCardProps {
   slide: SlideOutput;
@@ -293,25 +315,27 @@ interface SlideCardProps {
   isGenerating?: boolean;
   onGenerateImage: (slideNumber: number, prompt: string, quality: 'fast' | 'high') => void;
   onClearImage: (slideNumber: number) => void;
+  onApplyLibraryImage: (slideNumber: number, url: string) => void;
+  mediaLibraryCount: number;
+  userId: string | null;
 }
 
-// Build a generic image prompt for slides that don't have one defined
 function buildGenericImagePrompt(slide: SlideOutput): string {
   return `Editorial photography for a Brazilian service brand carousel slide. Style: documentary, natural light, authentic moment. The slide headline is "${slide.headline}". Create a background image that evokes this concept — no text, no overlays, no logos. The image will have a semi-transparent orange (#E8603C) overlay, so use high-contrast composition. Shot on Canon EOS R5, 35mm lens, f/2.8. Professional but human.`;
 }
 
-function SlideCard({ slide, imageUrl, isGenerating, onGenerateImage, onClearImage }: SlideCardProps) {
+function SlideCard({ slide, imageUrl, isGenerating, onGenerateImage, onClearImage, onApplyLibraryImage, mediaLibraryCount, userId }: SlideCardProps) {
+  const { toast } = useToast();
   const [expanded, setExpanded] = useState(false);
   const slideRef = useRef<HTMLDivElement>(null);
   const [exporting, setExporting] = useState(false);
-
-  // Editable copy state — live updates preview
   const [editedHeadline, setEditedHeadline] = useState(slide.headline);
   const [editedHighlight, setEditedHighlight] = useState(slide.headlineHighlight ?? '');
   const [editedSubtext, setEditedSubtext] = useState(slide.subtext ?? '');
-
-  // Image instruction — appended to prompt for regeneration
   const [imageInstruction, setImageInstruction] = useState('');
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [suggestions, setSuggestions] = useState<MediaSuggestion[]>([]);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
 
   const editedSlide: SlideOutput = {
     ...slide,
@@ -321,7 +345,6 @@ function SlideCard({ slide, imageUrl, isGenerating, onGenerateImage, onClearImag
   };
 
   const hasImage = !!imageUrl;
-  // ALL slides can generate image — use their own prompt or the generic builder
   const basePrompt = slide.imagePrompt ?? buildGenericImagePrompt(slide);
 
   const buildImagePrompt = () => {
@@ -344,10 +367,8 @@ function SlideCard({ slide, imageUrl, isGenerating, onGenerateImage, onClearImag
     }
   };
 
-  // Quick-adjust buttons modify the headline state
   const applyLessText = () => {
     const words = editedHeadline.split(' ');
-    // Keep first ~60% of words, round up to at least 2
     const keep = Math.max(2, Math.ceil(words.length * 0.6));
     setEditedHeadline(words.slice(0, keep).join(' '));
   };
@@ -359,10 +380,34 @@ function SlideCard({ slide, imageUrl, isGenerating, onGenerateImage, onClearImag
       (h: string) => `PARE. ${h}.`,
       (h: string) => `A VERDADE SOBRE ${h}`,
     ];
-    // Cycle through approaches based on current text length
     const idx = editedHeadline.length % approaches.length;
-    const base = slide.headline; // always start from original for approach changes
+    const base = slide.headline;
     setEditedHeadline(approaches[idx](base));
+  };
+
+  const handleFetchSuggestions = async () => {
+    if (!userId) return;
+    setShowSuggestions(true);
+    setLoadingSuggestions(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('suggest-media', {
+        body: {
+          slideHeadline: editedHeadline,
+          slideSubtext: editedSubtext,
+          slideImagePrompt: slide.imagePrompt,
+          slideType: slide.type,
+          userId,
+        },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      setSuggestions(data.suggestions ?? []);
+    } catch (e: any) {
+      toast({ title: 'Erro', description: e.message ?? 'Falha ao buscar sugestões.', variant: 'destructive' });
+      setShowSuggestions(false);
+    } finally {
+      setLoadingSuggestions(false);
+    }
   };
 
   return (
@@ -430,7 +475,7 @@ function SlideCard({ slide, imageUrl, isGenerating, onGenerateImage, onClearImag
         </div>
       </div>
 
-      {/* ── Image generation — all slides ── */}
+      {/* ── Image section ── */}
       <div className="px-3 pb-3 space-y-2 border-t border-border pt-2.5">
         <p className="text-[9px] font-bold text-muted-foreground/60 tracking-[0.15em] uppercase">Imagem de fundo</p>
         <textarea
@@ -459,18 +504,87 @@ function SlideCard({ slide, imageUrl, isGenerating, onGenerateImage, onClearImag
             ? (imageInstruction.trim() ? 'Aplicar ajuste' : 'Trocar imagem')
             : 'Gerar imagem'}
         </button>
+
+        {/* Library search button — shown only when user has media */}
+        {mediaLibraryCount > 0 && (
+          <button
+            onClick={showSuggestions ? () => setShowSuggestions(false) : handleFetchSuggestions}
+            disabled={loadingSuggestions}
+            className={cn(
+              'w-full flex items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all border',
+              showSuggestions
+                ? 'border-primary/40 bg-primary/10 text-primary'
+                : 'border-border text-muted-foreground hover:bg-muted/30 hover:text-foreground'
+            )}
+          >
+            {loadingSuggestions
+              ? <span className="h-3 w-3 border border-current border-t-transparent rounded-full animate-spin" />
+              : <Library className="h-3 w-3" />}
+            {loadingSuggestions ? 'Buscando...' : showSuggestions ? 'Fechar biblioteca' : `Buscar na biblioteca (${mediaLibraryCount})`}
+          </button>
+        )}
+
+        {/* Tirar imagem */}
         {hasImage && (
           <button
             onClick={() => onClearImage(slide.number)}
-            className="w-full flex items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all border border-destructive/30 text-destructive/70 hover:bg-destructive/10 hover:text-destructive mt-1"
+            className="w-full flex items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all border border-destructive/30 text-destructive/70 hover:bg-destructive/10 hover:text-destructive"
           >
             <ImageIcon className="h-3 w-3" />
             Tirar imagem
           </button>
         )}
+
+        {/* ── Library suggestions inline ── */}
+        {showSuggestions && !loadingSuggestions && (
+          <div className="mt-2 space-y-2">
+            {suggestions.length === 0 ? (
+              <p className="text-[10px] text-muted-foreground text-center py-3">Nenhuma sugestão encontrada para esta lâmina.</p>
+            ) : (
+              <>
+                <p className="text-[9px] font-bold text-muted-foreground/60 tracking-[0.15em] uppercase">Sugestões por relevância</p>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {suggestions.map(s => (
+                    <button
+                      key={s.id}
+                      onClick={() => {
+                        onApplyLibraryImage(slide.number, s.url);
+                        setShowSuggestions(false);
+                      }}
+                      className="group relative rounded-lg overflow-hidden border border-border hover:border-primary/50 transition-all"
+                      title={s.reason}
+                    >
+                      <div className="aspect-square relative">
+                        <img
+                          src={s.url}
+                          alt={s.filename}
+                          className="w-full h-full object-cover"
+                        />
+                        {/* Relevance score badge */}
+                        <div className="absolute top-1 right-1 flex items-center gap-0.5 bg-black/70 rounded-full px-1.5 py-0.5">
+                          <Star className="h-2 w-2 text-yellow-400 fill-yellow-400" />
+                          <span className="text-[9px] font-bold text-white">{s.score}</span>
+                        </div>
+                        {/* Hover overlay */}
+                        <div className="absolute inset-0 bg-primary/80 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                          <span className="text-[10px] font-bold text-white">Aplicar</span>
+                        </div>
+                      </div>
+                      {s.category && (
+                        <div className="px-1.5 py-1 bg-muted/30">
+                          <span className="text-[8px] font-medium text-muted-foreground truncate block">{s.category}</span>
+                        </div>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* ── Logic toggle (collapsed by default) ── */}
+      {/* ── Logic toggle ── */}
       <button
         onClick={() => setExpanded(!expanded)}
         className="w-full flex items-center justify-between px-3 py-2 text-[10px] text-muted-foreground/50 hover:text-muted-foreground hover:bg-muted/20 transition-colors border-t border-border/50"
@@ -513,7 +627,210 @@ function SlideCard({ slide, imageUrl, isGenerating, onGenerateImage, onClearImag
   );
 }
 
+// ─── MediaLibraryPanel ────────────────────────────────────────────────────────
 
+interface MediaLibraryPanelProps {
+  userId: string | null;
+  library: MediaItem[];
+  onLibraryChange: () => void;
+}
+
+function MediaLibraryPanel({ userId, library, onLibraryChange }: MediaLibraryPanelProps) {
+  const { toast } = useToast();
+  const [uploading, setUploading] = useState(false);
+  const [categorizingIds, setCategorizingIds] = useState<Set<string>>(new Set());
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleUpload = async (files: FileList | null) => {
+    if (!files || !userId) return;
+    setUploading(true);
+
+    const uploadedIds: string[] = [];
+
+    for (const file of Array.from(files)) {
+      if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+        toast({ title: 'Formato inválido', description: `${file.name} não é JPG, PNG ou WEBP.`, variant: 'destructive' });
+        continue;
+      }
+      if (file.size > 20 * 1024 * 1024) {
+        toast({ title: 'Arquivo muito grande', description: `${file.name} excede 20MB.`, variant: 'destructive' });
+        continue;
+      }
+
+      const ext = file.name.split('.').pop()?.toLowerCase() ?? 'jpg';
+      const uuid = crypto.randomUUID();
+      const storagePath = `${userId}/${uuid}.${ext}`;
+
+      // Upload to storage
+      const { error: storageError } = await supabase.storage
+        .from('media-library')
+        .upload(storagePath, file, { contentType: file.type, upsert: false });
+
+      if (storageError) {
+        toast({ title: 'Erro no upload', description: storageError.message, variant: 'destructive' });
+        continue;
+      }
+
+      // Get public URL
+      const { data: urlData } = supabase.storage.from('media-library').getPublicUrl(storagePath);
+      const publicUrl = urlData.publicUrl;
+
+      // Insert into media_library
+      const { data: insertData, error: insertError } = await supabase
+        .from('media_library')
+        .insert({
+          user_id: userId,
+          url: publicUrl,
+          filename: file.name,
+          file_size: file.size,
+        })
+        .select('id')
+        .single();
+
+      if (insertError) {
+        toast({ title: 'Erro ao salvar', description: insertError.message, variant: 'destructive' });
+        continue;
+      }
+
+      uploadedIds.push(insertData.id);
+    }
+
+    setUploading(false);
+    onLibraryChange();
+
+    // Categorize uploaded images in background
+    for (const mediaId of uploadedIds) {
+      setCategorizingIds(prev => new Set([...prev, mediaId]));
+      const item = library.find(i => i.id === mediaId);
+      const url = item?.url;
+
+      // Re-fetch to get the URL of newly uploaded items
+      const { data: newItem } = await supabase
+        .from('media_library')
+        .select('url')
+        .eq('id', mediaId)
+        .single();
+
+      if (newItem?.url) {
+        supabase.functions.invoke('categorize-media', {
+          body: { imageUrl: newItem.url, mediaId },
+        }).then(({ error }) => {
+          if (!error) {
+            setCategorizingIds(prev => { const s = new Set(prev); s.delete(mediaId); return s; });
+            onLibraryChange();
+          }
+        });
+      }
+    }
+
+    if (uploadedIds.length > 0) {
+      toast({ title: `${uploadedIds.length} imagem(ns) enviada(s) ✅`, description: 'Categorização automática em andamento...' });
+    }
+  };
+
+  const handleDelete = async (item: MediaItem) => {
+    if (!userId) return;
+
+    // Extract storage path from URL
+    const urlParts = item.url.split('/media-library/');
+    const storagePath = urlParts[1];
+
+    if (storagePath) {
+      await supabase.storage.from('media-library').remove([storagePath]);
+    }
+
+    const { error } = await supabase.from('media_library').delete().eq('id', item.id);
+    if (error) {
+      toast({ title: 'Erro ao excluir', description: error.message, variant: 'destructive' });
+      return;
+    }
+
+    onLibraryChange();
+    toast({ title: 'Imagem removida', description: item.filename });
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Upload button */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        multiple
+        className="hidden"
+        onChange={e => handleUpload(e.target.files)}
+      />
+      <button
+        onClick={() => fileInputRef.current?.click()}
+        disabled={uploading || !userId}
+        className="w-full flex items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border hover:border-primary/50 hover:bg-primary/5 transition-all py-4 text-sm font-medium text-muted-foreground hover:text-foreground disabled:opacity-40"
+      >
+        {uploading
+          ? <><span className="h-4 w-4 border-2 border-current border-t-transparent rounded-full animate-spin" /> Enviando...</>
+          : <><Upload className="h-4 w-4" /> Enviar imagens (JPG, PNG, WEBP)</>
+        }
+      </button>
+
+      {/* Library grid */}
+      {library.length === 0 ? (
+        <div className="text-center py-8 text-muted-foreground">
+          <Library className="h-8 w-8 mx-auto mb-2 opacity-30" />
+          <p className="text-sm">Sua biblioteca está vazia</p>
+          <p className="text-xs mt-1 opacity-60">Envie imagens para reutilizá-las nos carrosséis</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-2">
+          {library.map(item => {
+            const isCategorizing = categorizingIds.has(item.id);
+            const catColor = item.category ? CATEGORY_COLORS[item.category] ?? 'bg-muted/30 text-muted-foreground border-border' : '';
+
+            return (
+              <div key={item.id} className="group relative rounded-lg overflow-hidden border border-border">
+                <div className="aspect-square relative">
+                  <img
+                    src={item.url}
+                    alt={item.filename}
+                    className="w-full h-full object-cover"
+                  />
+                  {/* Categorizing spinner */}
+                  {isCategorizing && (
+                    <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
+                      <div className="flex flex-col items-center gap-1.5">
+                        <span className="h-4 w-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                        <span className="text-[9px] text-white font-medium">Analisando...</span>
+                      </div>
+                    </div>
+                  )}
+                  {/* Delete button */}
+                  <button
+                    onClick={() => handleDelete(item)}
+                    className="absolute top-1 right-1 rounded-full bg-black/70 p-1 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-destructive/80"
+                  >
+                    <Trash2 className="h-2.5 w-2.5 text-white" />
+                  </button>
+                </div>
+                {/* Metadata row */}
+                <div className="px-1.5 py-1 bg-muted/30 space-y-0.5">
+                  {item.category && (
+                    <span className={cn('inline-flex text-[8px] font-bold px-1.5 py-0.5 rounded-full border', catColor)}>
+                      {item.category}
+                    </span>
+                  )}
+                  {item.tags && item.tags.length > 0 && (
+                    <p className="text-[8px] text-muted-foreground/60 truncate">{item.tags.slice(0, 3).join(' · ')}</p>
+                  )}
+                  {!item.category && !isCategorizing && (
+                    <span className="text-[8px] text-muted-foreground/40">sem categoria</span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ─── AngleRecommendation ──────────────────────────────────────────────────────
 
@@ -678,6 +995,32 @@ export default function AiCarrosseis() {
   const [slideImages, setSlideImages] = useState<Record<number, string>>({});
   const [generatingImage, setGeneratingImage] = useState<Record<number, boolean>>({});
 
+  // Media library state
+  const [library, setLibrary] = useState<MediaItem[]>([]);
+  const [userId, setUserId] = useState<string | null>(null);
+
+  // Fetch current user id
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      setUserId(data.user?.id ?? null);
+    });
+  }, []);
+
+  // Fetch library
+  const fetchLibrary = useCallback(async () => {
+    if (!userId) return;
+    const { data, error } = await supabase
+      .from('media_library')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+    if (!error && data) setLibrary(data as MediaItem[]);
+  }, [userId]);
+
+  useEffect(() => {
+    fetchLibrary();
+  }, [fetchLibrary]);
+
   const handleGenerate = async () => {
     setLoading(true);
     setResult(null);
@@ -732,6 +1075,11 @@ export default function AiCarrosseis() {
     });
   }, []);
 
+  const handleApplyLibraryImage = useCallback((slideNumber: number, url: string) => {
+    setSlideImages(prev => ({ ...prev, [slideNumber]: url }));
+    toast({ title: 'Imagem aplicada ✅', description: `Lâmina ${slideNumber} atualizada com imagem da biblioteca.` });
+  }, [toast]);
+
   return (
     <div className="h-full overflow-y-auto">
       <style>{`
@@ -753,131 +1101,158 @@ export default function AiCarrosseis() {
         {/* Two-column layout */}
         <div className="grid grid-cols-1 xl:grid-cols-[380px,1fr] gap-6">
 
-          {/* ── LEFT: Briefing ── */}
+          {/* ── LEFT: Briefing + Biblioteca tabs ── */}
           <div className="space-y-4">
-            <div className="rounded-xl border border-border bg-card p-5 space-y-5">
-              <div>
-                <p className="text-xs font-bold text-primary tracking-widest mb-3">CONTEXTO ESTRATÉGICO</p>
-                <Textarea
-                  placeholder="Descreva a ideia, ângulo ou deixe em branco para a IA criar do zero..."
-                  value={context}
-                  onChange={e => setContext(e.target.value)}
-                  className="min-h-[90px] text-sm resize-none bg-muted/30 border-border/60"
-                />
-                <p className="text-xs text-muted-foreground mt-1.5 flex items-center gap-1">
-                  <Wand2 className="h-3 w-3" />
-                  Se vazio, a IA escolhe o ângulo estratégico ideal agora
-                </p>
-              </div>
+            <Tabs defaultValue="briefing">
+              <TabsList className="w-full grid grid-cols-2 mb-4">
+                <TabsTrigger value="briefing">Briefing</TabsTrigger>
+                <TabsTrigger value="biblioteca" className="flex items-center gap-1.5">
+                  Biblioteca
+                  {library.length > 0 && (
+                    <span className="inline-flex items-center justify-center rounded-full bg-primary text-primary-foreground text-[9px] font-bold min-w-[16px] h-4 px-1">
+                      {library.length}
+                    </span>
+                  )}
+                </TabsTrigger>
+              </TabsList>
 
-              {/* Angle */}
-              <div>
-                <p className="text-xs font-bold text-muted-foreground tracking-widest mb-2.5">ÂNGULO</p>
-                <div className="grid grid-cols-3 gap-1.5">
-                  {ANGLES.map(a => (
-                    <button
-                      key={a.id}
-                      onClick={() => setAngle(a.id)}
-                      className={cn(
-                        'rounded-lg border px-2.5 py-2 text-xs font-semibold transition-all',
-                        angle === a.id
-                          ? 'bg-primary/15 border-primary text-primary'
-                          : 'border-border text-muted-foreground hover:border-border/80 hover:text-foreground'
-                      )}
-                    >
-                      {a.emoji} {a.label}
-                    </button>
-                  ))}
+              {/* ── BRIEFING TAB ── */}
+              <TabsContent value="briefing">
+                <div className="rounded-xl border border-border bg-card p-5 space-y-5">
+                  <div>
+                    <p className="text-xs font-bold text-primary tracking-widest mb-3">CONTEXTO ESTRATÉGICO</p>
+                    <Textarea
+                      placeholder="Descreva a ideia, ângulo ou deixe em branco para a IA criar do zero..."
+                      value={context}
+                      onChange={e => setContext(e.target.value)}
+                      className="min-h-[90px] text-sm resize-none bg-muted/30 border-border/60"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1.5 flex items-center gap-1">
+                      <Wand2 className="h-3 w-3" />
+                      Se vazio, a IA escolhe o ângulo estratégico ideal agora
+                    </p>
+                  </div>
+
+                  {/* Angle */}
+                  <div>
+                    <p className="text-xs font-bold text-muted-foreground tracking-widest mb-2.5">ÂNGULO</p>
+                    <div className="grid grid-cols-3 gap-1.5">
+                      {ANGLES.map(a => (
+                        <button
+                          key={a.id}
+                          onClick={() => setAngle(a.id)}
+                          className={cn(
+                            'rounded-lg border px-2.5 py-2 text-xs font-semibold transition-all',
+                            angle === a.id
+                              ? 'bg-primary/15 border-primary text-primary'
+                              : 'border-border text-muted-foreground hover:border-border/80 hover:text-foreground'
+                          )}
+                        >
+                          {a.emoji} {a.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Persona */}
+                  <div>
+                    <p className="text-xs font-bold text-muted-foreground tracking-widest mb-2.5">PERFIL-ALVO</p>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      {PERSONAS.map(p => (
+                        <button
+                          key={p}
+                          onClick={() => setPersona(persona === p ? '' : p)}
+                          className={cn(
+                            'rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-all text-left',
+                            persona === p
+                              ? 'bg-primary/15 border-primary text-primary'
+                              : 'border-border text-muted-foreground hover:text-foreground'
+                          )}
+                        >
+                          {p}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Channel */}
+                  <div>
+                    <p className="text-xs font-bold text-muted-foreground tracking-widest mb-2.5">CANAL</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {CHANNELS.map(c => (
+                        <button
+                          key={c}
+                          onClick={() => setChannel(c)}
+                          className={cn(
+                            'rounded-full border px-3 py-1 text-xs font-medium transition-all',
+                            channel === c
+                              ? 'bg-primary text-primary-foreground border-primary'
+                              : 'border-border text-muted-foreground hover:text-foreground'
+                          )}
+                        >
+                          {c}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Tone */}
+                  <div>
+                    <p className="text-xs font-bold text-muted-foreground tracking-widest mb-2.5">TOM</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {TONES.map(t => (
+                        <button
+                          key={t}
+                          onClick={() => setTone(t)}
+                          className={cn(
+                            'rounded-full border px-3 py-1 text-xs font-medium transition-all',
+                            tone === t
+                              ? 'bg-primary text-primary-foreground border-primary'
+                              : 'border-border text-muted-foreground hover:text-foreground'
+                          )}
+                        >
+                          {t}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Generate button */}
+                  <Button
+                    onClick={handleGenerate}
+                    disabled={loading}
+                    className="w-full h-12 text-base font-bold bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl"
+                  >
+                    {loading ? (
+                      <span className="flex items-center gap-2">
+                        <span className="h-4 w-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
+                        Gerando carrossel...
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-2">
+                        <Wand2 className="h-4 w-4" />
+                        Gerar Carrossel
+                      </span>
+                    )}
+                  </Button>
                 </div>
-              </div>
+              </TabsContent>
 
-              {/* Persona */}
-              <div>
-                <p className="text-xs font-bold text-muted-foreground tracking-widest mb-2.5">PERFIL-ALVO</p>
-                <div className="grid grid-cols-2 gap-1.5">
-                  {PERSONAS.map(p => (
-                    <button
-                      key={p}
-                      onClick={() => setPersona(persona === p ? '' : p)}
-                      className={cn(
-                        'rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-all text-left',
-                        persona === p
-                          ? 'bg-primary/15 border-primary text-primary'
-                          : 'border-border text-muted-foreground hover:text-foreground'
-                      )}
-                    >
-                      {p}
-                    </button>
-                  ))}
+              {/* ── BIBLIOTECA TAB ── */}
+              <TabsContent value="biblioteca">
+                <div className="rounded-xl border border-border bg-card p-5">
+                  <MediaLibraryPanel
+                    userId={userId}
+                    library={library}
+                    onLibraryChange={fetchLibrary}
+                  />
                 </div>
-              </div>
-
-              {/* Channel */}
-              <div>
-                <p className="text-xs font-bold text-muted-foreground tracking-widest mb-2.5">CANAL</p>
-                <div className="flex flex-wrap gap-1.5">
-                  {CHANNELS.map(c => (
-                    <button
-                      key={c}
-                      onClick={() => setChannel(c)}
-                      className={cn(
-                        'rounded-full border px-3 py-1 text-xs font-medium transition-all',
-                        channel === c
-                          ? 'bg-primary text-primary-foreground border-primary'
-                          : 'border-border text-muted-foreground hover:text-foreground'
-                      )}
-                    >
-                      {c}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Tone */}
-              <div>
-                <p className="text-xs font-bold text-muted-foreground tracking-widest mb-2.5">TOM</p>
-                <div className="flex flex-wrap gap-1.5">
-                  {TONES.map(t => (
-                    <button
-                      key={t}
-                      onClick={() => setTone(t)}
-                      className={cn(
-                        'rounded-full border px-3 py-1 text-xs font-medium transition-all',
-                        tone === t
-                          ? 'bg-primary text-primary-foreground border-primary'
-                          : 'border-border text-muted-foreground hover:text-foreground'
-                      )}
-                    >
-                      {t}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Generate button */}
-              <Button
-                onClick={handleGenerate}
-                disabled={loading}
-                className="w-full h-12 text-base font-bold bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl"
-              >
-                {loading ? (
-                  <span className="flex items-center gap-2">
-                    <span className="h-4 w-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
-                    Gerando carrossel...
-                  </span>
-                ) : (
-                  <span className="flex items-center gap-2">
-                    <Wand2 className="h-4 w-4" />
-                    Gerar Carrossel
-                  </span>
-                )}
-              </Button>
-            </div>
+              </TabsContent>
+            </Tabs>
           </div>
 
           {/* ── RIGHT: Output ── */}
           <div>
-            {/* Empty state */}
             {!result && !loading && (
               <div className="h-full min-h-[400px] rounded-xl border border-dashed border-border flex flex-col items-center justify-center gap-3 text-center p-8">
                 <div className="rounded-2xl bg-primary/10 p-4">
@@ -890,7 +1265,6 @@ export default function AiCarrosseis() {
               </div>
             )}
 
-            {/* Loading skeleton */}
             {loading && (
               <div className="space-y-4">
                 <div className="h-24 rounded-xl bg-muted/30 animate-pulse" />
@@ -902,13 +1276,10 @@ export default function AiCarrosseis() {
               </div>
             )}
 
-            {/* Result */}
             {result && !loading && (
               <div>
-                {/* Autonomous recommendation card */}
                 {result.autonomous && <AngleRecommendation carousel={result.carousel} />}
 
-                {/* Carousel header */}
                 <div className="mb-5">
                   <h2 className="text-2xl font-black tracking-tight text-foreground mb-2 uppercase" style={{ fontFamily: 'Montserrat, sans-serif', fontWeight: 900 }}>
                     {result.carousel.title}
@@ -937,6 +1308,9 @@ export default function AiCarrosseis() {
                       isGenerating={generatingImage[slide.number]}
                       onGenerateImage={handleGenerateImage}
                       onClearImage={handleClearImage}
+                      onApplyLibraryImage={handleApplyLibraryImage}
+                      mediaLibraryCount={library.length}
+                      userId={userId}
                     />
                   ))}
                 </div>
@@ -984,4 +1358,3 @@ export default function AiCarrosseis() {
     </div>
   );
 }
-
