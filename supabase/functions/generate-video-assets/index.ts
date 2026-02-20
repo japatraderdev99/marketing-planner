@@ -49,15 +49,17 @@ SEEDANCE 1.5 PRO — DIRETRIZES ESPECÍFICAS:
 };
 
 interface GenerateRequest {
-  operation: "image_prompt" | "video_prompt" | "generate_image";
-  persona: string;
-  scene: string;
-  contentAngle: string;
-  videoModel: string;
-  aspectRatio: string;
-  duration: number;
+  operation: "image_prompt" | "video_prompt" | "generate_image" | "express_prompts";
+  persona?: string;
+  scene?: string;
+  contentAngle?: string;
+  videoModel?: string;
+  aspectRatio?: string;
+  duration?: number;
   additionalContext?: string;
-  imagePrompt?: string; // used when generating the actual image
+  imagePrompt?: string;
+  // express mode
+  freeText?: string;
 }
 
 Deno.serve(async (req) => {
@@ -80,7 +82,90 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: "AI service not configured" }), { status: 500, headers: CORS });
     }
 
-    const { operation, persona, scene, contentAngle, videoModel, aspectRatio, duration, additionalContext, imagePrompt } = body;
+    const { operation, persona, scene, contentAngle, videoModel, aspectRatio, duration, additionalContext, imagePrompt, freeText } = body;
+
+    // ─── 0. EXPRESS MODE ─────────────────────────────────────────────────────
+    if (operation === "express_prompts") {
+      const targetModel = videoModel ?? "Seedance 1.5 Pro";
+      const targetAspect = aspectRatio ?? "9:16";
+      const targetDuration = duration ?? 10;
+      const modelInstructions = MODEL_INSTRUCTIONS[targetModel] ?? MODEL_INSTRUCTIONS["Seedance 1.5 Pro"];
+
+      const systemPrompt = `Você é um diretor de cinema e diretor de fotografia com 20 anos de experiência em publicidade brasileira, especialista em geração de conteúdo para IA (Higgsfield, VEO, Sora).
+
+${DQEF_BRAND_CONTEXT}
+
+${modelInstructions}
+
+O usuário vai te dar uma IDEIA, REFERÊNCIA ou TEXTO BRUTO (pode ser um roteiro de carrossel, uma ideia de campanha, um conceito visual). Você deve:
+1. Extrair a essência visual e narrativa desse conteúdo
+2. Gerar um prompt de IMAGEM hiperdetalhado para o frame inicial (em inglês, estilo fotografia profissional)
+3. Gerar um prompt de VÍDEO hiperdetalhado no estilo de diretor de cinema (em inglês)
+
+ESTRUTURA DO PROMPT DE IMAGEM:
+[SHOT TYPE]: [lens/focal] | [Subject] | [Action/pose — frozen moment] | [Environment] | [Lighting] | [Depth of field] | [Color grading] | [Technical specs] | [Style]
+
+ESTRUTURA DO PROMPT DE VÍDEO:
+OPENING FRAME → SEQUENCE BEATS [0.0s–Xs] → CAMERA movement → CHARACTER actions → ENVIRONMENT → LIGHTING → TECHNICAL → AUDIO/MOOD → STYLE references
+
+Retorne JSON exatamente neste formato:
+{
+  "imagePrompt": "prompt EN hiperdetalhado para frame inicial no Higgsfield",
+  "imagePromptPtBr": "tradução explicativa do prompt de imagem",
+  "visualNotes": "notas do diretor de arte sobre as escolhas visuais",
+  "videoPrompt": "prompt EN completo de diretor de cinema para o vídeo",
+  "videoPromptPtBr": "tradução + análise das escolhas cinematográficas",
+  "directorNotes": "raciocínio por trás de cada decisão técnica e narrativa",
+  "technicalSpecs": {
+    "model": "${targetModel}",
+    "duration": "${targetDuration}s",
+    "aspectRatio": "${targetAspect}",
+    "fixedLens": false,
+    "audio": true,
+    "resolution": "1080p"
+  },
+  "warningsAndTips": ["dica 1", "dica 2", "dica 3"],
+  "extractedScene": "resumo da cena/ideia extraída do input do usuário",
+  "suggestedAngle": "ângulo emocional detectado (Raiva/Dinheiro/Orgulho/Urgência/Alívio)"
+}`;
+
+      const userContent = `IDEIA / REFERÊNCIA / TEXTO DO USUÁRIO:
+---
+${freeText}
+---
+
+Modelo de vídeo alvo: ${targetModel}
+Aspecto: ${targetAspect}
+Duração: ${targetDuration}s
+${persona ? `Persona do prestador: ${persona}` : ""}
+${contentAngle ? `Ângulo emocional preferido: ${contentAngle}` : ""}
+
+Analise o conteúdo acima e gere ambos os prompts (imagem + vídeo) em inglês, no estilo de diretor de cinema.`;
+
+      const res = await fetch(AI_GATEWAY, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "google/gemini-2.5-pro",
+          messages: [{ role: "system", content: systemPrompt }, { role: "user", content: userContent }],
+          temperature: 0.75,
+        }),
+      });
+
+      if (!res.ok) {
+        const status = res.status;
+        if (status === 429) return new Response(JSON.stringify({ error: "Rate limit atingido. Aguarde e tente novamente." }), { status: 429, headers: CORS });
+        if (status === 402) return new Response(JSON.stringify({ error: "Créditos insuficientes. Adicione créditos ao workspace." }), { status: 402, headers: CORS });
+        return new Response(JSON.stringify({ error: "Erro no serviço de IA" }), { status: 500, headers: CORS });
+      }
+
+      const data = await res.json();
+      const content = data.choices?.[0]?.message?.content ?? "";
+      const cleaned = content.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+      const parsed = JSON.parse(cleaned);
+      return new Response(JSON.stringify(parsed), { headers: CORS });
+    }
+
 
     // ─── 1. GENERATE IMAGE PROMPT ────────────────────────────────────────────
     if (operation === "image_prompt") {
