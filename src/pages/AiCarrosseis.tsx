@@ -1,10 +1,11 @@
-import { useState } from 'react';
-import { Layers, Wand2, Copy, Check, Download, ChevronDown, ChevronUp, ImageIcon, Video, Zap } from 'lucide-react';
+import { useState, useRef, useCallback } from 'react';
+import { Layers, Wand2, Copy, Check, Download, ChevronDown, ChevronUp, ImageIcon, Video, Zap, RefreshCw, Image } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
+import { toPng } from 'html-to-image';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -112,8 +113,14 @@ function CopyButton({ text, label = 'Copiar', size = 'sm' }: { text: string; lab
 
 // ─── SlidePreview ─────────────────────────────────────────────────────────────
 
-function SlidePreview({ slide }: { slide: SlideOutput }) {
-  const bg = BG_COLORS[slide.bgStyle] ?? '#0A0A0A';
+interface SlidePreviewProps {
+  slide: SlideOutput;
+  imageUrl?: string;
+  slideRef?: React.RefObject<HTMLDivElement>;
+}
+
+function SlidePreview({ slide, imageUrl, slideRef }: SlidePreviewProps) {
+  const bg = BG_COLORS[slide.bgStyle] ?? SLIDE_BG;
   const isDataSlide = slide.layout === 'number-dominant';
   const isCTA = slide.layout === 'cta-clean';
 
@@ -129,7 +136,7 @@ function SlidePreview({ slide }: { slide: SlideOutput }) {
     return (
       <>
         {before && <span style={{ color: '#FFFFFF' }}>{before}</span>}
-        <span style={{ color: '#0A0A0A', backgroundColor: 'rgba(255,255,255,0.25)', borderRadius: '2px', padding: '0 2px' }}>{word}</span>
+        <span style={{ color: '#FFFFFF', backgroundColor: 'rgba(255,255,255,0.22)', borderRadius: '2px', padding: '0 3px' }}>{word}</span>
         {after && <span style={{ color: '#FFFFFF' }}>{after}</span>}
       </>
     );
@@ -137,6 +144,7 @@ function SlidePreview({ slide }: { slide: SlideOutput }) {
 
   return (
     <div
+      ref={slideRef}
       style={{
         background: bg,
         aspectRatio: '4/5',
@@ -152,6 +160,28 @@ function SlidePreview({ slide }: { slide: SlideOutput }) {
         boxSizing: 'border-box',
       }}
     >
+      {/* Background image overlay when image is generated */}
+      {imageUrl && (
+        <>
+          <div style={{
+            position: 'absolute',
+            inset: 0,
+            backgroundImage: `url(${imageUrl})`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            opacity: 0.52,
+            zIndex: 0,
+          }} />
+          {/* Gradient for text legibility */}
+          <div style={{
+            position: 'absolute',
+            inset: 0,
+            background: 'linear-gradient(to top, rgba(0,0,0,0.68) 0%, rgba(0,0,0,0.15) 55%, rgba(0,0,0,0.05) 100%)',
+            zIndex: 1,
+          }} />
+        </>
+      )}
+
       {/* Slide number + type */}
       <div style={{
         position: 'absolute',
@@ -163,44 +193,15 @@ function SlidePreview({ slide }: { slide: SlideOutput }) {
         color: '#FFFFFF',
         letterSpacing: '0.12em',
         lineHeight: 1,
-        opacity: 0.85,
+        opacity: 0.9,
+        zIndex: 10,
       }}>
         {String(slide.number).padStart(2, '0')} · {TYPE_LABELS[slide.type] ?? slide.type.toUpperCase()}
       </div>
 
-      {/* Media placeholder */}
-      {slide.needsMedia && (
-        <div style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: '45%',
-          background: 'linear-gradient(180deg, #1a1a1a 0%, transparent 100%)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}>
-          <div style={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: '6px',
-            color: '#555',
-          }}>
-            {slide.mediaType === 'video'
-              ? <Video size={28} color="#555" />
-              : <ImageIcon size={28} color="#555" />}
-            <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '9px', color: '#444' }}>
-              {slide.mediaType === 'video' ? 'VEO 3.1' : 'FLUX 1.1'} · INSERIR AQUI
-            </span>
-          </div>
-        </div>
-      )}
-
       {/* CTA Layout */}
       {isCTA && (
-        <div style={{ textAlign: 'center', width: '100%' }}>
+        <div style={{ textAlign: 'center', width: '100%', position: 'relative', zIndex: 10 }}>
           <div style={{
             fontFamily: 'Montserrat, sans-serif',
             fontSize: '11px',
@@ -236,7 +237,7 @@ function SlidePreview({ slide }: { slide: SlideOutput }) {
 
       {/* Data/Number dominant layout */}
       {isDataSlide && !isCTA && (
-        <div style={{ width: '100%', textAlign: 'left' }}>
+        <div style={{ width: '100%', textAlign: 'left', position: 'relative', zIndex: 10 }}>
           <div style={{
             fontFamily: 'Montserrat, sans-serif',
             fontWeight: 900,
@@ -265,7 +266,7 @@ function SlidePreview({ slide }: { slide: SlideOutput }) {
 
       {/* Standard text layout */}
       {!isDataSlide && !isCTA && (
-        <div style={{ width: '100%' }}>
+        <div style={{ width: '100%', position: 'relative', zIndex: 10 }}>
           <div style={{
             fontFamily: 'Montserrat, sans-serif',
             fontWeight: 900,
@@ -301,20 +302,92 @@ function SlidePreview({ slide }: { slide: SlideOutput }) {
         fontSize: '8px',
         color: 'rgba(255,255,255,0.3)',
         letterSpacing: '0.2em',
+        zIndex: 10,
       }}>DQEF</div>
     </div>
   );
 }
 
-// ─── SlideCard (preview + metadata) ──────────────────────────────────────────
+// ─── SlideCard (preview + image generation + PNG export) ──────────────────────
 
-function SlideCard({ slide }: { slide: SlideOutput }) {
+interface SlideCardProps {
+  slide: SlideOutput;
+  imageUrl?: string;
+  isGenerating?: boolean;
+  onGenerateImage: (slideNumber: number, prompt: string, quality: 'fast' | 'high') => void;
+  onExportPng: (slideNumber: number) => void;
+}
+
+function SlideCard({ slide, imageUrl, isGenerating, onGenerateImage, onExportPng }: SlideCardProps) {
   const [expanded, setExpanded] = useState(false);
+  const slideRef = useRef<HTMLDivElement>(null);
+
+  // Expose ref via callback for parent to access
+  const handleExport = () => onExportPng(slide.number);
+
+  const hasImage = !!imageUrl;
+  const hasImagePrompt = slide.needsMedia && slide.mediaType !== 'video' && !!slide.imagePrompt;
 
   return (
     <div className="rounded-xl border border-border overflow-hidden bg-card">
       <div className="p-3">
-        <SlidePreview slide={slide} />
+        <SlidePreview slide={slide} imageUrl={imageUrl} slideRef={slideRef} />
+      </div>
+
+      {/* Action bar */}
+      <div className="px-3 pb-3 flex items-center gap-1.5 flex-wrap">
+        {/* Generate / Retake image button — only for photo slides */}
+        {hasImagePrompt && (
+          <>
+            {!hasImage ? (
+              <button
+                onClick={() => onGenerateImage(slide.number, slide.imagePrompt!, 'fast')}
+                disabled={isGenerating}
+                className={cn(
+                  'flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-all border flex-1',
+                  isGenerating
+                    ? 'border-border text-muted-foreground cursor-not-allowed'
+                    : 'border-blue-500/40 text-blue-400 hover:bg-blue-500/10 hover:border-blue-500/60'
+                )}
+              >
+                {isGenerating ? (
+                  <span className="h-3 w-3 border border-blue-400/40 border-t-blue-400 rounded-full animate-spin" />
+                ) : (
+                  <Image className="h-3 w-3" />
+                )}
+                {isGenerating ? 'Gerando...' : 'Gerar Imagem'}
+              </button>
+            ) : (
+              <button
+                onClick={() => onGenerateImage(slide.number, slide.imagePrompt!, 'fast')}
+                disabled={isGenerating}
+                className={cn(
+                  'flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-all border',
+                  isGenerating
+                    ? 'border-border text-muted-foreground cursor-not-allowed'
+                    : 'border-border text-muted-foreground hover:bg-muted/30 hover:text-foreground'
+                )}
+              >
+                {isGenerating ? (
+                  <span className="h-3 w-3 border border-muted-foreground/40 border-t-muted-foreground rounded-full animate-spin" />
+                ) : (
+                  <RefreshCw className="h-3 w-3" />
+                )}
+                {isGenerating ? 'Trocando...' : 'Trocar'}
+              </button>
+            )}
+          </>
+        )}
+
+        {/* PNG export — always visible */}
+        <button
+          onClick={handleExport}
+          className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold border border-border text-muted-foreground hover:bg-muted/30 hover:text-foreground transition-all ml-auto"
+          title="Exportar lâmina como PNG"
+        >
+          <Download className="h-3 w-3" />
+          PNG
+        </button>
       </div>
 
       {/* Logic toggle */}
@@ -354,7 +427,7 @@ function SlideCard({ slide }: { slide: SlideOutput }) {
               <div className="flex items-center justify-between mb-1.5">
                 <div className="flex items-center gap-1.5 text-xs font-semibold text-blue-400">
                   <ImageIcon className="h-3 w-3" />
-                  PROMPT FLUX 1.1 DEV PRO
+                  PROMPT IMAGEM
                 </div>
                 <CopyButton text={slide.imagePrompt} label="Copiar prompt" />
               </div>
@@ -381,6 +454,11 @@ function SlideCard({ slide }: { slide: SlideOutput }) {
           )}
         </div>
       )}
+
+      {/* Hidden ref holder for PNG export — must be rendered at full size */}
+      <div style={{ position: 'absolute', left: '-9999px', top: 0, width: '400px', pointerEvents: 'none' }}>
+        <SlidePreview slide={slide} imageUrl={imageUrl} slideRef={slideRef} />
+      </div>
     </div>
   );
 }
@@ -410,16 +488,17 @@ function AngleRecommendation({ carousel }: { carousel: CarouselOutput }) {
 
 // ─── HTML Exporter ────────────────────────────────────────────────────────────
 
-function exportCarouselHTML(carousel: CarouselOutput) {
+function exportCarouselHTML(carousel: CarouselOutput, slideImages: Record<number, string>) {
   const slidesHTML = carousel.slides.map(slide => {
-    const bg = BG_COLORS[slide.bgStyle] ?? '#0A0A0A';
+    const bg = BG_COLORS[slide.bgStyle] ?? SLIDE_BG;
     const isData = slide.layout === 'number-dominant';
     const isCTA = slide.layout === 'cta-clean';
+    const imgUrl = slideImages[slide.number];
 
     const promptSection = slide.needsMedia && (slide.imagePrompt || slide.veoPrompt) ? `
       <div class="prompt-box">
         ${slide.mediaType === 'photo' && slide.imagePrompt ? `
-          <div class="prompt-label">📸 PROMPT FLUX 1.1 DEV PRO</div>
+          <div class="prompt-label">📸 PROMPT IMAGEM</div>
           <pre class="prompt-text">${slide.imagePrompt.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>
         ` : ''}
         ${slide.mediaType === 'video' && slide.veoPrompt ? `
@@ -433,11 +512,15 @@ function exportCarouselHTML(carousel: CarouselOutput) {
       ? slide.headline.replace(new RegExp(`(${slide.headlineHighlight})`, 'gi'), '<span class="highlight">$1</span>')
       : slide.headline;
 
+    const bgImageStyle = imgUrl
+      ? `background-image: url(${imgUrl}); background-size: cover; background-position: center;`
+      : '';
+
     return `
     <div class="slide-section">
-      <div class="slide-frame" style="background:${bg};">
+      <div class="slide-frame" style="background:${bg}; ${bgImageStyle}">
+        ${imgUrl ? `<div class="img-overlay"></div>` : ''}
         <div class="slide-label">${String(slide.number).padStart(2, '0')} · ${TYPE_LABELS[slide.type] ?? slide.type.toUpperCase()}</div>
-        ${slide.needsMedia ? `<div class="media-placeholder">[${slide.mediaType === 'video' ? '🎬 VEO 3.1' : '📸 FLUX 1.1'} · INSERIR AQUI]</div>` : ''}
         <div class="slide-content ${isCTA ? 'cta-content' : ''}">
           <div class="${isData ? 'headline-data' : 'headline'}">${headlineHTML}</div>
           ${slide.subtext ? `<div class="subtext">${slide.subtext}</div>` : ''}
@@ -475,15 +558,15 @@ function exportCarouselHTML(carousel: CarouselOutput) {
   .viral-logic { font-size: 12px; color: #aaa; line-height: 1.5; margin-bottom: 32px; padding: 12px 16px; border-left: 3px solid #E8603C; background: rgba(232,96,60,0.08); }
   .slide-section { margin-bottom: 40px; }
   .slide-frame { aspect-ratio: 4/5; width: 100%; border-radius: 10px; position: relative; display: flex; flex-direction: column; justify-content: flex-end; padding: 20px; overflow: hidden; background: #E8603C; }
-  .slide-label { position: absolute; top: 14px; left: 16px; font-family: 'Montserrat', sans-serif; font-size: 9px; font-weight: 800; color: rgba(255,255,255,0.8); letter-spacing: 0.14em; }
-  .media-placeholder { position: absolute; top: 50px; left: 0; right: 0; bottom: 45%; display: flex; align-items: center; justify-content: center; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: rgba(255,255,255,0.4); border: 1px dashed rgba(255,255,255,0.3); margin: 8px; border-radius: 4px; }
+  .img-overlay { position: absolute; inset: 0; background: linear-gradient(to top, rgba(0,0,0,0.68) 0%, rgba(0,0,0,0.15) 55%, rgba(0,0,0,0.05) 100%); }
+  .slide-label { position: absolute; top: 14px; left: 16px; font-family: 'Montserrat', sans-serif; font-size: 9px; font-weight: 800; color: rgba(255,255,255,0.9); letter-spacing: 0.14em; z-index: 2; }
   .slide-content { position: relative; z-index: 2; }
   .cta-content { text-align: center; align-self: center; width: 100%; }
   .headline { font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: clamp(26px, 7vw, 38px); color: #FFFFFF; line-height: 1.08; letter-spacing: -0.01em; white-space: pre-line; text-transform: uppercase; }
   .headline-data { font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: clamp(64px, 18vw, 100px); color: #FFFFFF; line-height: 0.9; letter-spacing: -0.03em; text-transform: uppercase; }
-  .highlight { background: rgba(255,255,255,0.25); border-radius: 2px; padding: 0 2px; color: #0A0A0A; }
+  .highlight { background: rgba(255,255,255,0.22); border-radius: 2px; padding: 0 3px; color: #FFFFFF; }
   .subtext { font-family: 'Montserrat', sans-serif; font-weight: 600; font-size: 12px; color: rgba(255,255,255,0.75); margin-top: 10px; letter-spacing: 0.03em; line-height: 1.45; }
-  .watermark { position: absolute; bottom: 10px; right: 12px; font-family: 'Montserrat', sans-serif; font-weight: 800; font-size: 8px; color: rgba(255,255,255,0.25); letter-spacing: 0.2em; }
+  .watermark { position: absolute; bottom: 10px; right: 12px; font-family: 'Montserrat', sans-serif; font-weight: 800; font-size: 8px; color: rgba(255,255,255,0.25); letter-spacing: 0.2em; z-index: 2; }
   .slide-meta { background: #111; border-radius: 0 0 8px 8px; padding: 14px 16px; border: 1px solid #1e1e1e; border-top: none; }
   .meta-label { font-family: 'JetBrains Mono', monospace; font-size: 9px; font-weight: 700; color: #E8603C; letter-spacing: 0.15em; margin-bottom: 4px; }
   .meta-text { font-size: 11px; color: #777; line-height: 1.5; }
@@ -539,9 +622,17 @@ export default function AiCarrosseis() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<{ carousel: CarouselOutput; autonomous: boolean } | null>(null);
 
+  // Per-slide image state
+  const [slideImages, setSlideImages] = useState<Record<number, string>>({});
+  const [generatingImage, setGeneratingImage] = useState<Record<number, boolean>>({});
+
+  // Refs per slide for PNG export
+  const slideRefs = useRef<Record<number, HTMLDivElement | null>>({});
+
   const handleGenerate = async () => {
     setLoading(true);
     setResult(null);
+    setSlideImages({});
     try {
       const { data, error } = await supabase.functions.invoke('generate-carousel-visual', {
         body: { context, angle, persona, channel, tone },
@@ -562,6 +653,55 @@ export default function AiCarrosseis() {
       setLoading(false);
     }
   };
+
+  const handleGenerateImage = useCallback(async (slideNumber: number, prompt: string, quality: 'fast' | 'high') => {
+    setGeneratingImage(prev => ({ ...prev, [slideNumber]: true }));
+    try {
+      const { data, error } = await supabase.functions.invoke('generate-slide-image', {
+        body: { imagePrompt: prompt, quality },
+      });
+
+      if (error) throw error;
+      if (data?.error) {
+        toast({ title: 'Erro na imagem', description: data.error, variant: 'destructive' });
+        return;
+      }
+
+      if (data?.imageUrl) {
+        setSlideImages(prev => ({ ...prev, [slideNumber]: data.imageUrl }));
+        toast({ title: `Imagem gerada ✅`, description: `Lâmina ${slideNumber} atualizada.` });
+      }
+    } catch (e) {
+      console.error(e);
+      toast({ title: 'Erro', description: 'Falha ao gerar imagem. Tente novamente.', variant: 'destructive' });
+    } finally {
+      setGeneratingImage(prev => ({ ...prev, [slideNumber]: false }));
+    }
+  }, [toast]);
+
+  const handleExportPng = useCallback(async (slideNumber: number) => {
+    const el = slideRefs.current[slideNumber];
+    if (!el) {
+      toast({ title: 'Erro', description: 'Referência da lâmina não encontrada.', variant: 'destructive' });
+      return;
+    }
+    try {
+      toast({ title: 'Exportando...', description: `Gerando PNG da lâmina ${slideNumber}` });
+      const dataUrl = await toPng(el, {
+        pixelRatio: 2,
+        cacheBust: true,
+        style: { borderRadius: '0' },
+      });
+      const link = document.createElement('a');
+      link.download = `dqef-slide-${String(slideNumber).padStart(2, '0')}.png`;
+      link.href = dataUrl;
+      link.click();
+      toast({ title: `PNG exportado ✅`, description: `dqef-slide-${String(slideNumber).padStart(2, '0')}.png` });
+    } catch (e) {
+      console.error(e);
+      toast({ title: 'Erro ao exportar', description: 'Falha ao gerar PNG. Tente novamente.', variant: 'destructive' });
+    }
+  }, [toast]);
 
   return (
     <div className="h-full overflow-y-auto">
@@ -726,7 +866,7 @@ export default function AiCarrosseis() {
               <div className="space-y-4">
                 <div className="h-24 rounded-xl bg-muted/30 animate-pulse" />
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                  {[...Array(6)].map((_, i) => (
+                  {[...Array(5)].map((_, i) => (
                     <div key={i} className="rounded-xl bg-muted/20 animate-pulse" style={{ aspectRatio: '4/5' }} />
                   ))}
                 </div>
@@ -741,10 +881,7 @@ export default function AiCarrosseis() {
 
                 {/* Carousel header */}
                 <div className="mb-5">
-                  <h2
-                    className="text-3xl font-black tracking-wide text-foreground mb-2 uppercase"
-                    style={{ fontFamily: 'Bebas Neue, sans-serif' }}
-                  >
+                  <h2 className="text-2xl font-black tracking-tight text-foreground mb-2 uppercase" style={{ fontFamily: 'Montserrat, sans-serif', fontWeight: 900 }}>
                     {result.carousel.title}
                   </h2>
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground font-mono mb-2">
@@ -761,10 +898,18 @@ export default function AiCarrosseis() {
                   </div>
                 </div>
 
-                {/* Slides grid */}
+                {/* Slides grid — with hidden full-res refs for PNG export */}
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-3 gap-3 mb-6">
                   {result.carousel.slides.map(slide => (
-                    <SlideCard key={slide.number} slide={slide} />
+                    <SlideCardWithRef
+                      key={slide.number}
+                      slide={slide}
+                      imageUrl={slideImages[slide.number]}
+                      isGenerating={generatingImage[slide.number]}
+                      onGenerateImage={handleGenerateImage}
+                      onExportPng={handleExportPng}
+                      onRefReady={(num, el) => { slideRefs.current[num] = el; }}
+                    />
                   ))}
                 </div>
 
@@ -796,7 +941,7 @@ export default function AiCarrosseis() {
                     <Button
                       size="sm"
                       className="bg-primary hover:bg-primary/90 text-primary-foreground"
-                      onClick={() => exportCarouselHTML(result.carousel)}
+                      onClick={() => exportCarouselHTML(result.carousel, slideImages)}
                     >
                       <Download className="h-3.5 w-3.5 mr-1.5" />
                       Exportar HTML
@@ -808,6 +953,154 @@ export default function AiCarrosseis() {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ─── SlideCardWithRef — bridges parent ref collection ─────────────────────────
+
+interface SlideCardWithRefProps extends SlideCardProps {
+  onRefReady: (slideNumber: number, el: HTMLDivElement | null) => void;
+}
+
+function SlideCardWithRef({ slide, imageUrl, isGenerating, onGenerateImage, onExportPng, onRefReady }: SlideCardWithRefProps) {
+  const slideRef = useRef<HTMLDivElement>(null);
+  const [expanded, setExpanded] = useState(false);
+
+  // Register ref with parent on mount/unmount
+  const refCallback = useCallback((el: HTMLDivElement | null) => {
+    (slideRef as React.MutableRefObject<HTMLDivElement | null>).current = el;
+    onRefReady(slide.number, el);
+  }, [slide.number, onRefReady]);
+
+  const hasImage = !!imageUrl;
+  const hasImagePrompt = slide.needsMedia && slide.mediaType !== 'video' && !!slide.imagePrompt;
+
+  const handleExport = async () => {
+    const el = slideRef.current;
+    if (!el) { onExportPng(slide.number); return; }
+    onExportPng(slide.number);
+  };
+
+  return (
+    <div className="rounded-xl border border-border overflow-hidden bg-card">
+      <div className="p-3">
+        {/* The actual slide preview with ref for PNG export */}
+        <div ref={refCallback} style={{ aspectRatio: '4/5', width: '100%', borderRadius: '8px', overflow: 'hidden' }}>
+          <SlidePreview slide={slide} imageUrl={imageUrl} />
+        </div>
+      </div>
+
+      {/* Action bar */}
+      <div className="px-3 pb-3 flex items-center gap-1.5 flex-wrap">
+        {hasImagePrompt && (
+          <>
+            {!hasImage ? (
+              <button
+                onClick={() => onGenerateImage(slide.number, slide.imagePrompt!, 'fast')}
+                disabled={isGenerating}
+                className={cn(
+                  'flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-all border flex-1',
+                  isGenerating
+                    ? 'border-border text-muted-foreground cursor-not-allowed'
+                    : 'border-blue-500/40 text-blue-400 hover:bg-blue-500/10 hover:border-blue-500/60'
+                )}
+              >
+                {isGenerating ? (
+                  <span className="h-3 w-3 border border-blue-400/40 border-t-blue-400 rounded-full animate-spin" />
+                ) : (
+                  <Image className="h-3 w-3" />
+                )}
+                {isGenerating ? 'Gerando...' : 'Gerar Imagem'}
+              </button>
+            ) : (
+              <button
+                onClick={() => onGenerateImage(slide.number, slide.imagePrompt!, 'fast')}
+                disabled={isGenerating}
+                className={cn(
+                  'flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-all border',
+                  isGenerating
+                    ? 'border-border text-muted-foreground cursor-not-allowed'
+                    : 'border-border text-muted-foreground hover:bg-muted/30 hover:text-foreground'
+                )}
+              >
+                {isGenerating ? (
+                  <span className="h-3 w-3 border border-muted-foreground/40 border-t-muted-foreground rounded-full animate-spin" />
+                ) : (
+                  <RefreshCw className="h-3 w-3" />
+                )}
+                {isGenerating ? 'Trocando...' : 'Trocar'}
+              </button>
+            )}
+          </>
+        )}
+
+        {/* PNG export */}
+        <button
+          onClick={handleExport}
+          className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold border border-border text-muted-foreground hover:bg-muted/30 hover:text-foreground transition-all ml-auto"
+          title="Exportar lâmina como PNG"
+        >
+          <Download className="h-3 w-3" />
+          PNG
+        </button>
+      </div>
+
+      {/* Logic toggle */}
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="w-full flex items-center justify-between px-4 py-2.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/30 transition-colors border-t border-border"
+      >
+        <span className="font-medium">→ LÓGICA + MÍDIA</span>
+        {expanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+      </button>
+
+      {expanded && (
+        <div className="px-4 py-3 space-y-3 border-t border-border bg-muted/10">
+          <div>
+            <p className="text-xs font-semibold text-primary mb-1">→ LÓGICA ESTRATÉGICA</p>
+            <p className="text-xs text-muted-foreground leading-relaxed">{slide.logic}</p>
+          </div>
+          <div>
+            <p className="text-xs font-semibold text-muted-foreground mb-1">🎨 DIREÇÃO VISUAL</p>
+            <p className="text-xs text-muted-foreground leading-relaxed">{slide.visualDirection}</p>
+          </div>
+          {!slide.needsMedia && (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/40" />
+              Sem imagem — impacto tipográfico puro
+            </div>
+          )}
+          {slide.needsMedia && slide.mediaType === 'photo' && slide.imagePrompt && (
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <div className="flex items-center gap-1.5 text-xs font-semibold text-blue-400">
+                  <ImageIcon className="h-3 w-3" />
+                  PROMPT IMAGEM
+                </div>
+                <CopyButton text={slide.imagePrompt} label="Copiar prompt" />
+              </div>
+              <pre className="text-xs text-muted-foreground leading-relaxed bg-muted/20 p-2.5 rounded-lg overflow-x-auto whitespace-pre-wrap" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                {slide.imagePrompt}
+              </pre>
+            </div>
+          )}
+          {slide.needsMedia && slide.mediaType === 'video' && slide.veoPrompt && (
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <div className="flex items-center gap-1.5 text-xs font-semibold text-purple-400">
+                  <Video className="h-3 w-3" />
+                  PROMPT VEO 3.1
+                </div>
+                <CopyButton text={slide.veoPrompt} label="Copiar prompt" />
+              </div>
+              <pre className="text-xs text-muted-foreground leading-relaxed bg-muted/20 p-2.5 rounded-lg overflow-x-auto whitespace-pre-wrap" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                {slide.veoPrompt}
+              </pre>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
