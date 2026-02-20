@@ -218,7 +218,7 @@ function SlidePreview({ slide, imageUrl, slideRef }: SlidePreviewProps) {
           <div style={{
             fontFamily: 'Montserrat, sans-serif',
             fontWeight: 900,
-            fontSize: 'clamp(22px, 6vw, 32px)',
+            fontSize: 'clamp(16px, 4.5vw, 24px)',
             color: '#FFFFFF',
             lineHeight: 1.05,
             marginBottom: '10px',
@@ -231,11 +231,22 @@ function SlidePreview({ slide, imageUrl, slideRef }: SlidePreviewProps) {
             <div style={{
               fontFamily: 'Montserrat, sans-serif',
               fontWeight: 600,
-              fontSize: '11px',
+              fontSize: '10px',
               color: 'rgba(255,255,255,0.75)',
               letterSpacing: '0.06em',
             }}>{slide.subtext}</div>
           )}
+          {/* Slogan */}
+          <div style={{
+            fontFamily: 'Montserrat, sans-serif',
+            fontWeight: 700,
+            fontSize: '10px',
+            marginTop: '18px',
+            letterSpacing: '0.04em',
+          }}>
+            <span style={{ color: 'rgba(255,255,255,0.45)' }}>pronto. </span>
+            <span style={{ color: '#FFFFFF' }}>resolvido.</span>
+          </div>
         </div>
       )}
 
@@ -244,11 +255,11 @@ function SlidePreview({ slide, imageUrl, slideRef }: SlidePreviewProps) {
           <div style={{
             fontFamily: 'Montserrat, sans-serif',
             fontWeight: 900,
-            fontSize: 'clamp(64px, 18vw, 96px)',
+            fontSize: 'clamp(44px, 13vw, 72px)',
             color: '#FFFFFF',
             lineHeight: 0.9,
             letterSpacing: '-0.03em',
-            marginBottom: '12px',
+            marginBottom: '10px',
             textTransform: 'uppercase',
           }}>
             {slide.headline}
@@ -257,7 +268,7 @@ function SlidePreview({ slide, imageUrl, slideRef }: SlidePreviewProps) {
             <div style={{
               fontFamily: 'Montserrat, sans-serif',
               fontWeight: 700,
-              fontSize: '13px',
+              fontSize: '11px',
               color: 'rgba(255,255,255,0.8)',
               lineHeight: 1.3,
               letterSpacing: '0.02em',
@@ -272,10 +283,10 @@ function SlidePreview({ slide, imageUrl, slideRef }: SlidePreviewProps) {
           <div style={{
             fontFamily: 'Montserrat, sans-serif',
             fontWeight: 900,
-            fontSize: 'clamp(20px, 5.5vw, 30px)',
+            fontSize: 'clamp(14px, 3.8vw, 22px)',
             lineHeight: 1.1,
             letterSpacing: '-0.01em',
-            marginBottom: slide.subtext ? '10px' : '0',
+            marginBottom: slide.subtext ? '8px' : '0',
             whiteSpace: 'pre-line',
             textTransform: 'uppercase',
           }}>
@@ -285,7 +296,7 @@ function SlidePreview({ slide, imageUrl, slideRef }: SlidePreviewProps) {
             <div style={{
               fontFamily: 'Montserrat, sans-serif',
               fontWeight: 600,
-              fontSize: '11px',
+              fontSize: '10px',
               color: 'rgba(255,255,255,0.75)',
               lineHeight: 1.45,
               letterSpacing: '0.03em',
