@@ -1,4 +1,5 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { createClient } from "jsr:@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -14,13 +15,75 @@ Deno.serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY não configurada");
 
+    const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
     const { strategyData } = await req.json();
+
+    // Try to load knowledge base docs for this user (optional, use auth header if present)
+    let knowledgeContext = "";
+    try {
+      const authHeader = req.headers.get("Authorization");
+      if (authHeader) {
+        const userClient = createClient(SUPABASE_URL, Deno.env.get("SUPABASE_ANON_KEY")!, {
+          global: { headers: { Authorization: authHeader } },
+        });
+        const { data: { user } } = await userClient.auth.getUser();
+        if (user) {
+          const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+          const { data: knowledgeDocs } = await supabase
+            .from("strategy_knowledge")
+            .select("document_name, extracted_knowledge")
+            .eq("user_id", user.id)
+            .eq("status", "done");
+
+          if (knowledgeDocs && knowledgeDocs.length > 0) {
+            knowledgeContext = knowledgeDocs.map((doc: { document_name: string; extracted_knowledge: Record<string, unknown> | null }) => {
+              const k = doc.extracted_knowledge as Record<string, unknown>;
+              if (!k) return "";
+              return `=== ${doc.document_name} ===
+Marca: ${k.brandName || ""}
+Essência: ${k.brandEssence || ""}
+Posicionamento: ${k.positioning || ""}
+Proposta de Valor: ${k.uniqueValueProp || ""}
+Missão: ${k.mission || ""} | Visão: ${k.vision || ""}
+Valores: ${JSON.stringify(k.values || [])}
+Persona/Público: ${JSON.stringify(k.targetAudience || {})}
+Tom de Voz: ${JSON.stringify(k.toneOfVoice || {})}
+Mensagens-Chave: ${JSON.stringify(k.keyMessages || [])}
+Diferenciais: ${JSON.stringify(k.differentials || [])}
+Concorrentes: ${JSON.stringify(k.competitors || [])}
+Vantagem Competitiva: ${JSON.stringify(k.competitiveEdge || [])}
+Tópicos Proibidos: ${JSON.stringify(k.forbiddenTopics || [])}
+Ângulos de Conteúdo: ${JSON.stringify(k.contentAngles || [])}
+CTA: ${k.ctaStyle || ""}
+Insights: ${JSON.stringify(k.keyInsights || [])}
+Resumo: ${k.documentSummary || ""}`;
+            }).filter(Boolean).join("\n\n");
+          }
+        }
+      }
+    } catch (_) {
+      // knowledge base is optional — proceed without it
+    }
+
+    const hasPlaybookData = Object.values(strategyData).some((v) => typeof v === "string" && (v as string).trim().length > 10);
+    const hasKnowledge = knowledgeContext.length > 0;
+
+    if (!hasPlaybookData && !hasKnowledge) {
+      throw new Error("Preencha pelo menos um campo do playbook ou envie um brand book para a IA analisar.");
+    }
 
     const prompt = `Você é um estrategista de marketing sênior especializado em brand strategy e comunicação persuasiva.
 
-Analise o playbook estratégico abaixo e extraia os META-FIELDS estruturados que devem nortear TODAS as campanhas, copies e comunicações da marca.
+Analise TODAS as fontes de informação abaixo e extraia os META-FIELDS estruturados que devem nortear TODAS as campanhas, copies e comunicações da marca.
 
-PLAYBOOK ESTRATÉGICO:
+${hasKnowledge ? `KNOWLEDGE BASE (documentos enviados — prioridade máxima):
+---
+${knowledgeContext}
+---
+
+` : ""}PLAYBOOK ESTRATÉGICO (campos manuais):
 ---
 POSICIONAMENTO: ${strategyData.positioning || "(não preenchido)"}
 DIFERENCIAIS COMPETITIVOS: ${strategyData.differentials || "(não preenchido)"}
@@ -32,6 +95,8 @@ TÓPICOS PROIBIDOS: ${strategyData.forbiddenTopics || "(não preenchido)"}
 OBJETIVO ATUAL (30-90 dias): ${strategyData.currentObjective || "(não preenchido)"}
 KPIs E METAS: ${strategyData.kpis || "(não preenchido)"}
 ---
+
+INSTRUÇÃO: Use TODAS as fontes disponíveis. Se um campo do playbook está vazio, busque a informação nos documentos do knowledge base. Seja específico e acionável. Prefira dados concretos a generalizações.
 
 Retorne um JSON com a seguinte estrutura exata:
 {
@@ -61,8 +126,8 @@ Retorne um JSON com a seguinte estrutura exata:
   "missingCritical": ["campo faltante 1", "campo faltante 2"]
 }
 
-Para completenessScore: calcule 0-100 baseado na qualidade e completude do playbook.
-Para missingCritical: liste apenas campos críticos faltando ou muito vagos.`;
+Para completenessScore: calcule 0-100 baseado na qualidade e completude de TODAS as fontes combinadas.
+Para missingCritical: liste apenas campos críticos que não foram encontrados em nenhuma fonte.`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -91,7 +156,7 @@ Para missingCritical: liste apenas campos críticos faltando ou muito vagos.`;
     const content = aiResponse.choices[0].message.content;
     const metafields = JSON.parse(content);
 
-    return new Response(JSON.stringify({ metafields }), {
+    return new Response(JSON.stringify({ metafields, sourcedFromKnowledge: hasKnowledge }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
 
