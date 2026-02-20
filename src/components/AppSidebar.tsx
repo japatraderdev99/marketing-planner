@@ -9,6 +9,7 @@ import {
   Megaphone,
   Sparkles,
   Clapperboard,
+  Layers,
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react';
@@ -32,6 +33,7 @@ const navItems = [
   { title: 'Analytics', url: '/analytics', icon: BarChart3 },
   { title: 'Campanhas', url: '/campanhas', icon: Megaphone },
   { title: 'AI Criativo', url: '/criativo', icon: Sparkles },
+  { title: 'AI Carrosséis', url: '/ai-carrosseis', icon: Layers },
   { title: 'Video IA', url: '/video-ia', icon: Clapperboard },
 ];
 
