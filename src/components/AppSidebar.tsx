@@ -8,6 +8,7 @@ import {
   BarChart3,
   Megaphone,
   Sparkles,
+  Clapperboard,
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react';
@@ -31,6 +32,7 @@ const navItems = [
   { title: 'Analytics', url: '/analytics', icon: BarChart3 },
   { title: 'Campanhas', url: '/campanhas', icon: Megaphone },
   { title: 'AI Criativo', url: '/criativo', icon: Sparkles },
+  { title: 'Video IA', url: '/video-ia', icon: Clapperboard },
 ];
 
 export function AppSidebar() {
