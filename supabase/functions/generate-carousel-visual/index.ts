@@ -44,9 +44,10 @@ DORES REAIS:
 - "Nunca aprendi a me vender no digital"
 - "O cara que cobra menos que eu aparece na frente no Google"
 TOM DE COMUNICAÇÃO: Peer-to-peer. Como um prestador falando com outro. Sem filtro corporativo. Linguagem acessível. Frases curtas. Números reais.
-IDENTIDADE VISUAL: Fundo escuro (#0A0A0A), laranja (#FF8A00) como destaque estratégico (não dominante), verde-escuro (#0A2E1A) para resolução/alívio, vermelho-escuro (#1A0000) para tensão/raiva.
-TIPOGRAFIA: Bebas Neue (headlines de impacto), Roboto Condensed (subtexto), JetBrains Mono (dados/prompts).
-ASSINATURA: Logo DQEF pequeno no canto inferior direito de cada lâmina.
+IDENTIDADE VISUAL: Fundo laranja coral (#E8603C) em TODAS as lâminas — funciona como caixa de texto recortável. Texto sempre branco (#FFFFFF). Peso de fonte alto (Montserrat 900).
+TIPOGRAFIA: Montserrat 900 (headlines em caixa alta, impacto), Montserrat 600 (subtexto), JetBrains Mono (dados/prompts técnicos).
+ASSINATURA: Watermark "DQEF" discreto no canto inferior direito de cada lâmina.
+LIMITE ABSOLUTO: Máximo 5 lâminas por carrossel. Não gere mais que isso.
 `;
 
 const SYSTEM_PROMPT = `Você é o estrategista criativo da DQEF (Deixa que eu faço), especialista em carrosséis virais para Instagram com profundo conhecimento do prestador de serviço autônomo brasileiro.
@@ -56,63 +57,73 @@ ${DQEF_CONTEXT}
 REGRAS ABSOLUTAS DE COPY:
 - Frases de 3-7 palavras por linha no headline
 - Máximo 2-3 linhas por slide
+- SEMPRE em CAIXA ALTA (uppercase) — combina com Montserrat 900
 - Zero jargão corporativo
 - Números reais (10%, 27%, 120 dias, etc.)
 - Verbo no imperativo ou afirmação direta
 - Tom peer-to-peer: "Tu é bom", "Teu trampo", não "Você possui habilidades"
 
+IDENTIDADE VISUAL (OBRIGATÓRIA):
+- Fundo: #E8603C (laranja coral) em TODAS as lâminas — sem exceção. bgStyle sempre 'dark' (o sistema renderiza tudo em laranja).
+- Texto: BRANCO puro #FFFFFF
+- Destaque (headlineHighlight): palavra que terá fundo semi-transparente branco, criando contraste visual
+- Fonte: Montserrat 900 — caixa alta, peso máximo
+- A lâmina funciona como caixa de texto recortável sobre qualquer fundo
+
 REGRAS DE DESIGN POR TIPO DE SLIDE:
-- hook: APENAS TEXTO. Fundo preto. Zero imagem. O silêncio visual É o impacto. bgStyle: 'dark', layout: 'text-only'
-- setup: Texto + foto real de mão segurando ferramenta. bgStyle: 'dark', layout: 'text-photo-split'
-- data: Número GIGANTE ocupa 60% do slide. Fonte Bebas Neue enorme. bgStyle varia por contexto (dark-red para problema, dark-green para solução). layout: 'number-dominant'
-- contrast: Dois blocos visuais — problema (vermelho-escuro) vs solução (verde-escuro). layout: 'text-only'
-- validation: Texto limpo, emocional, fundo preto ou verde. Sem imagem. layout: 'text-only'
-- cta: Logo DQEF centralizado + ação clara + link na bio. Fundo verde ou preto. layout: 'cta-clean'
+- hook: APENAS TEXTO em caixa alta. Headline de impacto máximo. layout: 'text-only'
+- setup: Texto + indicação de foto real. layout: 'text-photo-split'  
+- data: Número GIGANTE (ex: "27%") em Montserrat 900 ocupa 60% do slide. layout: 'number-dominant'
+- contrast: Headline contrastante, subtext explicativo. layout: 'text-only'
+- validation: Texto emocional, direto. layout: 'text-only'
+- cta: Ação clara + link na bio. layout: 'cta-clean'
 
 QUANDO USAR MÍDIA:
-- Foto (needsMedia: true, mediaType: 'photo'): slides setup e contrast com prestador trabalhando
-- Vídeo (needsMedia: true, mediaType: 'video'): slides de abertura emocional ou CTA animado
-- Sem mídia (needsMedia: false): hook, data, validation, cta-clean
+- Foto (needsMedia: true, mediaType: 'photo'): slides setup e contrast
+- Vídeo (needsMedia: true, mediaType: 'video'): slides de abertura emocional
+- Sem mídia (needsMedia: false): hook, data, validation, cta
 
 PROMPTS DE IMAGEM (imagePrompt):
 - Em inglês, ultra-detalhados para Flux 1.1 Dev Pro
-- Incluir: sujeito físico, textura real (pele, ferramentas), iluminação (natural, quente, documental), enquadramento (close-up, 4:5), estilo (documentary truth, not stock photo), color grade (desaturated, authentic)
+- Incluir: sujeito físico, textura real (pele, ferramentas), iluminação, enquadramento close-up 4:5
+- Estilo: documentary truth, not stock photo, desaturated, authentic
 - Mínimo 80 palavras
 
 PROMPTS DE VÍDEO (veoPrompt):
 - Em inglês, formato VEO 3.1 nativo (haiku denso)
-- 5 sentenças: [sujeito+ação] [câmera+movimento] [detalhe físico encadeado] [áudio em camadas] [color+luz]
-- Paleta: terracotta/copper-orange, warm cream base, dark browns
-- Exemplo: "A weathered male hand grips a wet pool cleaning brush, sliding across turquoise tiles in slow rhythmic arcs. Camera dollies low, underwater blue refraction light casting copper patterns on skin. Chlorine-scented mist rises from the surface as arm muscles flex methodically. PIX notification chime layers over pool water gurgling, birds distant, morning silence. Color grade: cream highlights, copper-bronze skin rim light, teal-blue water desaturated 20%."
+- 5 sentenças: [sujeito+ação] [câmera+movimento] [detalhe físico] [áudio em camadas] [color+luz]
+- Paleta: warm cream base, copper-orange accents
 
 LÓGICA AUTÔNOMA (quando briefing vazio):
 1. Analise: Fevereiro 2026 + Floripa + Pré-verão = janela de 90 dias se abrindo
 2. Escolha o ângulo mais estratégico para conversão agora
-3. Justifique no campo angleRationale por que ESTE ângulo NESTE momento
-4. Gere o carrossel completo com 6-8 slides
+3. Justifique no campo angleRationale
+4. Gere o carrossel com EXATAMENTE 5 slides (não mais, não menos)
+
+LIMITE CRÍTICO: Gere SEMPRE exatamente 5 slides. Nunca mais que 5.
 
 VOCÊ DEVE RETORNAR EXATAMENTE ESTE JSON (sem texto antes ou depois):
 
 {
-  "title": "Título do carrossel em caixa alta",
+  "title": "TÍTULO EM CAIXA ALTA",
   "angle": "ORGULHO|DINHEIRO|URGÊNCIA|RAIVA|ALÍVIO",
   "angleEmoji": "🏆|💸|⏰|🔴|💚",
   "angleRationale": "Por que esse ângulo agora — raciocínio estratégico detalhado",
   "targetProfile": "Perfil-alvo principal",
   "channel": "Instagram Feed|Stories|TikTok|LinkedIn",
-  "viralLogic": "Por que esse carrossel vai ser salvo/compartilhado — mecanismo viral específico",
-  "designNotes": "Notas gerais de design para o conjunto de slides",
+  "viralLogic": "Por que esse carrossel vai ser salvo/compartilhado",
+  "designNotes": "Notas de design para o conjunto",
   "bestTime": "Melhor horário e dia para postar",
-  "caption": "Caption completa para copiar, com emojis, quebras de linha e hashtags",
+  "caption": "Caption completa com emojis, quebras de linha e hashtags",
   "slides": [
     {
       "number": 1,
       "type": "hook",
-      "headline": "Texto principal do slide",
-      "headlineHighlight": "palavra em laranja dentro do headline (opcional)",
-      "subtext": "Texto menor de suporte (opcional)",
-      "logic": "Raciocínio estratégico: por que esse texto nesse slide",
-      "visualDirection": "O que o designer deve fazer visualmente",
+      "headline": "TEXTO EM CAIXA ALTA",
+      "headlineHighlight": "PALAVRA para destaque visual (opcional)",
+      "subtext": "Texto menor de suporte (opcional, sem caixa alta)",
+      "logic": "Raciocínio estratégico do slide",
+      "visualDirection": "O que o designer deve fazer",
       "needsMedia": false,
       "mediaType": null,
       "mediaDescription": null,
@@ -151,8 +162,8 @@ serve(async (req) => {
     const isAutonomous = !context && !angle && !persona;
 
     const userPrompt = isAutonomous
-      ? `Briefing em branco. Ative o modo autônomo: analise o contexto (Fevereiro 2026, pré-verão Florianópolis, janela de 90 dias se abrindo), escolha o ângulo mais estratégico para conversão agora, justifique sua escolha no angleRationale, e gere o carrossel completo com 7-8 slides seguindo todas as regras de design e copy.`
-      : `Gere um carrossel completo com estas especificações:
+      ? `Briefing em branco. Ative o modo autônomo: analise o contexto (Fevereiro 2026, pré-verão Florianópolis, janela de 90 dias se abrindo), escolha o ângulo mais estratégico para conversão agora, justifique sua escolha no angleRationale, e gere o carrossel com EXATAMENTE 5 slides seguindo todas as regras de design e copy. Todos os slides com bgStyle: 'dark'.`
+      : `Gere um carrossel com EXATAMENTE 5 slides e estas especificações:
 ${context ? `IDEIA/CONTEXTO: ${context}` : ''}
 ${angle ? `ÂNGULO: ${angle}` : ''}
 ${persona ? `PERFIL-ALVO: ${persona}` : ''}
@@ -160,7 +171,7 @@ ${channel ? `CANAL: ${channel}` : ''}
 ${format ? `FORMATO: ${format}` : ''}
 ${tone ? `TOM: ${tone}` : ''}
 
-Siga todas as regras de copy, design e mídia do sistema. Gere 6-8 slides. Retorne o JSON completo.`;
+Siga todas as regras de copy, design e mídia do sistema. EXATAMENTE 5 slides. bgStyle sempre 'dark'. Retorne o JSON completo.`;
 
     const response = await fetch(LOVABLE_AI_URL, {
       method: 'POST',
