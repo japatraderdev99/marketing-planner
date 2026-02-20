@@ -14,6 +14,69 @@ export type Database = {
   }
   public: {
     Tables: {
+      creative_drafts: {
+        Row: {
+          angle: string | null
+          campaign_name: string | null
+          carousel_data: Json | null
+          channel: string | null
+          context: string | null
+          created_at: string
+          feedback_requests: Json | null
+          format_id: string | null
+          id: string
+          name: string
+          persona: string | null
+          sigla: string
+          slide_images: Json | null
+          status: string
+          tone: string | null
+          updated_at: string
+          user_id: string
+          workflow_stage: string | null
+        }
+        Insert: {
+          angle?: string | null
+          campaign_name?: string | null
+          carousel_data?: Json | null
+          channel?: string | null
+          context?: string | null
+          created_at?: string
+          feedback_requests?: Json | null
+          format_id?: string | null
+          id?: string
+          name: string
+          persona?: string | null
+          sigla: string
+          slide_images?: Json | null
+          status?: string
+          tone?: string | null
+          updated_at?: string
+          user_id: string
+          workflow_stage?: string | null
+        }
+        Update: {
+          angle?: string | null
+          campaign_name?: string | null
+          carousel_data?: Json | null
+          channel?: string | null
+          context?: string | null
+          created_at?: string
+          feedback_requests?: Json | null
+          format_id?: string | null
+          id?: string
+          name?: string
+          persona?: string | null
+          sigla?: string
+          slide_images?: Json | null
+          status?: string
+          tone?: string | null
+          updated_at?: string
+          user_id?: string
+          workflow_stage?: string | null
+        }
+        Relationships: []
+      }
       forum_messages: {
         Row: {
           author_initials: string
@@ -177,7 +240,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      generate_draft_sigla: { Args: never; Returns: string }
     }
     Enums: {
       [_ in never]: never
