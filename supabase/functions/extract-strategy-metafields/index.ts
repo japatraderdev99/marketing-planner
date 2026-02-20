@@ -11,6 +11,9 @@ Deno.serve(async (req) => {
   }
 
   try {
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY não configurada");
+
     const { strategyData } = await req.json();
 
     const prompt = `Você é um estrategista de marketing sênior especializado em brand strategy e comunicação persuasiva.
@@ -20,25 +23,17 @@ Analise o playbook estratégico abaixo e extraia os META-FIELDS estruturados que
 PLAYBOOK ESTRATÉGICO:
 ---
 POSICIONAMENTO: ${strategyData.positioning || "(não preenchido)"}
-
 DIFERENCIAIS COMPETITIVOS: ${strategyData.differentials || "(não preenchido)"}
-
 PÚBLICO-ALVO: ${strategyData.targetAudience || "(não preenchido)"}
-
 DORES E FRUSTRAÇÕES: ${strategyData.pains || "(não preenchido)"}
-
 TOM DE VOZ: ${strategyData.toneOfVoice || "(não preenchido)"}
-
 CONCORRENTES: ${strategyData.competitors || "(não preenchido)"}
-
 TÓPICOS PROIBIDOS: ${strategyData.forbiddenTopics || "(não preenchido)"}
-
 OBJETIVO ATUAL (30-90 dias): ${strategyData.currentObjective || "(não preenchido)"}
-
 KPIs E METAS: ${strategyData.kpis || "(não preenchido)"}
 ---
 
-Retorne um JSON com a seguinte estrutura exata (sem markdown, apenas JSON puro):
+Retorne um JSON com a seguinte estrutura exata:
 {
   "brandEssence": "frase de 1 linha que captura a essência da marca",
   "uniqueValueProp": "proposta de valor única em 1-2 frases diretas",
@@ -66,19 +61,19 @@ Retorne um JSON com a seguinte estrutura exata (sem markdown, apenas JSON puro):
   "missingCritical": ["campo faltante 1", "campo faltante 2"]
 }
 
-Para completenessScore: calcule 0-100 baseado na qualidade e completude do playbook (0 = vazio, 100 = completo e detalhado).
-Para missingCritical: liste apenas campos que estão faltando ou muito vagos e que são críticos.`;
+Para completenessScore: calcule 0-100 baseado na qualidade e completude do playbook.
+Para missingCritical: liste apenas campos críticos faltando ou muito vagos.`;
 
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${Deno.env.get("LOVABLE_API_KEY")}`,
+        "Authorization": `Bearer ${LOVABLE_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "openai/gpt-5-mini",
+        model: "google/gemini-2.5-flash",
         messages: [
-          { role: "system", content: "Você é um estrategista de marketing sênior. Retorne apenas JSON puro, sem markdown, sem explicações." },
+          { role: "system", content: "Você é um estrategista de marketing sênior. Retorne apenas JSON puro, sem markdown." },
           { role: "user", content: prompt }
         ],
         temperature: 0.3,
@@ -87,8 +82,9 @@ Para missingCritical: liste apenas campos que estão faltando ou muito vagos e q
     });
 
     if (!response.ok) {
-      const err = await response.text();
-      throw new Error(`AI API error: ${err}`);
+      if (response.status === 429) return new Response(JSON.stringify({ error: "Rate limit atingido. Tente novamente." }), { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      if (response.status === 402) return new Response(JSON.stringify({ error: "Créditos de IA esgotados." }), { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      throw new Error(`AI gateway error: ${await response.text()}`);
     }
 
     const aiResponse = await response.json();
@@ -102,7 +98,7 @@ Para missingCritical: liste apenas campos que estão faltando ou muito vagos e q
   } catch (error) {
     console.error("Error:", error);
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: error instanceof Error ? error.message : "Erro desconhecido" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
