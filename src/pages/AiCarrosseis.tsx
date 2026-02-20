@@ -292,6 +292,7 @@ interface SlideCardProps {
   imageUrl?: string;
   isGenerating?: boolean;
   onGenerateImage: (slideNumber: number, prompt: string, quality: 'fast' | 'high') => void;
+  onClearImage: (slideNumber: number) => void;
 }
 
 // Build a generic image prompt for slides that don't have one defined
@@ -299,7 +300,7 @@ function buildGenericImagePrompt(slide: SlideOutput): string {
   return `Editorial photography for a Brazilian service brand carousel slide. Style: documentary, natural light, authentic moment. The slide headline is "${slide.headline}". Create a background image that evokes this concept — no text, no overlays, no logos. The image will have a semi-transparent orange (#E8603C) overlay, so use high-contrast composition. Shot on Canon EOS R5, 35mm lens, f/2.8. Professional but human.`;
 }
 
-function SlideCard({ slide, imageUrl, isGenerating, onGenerateImage }: SlideCardProps) {
+function SlideCard({ slide, imageUrl, isGenerating, onGenerateImage, onClearImage }: SlideCardProps) {
   const [expanded, setExpanded] = useState(false);
   const slideRef = useRef<HTMLDivElement>(null);
   const [exporting, setExporting] = useState(false);
@@ -458,6 +459,15 @@ function SlideCard({ slide, imageUrl, isGenerating, onGenerateImage }: SlideCard
             ? (imageInstruction.trim() ? 'Aplicar ajuste' : 'Trocar imagem')
             : 'Gerar imagem'}
         </button>
+        {hasImage && (
+          <button
+            onClick={() => onClearImage(slide.number)}
+            className="w-full flex items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all border border-destructive/30 text-destructive/70 hover:bg-destructive/10 hover:text-destructive mt-1"
+          >
+            <ImageIcon className="h-3 w-3" />
+            Tirar imagem
+          </button>
+        )}
       </div>
 
       {/* ── Logic toggle (collapsed by default) ── */}
@@ -714,6 +724,14 @@ export default function AiCarrosseis() {
     }
   }, [toast]);
 
+  const handleClearImage = useCallback((slideNumber: number) => {
+    setSlideImages(prev => {
+      const next = { ...prev };
+      delete next[slideNumber];
+      return next;
+    });
+  }, []);
+
   return (
     <div className="h-full overflow-y-auto">
       <style>{`
@@ -918,6 +936,7 @@ export default function AiCarrosseis() {
                       imageUrl={slideImages[slide.number]}
                       isGenerating={generatingImage[slide.number]}
                       onGenerateImage={handleGenerateImage}
+                      onClearImage={handleClearImage}
                     />
                   ))}
                 </div>
