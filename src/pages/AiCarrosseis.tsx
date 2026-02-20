@@ -185,11 +185,11 @@ function SlidePreview({ slide, imageUrl, slideRef }: SlidePreviewProps) {
         position: 'relative',
         borderRadius: '8px',
         overflow: 'hidden',
-        display: 'flex',
+      display: 'flex',
         flexDirection: 'column',
         justifyContent: isDataSlide ? 'center' : isCTA ? 'center' : 'flex-end',
         alignItems: isCTA ? 'center' : 'flex-start',
-        padding: '20px',
+        padding: '36px 32px',
         boxSizing: 'border-box',
       }}
     >
