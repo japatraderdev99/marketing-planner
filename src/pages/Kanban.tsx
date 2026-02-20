@@ -19,7 +19,8 @@ import {
   SortableContext, useSortable, verticalListSortingStrategy
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Plus, Calendar, User, AlertCircle, GripVertical, X, Filter } from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
+import { Plus, Calendar, AlertCircle, GripVertical, X, Filter, Edit2, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const COLUMNS: { id: KanbanStatus; label: string; color: string }[] = [
@@ -58,7 +59,14 @@ function isUrgent(dateStr: string) {
   return diff <= 3 && diff >= 0;
 }
 
-function KanbanCard({ campaign, isDragging }: { campaign: Campaign; isDragging?: boolean }) {
+function KanbanCard({
+  campaign, isDragging, onEdit, onDelete,
+}: {
+  campaign: Campaign;
+  isDragging?: boolean;
+  onEdit?: (c: Campaign) => void;
+  onDelete?: (id: string) => void;
+}) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging: isSorting } = useSortable({
     id: campaign.id,
   });
@@ -83,12 +91,29 @@ function KanbanCard({ campaign, isDragging }: { campaign: Campaign; isDragging?:
         <button
           {...attributes}
           {...listeners}
-          className="mt-0.5 cursor-grab touch-none text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 active:cursor-grabbing"
+          className="mt-0.5 cursor-grab touch-none text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 active:cursor-grabbing shrink-0"
         >
           <GripVertical className="h-4 w-4" />
         </button>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold leading-snug text-foreground">{campaign.name}</p>
+          <div className="flex items-start justify-between gap-1">
+            <p className="text-sm font-semibold leading-snug text-foreground">{campaign.name}</p>
+            {/* Action buttons — visíveis no hover */}
+            <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" onClick={e => e.stopPropagation()}>
+              <button
+                onClick={() => onEdit?.(campaign)}
+                className="flex h-5 w-5 items-center justify-center rounded text-muted-foreground hover:bg-primary/20 hover:text-primary transition-colors"
+              >
+                <Edit2 className="h-3 w-3" />
+              </button>
+              <button
+                onClick={() => onDelete?.(campaign.id)}
+                className="flex h-5 w-5 items-center justify-center rounded text-muted-foreground hover:bg-red-500/20 hover:text-red-400 transition-colors"
+              >
+                <Trash2 className="h-3 w-3" />
+              </button>
+            </div>
+          </div>
           <div className="mt-1.5 flex flex-wrap gap-1">
             {campaign.channel.slice(0, 2).map(ch => (
               <span key={ch} className="text-xs text-muted-foreground">
@@ -197,10 +222,96 @@ function NewCardModal({
   );
 }
 
+function EditCardModal({
+  open, onClose, campaign, onSave,
+}: {
+  open: boolean;
+  onClose: () => void;
+  campaign: Campaign;
+  onSave: (updated: Campaign) => void;
+}) {
+  const [form, setForm] = useState<Campaign>(campaign);
+
+  // sync when campaign changes
+  useState(() => { setForm(campaign); });
+
+  const handleSave = () => {
+    onSave({
+      ...form,
+      avatar: form.responsible.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2) || form.avatar,
+    });
+    onClose();
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="sm:max-w-lg bg-card border-border max-h-[90vh] overflow-auto">
+        <DialogHeader>
+          <DialogTitle>Editar Card</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3">
+          <Input placeholder="Nome*" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} className="bg-background" />
+          <Textarea placeholder="Objetivo" value={form.objective ?? ''} onChange={e => setForm(f => ({ ...f, objective: e.target.value }))} className="bg-background" rows={2} />
+          <Textarea placeholder="Público-alvo" value={form.audience ?? ''} onChange={e => setForm(f => ({ ...f, audience: e.target.value }))} className="bg-background" rows={2} />
+          <Textarea placeholder="Descrição" value={form.description ?? ''} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} className="bg-background" rows={2} />
+          <div className="grid grid-cols-2 gap-2">
+            <Select value={form.priority} onValueChange={v => setForm(f => ({ ...f, priority: v as Priority }))}>
+              <SelectTrigger className="bg-background"><SelectValue placeholder="Prioridade" /></SelectTrigger>
+              <SelectContent className="bg-card border-border">
+                {(['Alta', 'Média', 'Baixa'] as Priority[]).map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={form.category} onValueChange={v => setForm(f => ({ ...f, category: v as ContentObjective }))}>
+              <SelectTrigger className="bg-background"><SelectValue placeholder="Categoria" /></SelectTrigger>
+              <SelectContent className="bg-card border-border">
+                {(['Awareness', 'Engajamento', 'Conversão', 'Retenção'] as ContentObjective[]).map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={form.kanbanStatus} onValueChange={v => setForm(f => ({ ...f, kanbanStatus: v as KanbanStatus }))}>
+              <SelectTrigger className="bg-background"><SelectValue placeholder="Coluna" /></SelectTrigger>
+              <SelectContent className="bg-card border-border">
+                {COLUMNS.map(col => <SelectItem key={col.id} value={col.id}>{col.label}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={form.status} onValueChange={v => setForm(f => ({ ...f, status: v as Campaign['status'] }))}>
+              <SelectTrigger className="bg-background"><SelectValue placeholder="Status" /></SelectTrigger>
+              <SelectContent className="bg-card border-border">
+                {(['Rascunho', 'Aprovada', 'Ativa', 'Pausada', 'Finalizada'] as Campaign['status'][]).map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-xs text-muted-foreground">Início</label>
+              <Input type="date" value={form.startDate} onChange={e => setForm(f => ({ ...f, startDate: e.target.value }))} className="bg-background mt-1" />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground">Fim</label>
+              <Input type="date" value={form.endDate} onChange={e => setForm(f => ({ ...f, endDate: e.target.value }))} className="bg-background mt-1" />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-xs text-muted-foreground">Budget (R$)</label>
+              <Input type="number" value={form.budget} onChange={e => setForm(f => ({ ...f, budget: Number(e.target.value) }))} className="bg-background mt-1" />
+            </div>
+            <Input placeholder="Responsável" value={form.responsible} onChange={e => setForm(f => ({ ...f, responsible: e.target.value }))} className="bg-background" />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+          <Button onClick={handleSave} className="gradient-orange text-white border-0">Salvar</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function Kanban() {
   const [campaigns, setCampaigns] = useLocalStorage<Campaign[]>('dqef-campaigns', initialCampaigns);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [newCardColumn, setNewCardColumn] = useState<KanbanStatus | null>(null);
+  const [editingCard, setEditingCard] = useState<Campaign | null>(null);
   const [filterPriority, setFilterPriority] = useState<string>('all');
   const [filterChannel, setFilterChannel] = useState<string>('all');
 
@@ -255,6 +366,14 @@ export default function Kanban() {
       history: [{ date: new Date().toISOString(), action: 'Card criado', user: data.responsible ?? 'Time Marketing' }],
     };
     setCampaigns(prev => [...prev, newCard]);
+  };
+
+  const handleEditCard = (updated: Campaign) => {
+    setCampaigns(prev => prev.map(c => c.id === updated.id ? updated : c));
+  };
+
+  const handleDeleteCard = (id: string) => {
+    setCampaigns(prev => prev.filter(c => c.id !== id));
   };
 
   const activeCampaign = campaigns.find(c => c.id === activeId);
@@ -337,7 +456,12 @@ export default function Kanban() {
                     data-column={col.id}
                   >
                     {cards.map(card => (
-                      <KanbanCard key={card.id} campaign={card} />
+                      <KanbanCard
+                        key={card.id}
+                        campaign={card}
+                        onEdit={setEditingCard}
+                        onDelete={handleDeleteCard}
+                      />
                     ))}
                     {cards.length === 0 && (
                       <div className="flex h-24 items-center justify-center rounded-xl border-2 border-dashed border-border text-xs text-muted-foreground">
@@ -362,6 +486,15 @@ export default function Kanban() {
           onClose={() => setNewCardColumn(null)}
           columnId={newCardColumn}
           onSave={handleAddCard}
+        />
+      )}
+
+      {editingCard && (
+        <EditCardModal
+          open={!!editingCard}
+          onClose={() => setEditingCard(null)}
+          campaign={editingCard}
+          onSave={handleEditCard}
         />
       )}
     </div>
