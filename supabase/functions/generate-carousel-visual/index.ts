@@ -1,5 +1,5 @@
-import "https://deno.land/x/xhr@0.1.0/mod.ts";
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { createClient } from "jsr:@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -10,106 +10,112 @@ const LOVABLE_AI_URL = 'https://ai.gateway.lovable.dev/v1/chat/completions';
 
 function extractJSON(raw: string): Record<string, unknown> {
   let cleaned = raw.trim();
-  // Remove markdown code fences
   cleaned = cleaned.replace(/```json\s*/gi, '').replace(/```\s*/gi, '');
-  // Try direct parse first
   try {
     return JSON.parse(cleaned);
   } catch {
-    // Extract first {...} block
     const match = cleaned.match(/\{[\s\S]*\}/);
     if (match) {
-      try {
-        return JSON.parse(match[0]);
-      } catch {
-        throw new Error('Could not parse JSON from AI response');
-      }
+      try { return JSON.parse(match[0]); } catch { throw new Error('Could not parse JSON from AI response'); }
     }
     throw new Error('No JSON found in AI response');
   }
 }
 
-const DQEF_CONTEXT = `
-MARCA: Deixa que eu faço (DQEF)
-POSICIONAMENTO: Plataforma de serviços para prestadores autônomos em todo o Brasil.
-MODELO DE NEGÓCIO: 10-15% de comissão APENAS quando o serviço é concluído. Zero cobrança quando não tem trabalho.
-CONCORRENTES: GetNinjas e Parafuzo cobram 27-35% por lead, mesmo sem garantia de contrato.
-PIX IMEDIATO: O prestador recebe na hora pelo app, sem burocracia bancária.
-CONTEXTO TEMPORAL: Fevereiro 2026 — início de um novo ciclo, janela de oportunidade de 90-120 dias se abrindo.
-PERFIS-ALVO: Piscineiro, eletricista, encanador, "marido de aluguel", pedreiro, pintor, jardineiro, faxineiro.
-DORES REAIS:
-- "Pago 27% pro GetNinjas e ainda não fico com o cliente"
-- "Ganho cliente só por indicação mas não escala"
-- "Nunca aprendi a me vender no digital"
-- "O cara que cobra menos que eu aparece na frente no Google"
-TOM DE COMUNICAÇÃO: Peer-to-peer. Como um prestador falando com outro. Sem filtro corporativo. Linguagem acessível. Frases curtas. Números reais.
-IDENTIDADE VISUAL: Fundo laranja coral (#E8603C) em TODAS as lâminas — funciona como caixa de texto recortável. Texto sempre branco (#FFFFFF). Peso de fonte alto (Montserrat 900).
-TIPOGRAFIA: Montserrat 900 (headlines em caixa alta, impacto), Montserrat 600 (subtexto), JetBrains Mono (dados/prompts técnicos).
-ASSINATURA: Watermark "DQEF" discreto no canto inferior direito de cada lâmina.
-SLOGAN OBRIGATÓRIO: O último slide (CTA) DEVE sempre terminar com o slogan da marca "pronto. resolvido." — "pronto." em estilo apagado/discreto e "resolvido." em destaque laranja/branco.
-LIMITE ABSOLUTO: Máximo 5 lâminas por carrossel. Não gere mais que isso.
-PROIBIDO: Nunca mencione cidades, estados ou regiões específicas nos textos dos slides.
-`;
+// Fetch strategy context from knowledge base + meta-fields
+async function getStrategyContext(req: Request, strategyContext?: string): Promise<string> {
+  const base = strategyContext ? `\nCONTEXTO ESTRATÉGICO DA MARCA (extraído do playbook):\n${strategyContext}\n` : '';
 
-const SYSTEM_PROMPT = `Você é o estrategista criativo da DQEF (Deixa que eu faço), especialista em carrosséis virais para Instagram com profundo conhecimento do prestador de serviço autônomo brasileiro.
+  try {
+    const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) return base;
 
-${DQEF_CONTEXT}
+    const userClient = createClient(SUPABASE_URL, Deno.env.get("SUPABASE_ANON_KEY")!, {
+      global: { headers: { Authorization: authHeader } },
+    });
+    const { data: { user } } = await userClient.auth.getUser();
+    if (!user) return base;
+
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+    const { data: knowledgeDocs } = await supabase
+      .from("strategy_knowledge")
+      .select("document_name, extracted_knowledge")
+      .eq("user_id", user.id)
+      .eq("status", "done")
+      .limit(3);
+
+    if (!knowledgeDocs || knowledgeDocs.length === 0) return base;
+
+    const knowledgeContext = knowledgeDocs.map((doc: { document_name: string; extracted_knowledge: Record<string, unknown> | null }) => {
+      const k = doc.extracted_knowledge as Record<string, unknown>;
+      if (!k) return "";
+      const parts: string[] = [];
+      if (k.brandName) parts.push(`MARCA: ${k.brandName}`);
+      if (k.brandEssence) parts.push(`ESSÊNCIA: ${k.brandEssence}`);
+      if (k.positioning) parts.push(`POSICIONAMENTO: ${k.positioning}`);
+      if (k.uniqueValueProp) parts.push(`PROPOSTA DE VALOR: ${k.uniqueValueProp}`);
+      if (k.toneOfVoice) parts.push(`TOM DE VOZ: ${JSON.stringify(k.toneOfVoice)}`);
+      if (Array.isArray(k.keyMessages) && k.keyMessages.length) parts.push(`MENSAGENS-CHAVE: ${k.keyMessages.join(" | ")}`);
+      if (Array.isArray(k.forbiddenTopics) && k.forbiddenTopics.length) parts.push(`PROIBIDO: ${k.forbiddenTopics.join(", ")}`);
+      if (k.ctaStyle) parts.push(`ESTILO DE CTA: ${k.ctaStyle}`);
+      if (k.promptContext) parts.push(`SYSTEM PROMPT DA MARCA: ${k.promptContext}`);
+      return parts.join("\n");
+    }).filter(Boolean).join("\n\n");
+
+    if (!knowledgeContext) return base;
+    return `\nKNOWLEDGE BASE DA MARCA (dos documentos analisados — prioridade máxima):\n---\n${knowledgeContext}\n---\n${base}`;
+  } catch {
+    return base;
+  }
+}
+
+const VISUAL_RULES = `
+IDENTIDADE VISUAL (OBRIGATÓRIA):
+- Fundo: #E8603C (laranja coral) em TODAS as lâminas — sem exceção. bgStyle sempre 'dark'.
+- Texto: BRANCO puro #FFFFFF
+- Destaque (headlineHighlight): palavra que terá fundo semi-transparente branco, criando contraste visual
+- Fonte: Montserrat 900 — caixa alta, peso máximo
+- Watermark "DQEF" discreto no canto inferior direito de cada lâmina
+- LIMITE ABSOLUTO: Máximo 5 lâminas por carrossel. Nunca gere mais que isso.
 
 REGRAS ABSOLUTAS DE COPY:
 - Frases de 3-7 palavras por linha no headline
 - Máximo 2-3 linhas por slide
 - SEMPRE em CAIXA ALTA (uppercase) — combina com Montserrat 900
 - Zero jargão corporativo
-- Números reais (10%, 27%, 120 dias, etc.)
+- Números reais (%, R$, dias) quando disponíveis no contexto da marca
 - Verbo no imperativo ou afirmação direta
-- Tom peer-to-peer: "Tu é bom", "Teu trampo", não "Você possui habilidades"
+- Tom peer-to-peer de acordo com o tom de voz da marca
 - PROIBIDO mencionar cidades, estados ou regiões geográficas nos textos dos slides
-
-IDENTIDADE VISUAL (OBRIGATÓRIA):
-- Fundo: #E8603C (laranja coral) em TODAS as lâminas — sem exceção. bgStyle sempre 'dark' (o sistema renderiza tudo em laranja).
-- Texto: BRANCO puro #FFFFFF
-- Destaque (headlineHighlight): palavra que terá fundo semi-transparente branco, criando contraste visual
-- Fonte: Montserrat 900 — caixa alta, peso máximo
-- A lâmina funciona como caixa de texto recortável sobre qualquer fundo
-
-REGRAS DE DESIGN POR TIPO DE SLIDE:
-- hook: APENAS TEXTO em caixa alta. Headline de impacto máximo. layout: 'text-only'
-- setup: Texto + indicação de foto real. layout: 'text-photo-split'  
-- data: Número GIGANTE (ex: "27%") em Montserrat 900 ocupa 60% do slide. layout: 'number-dominant'
-- contrast: Headline contrastante, subtext explicativo. layout: 'text-only'
-- validation: Texto emocional, direto. layout: 'text-only'
-- cta: Ação clara + link na bio. layout: 'cta-clean'. O subtext do CTA DEVE terminar com o slogan da marca.
 
 SLOGAN OBRIGATÓRIO NO CTA:
 - O último slide (type: 'cta') DEVE ter no subtext o slogan "pronto. resolvido." ao final.
-- Exemplo de subtext: "Entre agora. pronto. resolvido."
 
-QUANDO USAR MÍDIA:
-- Foto (needsMedia: true, mediaType: 'photo'): slides setup e contrast
-- Vídeo (needsMedia: true, mediaType: 'video'): slides de abertura emocional
-- Sem mídia (needsMedia: false): hook, data, validation, cta
+REGRAS DE DESIGN POR TIPO DE SLIDE:
+- hook: APENAS TEXTO em caixa alta. Headline de impacto máximo. layout: 'text-only'
+- setup: Texto + indicação de foto real. layout: 'text-photo-split'
+- data: Número GIGANTE ocupa 60% do slide. layout: 'number-dominant'
+- contrast: Headline contrastante, subtext explicativo. layout: 'text-only'
+- validation: Texto emocional, direto. layout: 'text-only'
+- cta: Ação clara + link na bio. layout: 'cta-clean'
 
 PROMPTS DE IMAGEM (imagePrompt):
-- Em inglês, ultra-detalhados para Flux 1.1 Dev Pro
-- Incluir: sujeito físico, textura real (pele, ferramentas), iluminação, enquadramento close-up 4:5
+- Em inglês, ultra-detalhados para geração de imagem
+- Incluir: sujeito físico, textura real, iluminação, enquadramento close-up 4:5
 - Estilo: documentary truth, not stock photo, desaturated, authentic
 - Mínimo 80 palavras
 
-PROMPTS DE VÍDEO (veoPrompt):
-- Em inglês, formato VEO 3.1 nativo (haiku denso)
-- 5 sentenças: [sujeito+ação] [câmera+movimento] [detalhe físico] [áudio em camadas] [color+luz]
-- Paleta: warm cream base, copper-orange accents
-
 LÓGICA AUTÔNOMA (quando briefing vazio):
-1. Analise: Fevereiro 2026, janela de oportunidade de 90 dias se abrindo no Brasil
+1. Analise o contexto e estratégia da marca disponíveis
 2. Escolha o ângulo mais estratégico para conversão agora
 3. Justifique no campo angleRationale
-4. Gere o carrossel com EXATAMENTE 5 slides (não mais, não menos)
+4. Gere o carrossel com EXATAMENTE 5 slides
 
 LIMITE CRÍTICO: Gere SEMPRE exatamente 5 slides. Nunca mais que 5.
 
-VOCÊ DEVE RETORNAR EXATAMENTE ESTE JSON (sem texto antes ou depois):
-
+RETORNE EXATAMENTE ESTE JSON (sem texto antes ou depois):
 {
   "title": "TÍTULO EM CAIXA ALTA",
   "angle": "ORGULHO|DINHEIRO|URGÊNCIA|RAIVA|ALÍVIO",
@@ -141,7 +147,7 @@ VOCÊ DEVE RETORNAR EXATAMENTE ESTE JSON (sem texto antes ou depois):
   ]
 }`;
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -150,34 +156,32 @@ serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
     if (!LOVABLE_API_KEY) {
       return new Response(JSON.stringify({ error: 'LOVABLE_API_KEY not configured' }), {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
     const body = await req.json();
-    const {
-      context = '',
-      angle = '',
-      persona = '',
-      channel = '',
-      format = '',
-      tone = '',
-    } = body;
+    const { context = '', angle = '', persona = '', channel = '', tone = '', strategyContext = '' } = body;
+
+    // Get dynamic brand strategy context (knowledge base + meta-fields from frontend)
+    const brandContext = await getStrategyContext(req, strategyContext);
+
+    const systemPrompt = `Você é o estrategista criativo especialista em carrosséis virais para Instagram com profundo conhecimento do prestador de serviço autônomo brasileiro.
+${brandContext}
+${VISUAL_RULES}`;
 
     const isAutonomous = !context && !angle && !persona;
 
     const userPrompt = isAutonomous
-      ? `Briefing em branco. Ative o modo autônomo: analise o contexto (Fevereiro 2026, pré-verão Florianópolis, janela de 90 dias se abrindo), escolha o ângulo mais estratégico para conversão agora, justifique sua escolha no angleRationale, e gere o carrossel com EXATAMENTE 5 slides seguindo todas as regras de design e copy. Todos os slides com bgStyle: 'dark'.`
+      ? `Briefing em branco. Ative o modo autônomo: analise o contexto e a estratégia da marca disponíveis, escolha o ângulo mais estratégico para conversão agora, justifique no angleRationale, e gere o carrossel com EXATAMENTE 5 slides seguindo todas as regras. Todos os slides com bgStyle: 'dark'.`
       : `Gere um carrossel com EXATAMENTE 5 slides e estas especificações:
 ${context ? `IDEIA/CONTEXTO: ${context}` : ''}
 ${angle ? `ÂNGULO: ${angle}` : ''}
 ${persona ? `PERFIL-ALVO: ${persona}` : ''}
 ${channel ? `CANAL: ${channel}` : ''}
-${format ? `FORMATO: ${format}` : ''}
 ${tone ? `TOM: ${tone}` : ''}
 
-Siga todas as regras de copy, design e mídia do sistema. EXATAMENTE 5 slides. bgStyle sempre 'dark'. Retorne o JSON completo.`;
+Siga todas as regras de copy, design e mídia. EXATAMENTE 5 slides. bgStyle sempre 'dark'. As copies devem estar 100% alinhadas com a estratégia e tom de voz da marca. Retorne o JSON completo.`;
 
     const response = await fetch(LOVABLE_AI_URL, {
       method: 'POST',
@@ -188,7 +192,7 @@ Siga todas as regras de copy, design e mídia do sistema. EXATAMENTE 5 slides. b
       body: JSON.stringify({
         model: 'google/gemini-2.5-pro',
         messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt },
         ],
         temperature: 0.85,
@@ -196,24 +200,11 @@ Siga todas as regras de copy, design e mídia do sistema. EXATAMENTE 5 slides. b
     });
 
     if (!response.ok) {
-      if (response.status === 429) {
-        return new Response(JSON.stringify({ error: 'Rate limit atingido. Aguarde alguns segundos e tente novamente.' }), {
-          status: 429,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-      if (response.status === 402) {
-        return new Response(JSON.stringify({ error: 'Créditos insuficientes. Adicione créditos na sua conta Lovable.' }), {
-          status: 402,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
+      if (response.status === 429) return new Response(JSON.stringify({ error: 'Rate limit atingido. Aguarde alguns segundos e tente novamente.' }), { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      if (response.status === 402) return new Response(JSON.stringify({ error: 'Créditos insuficientes. Adicione créditos na sua conta Lovable.' }), { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       const errText = await response.text();
       console.error('AI gateway error:', response.status, errText);
-      return new Response(JSON.stringify({ error: 'Erro na API de IA. Tente novamente.' }), {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      return new Response(JSON.stringify({ error: 'Erro na API de IA. Tente novamente.' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     const aiResponse = await response.json();
@@ -225,20 +216,18 @@ Siga todas as regras de copy, design e mídia do sistema. EXATAMENTE 5 slides. b
     } catch (e) {
       console.error('JSON parse error:', e, 'Raw:', rawContent.slice(0, 500));
       return new Response(JSON.stringify({ error: 'Erro ao processar resposta da IA. Tente novamente.' }), {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    return new Response(JSON.stringify({ carousel, autonomous: isAutonomous }), {
+    return new Response(JSON.stringify({ carousel, autonomous: isAutonomous, usedStrategyContext: !!brandContext }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
 
   } catch (error) {
     console.error('Edge function error:', error);
     return new Response(JSON.stringify({ error: error instanceof Error ? error.message : 'Erro interno' }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
 });

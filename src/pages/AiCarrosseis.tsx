@@ -1499,8 +1499,18 @@ export default function AiCarrosseis() {
     setResult(null);
     setSlideImages({});
     try {
+      // Inject strategy meta-fields if available
+      let strategyContext = '';
+      try {
+        const raw = localStorage.getItem('dqef_strategy_metafields_v1');
+        if (raw) {
+          const mf = JSON.parse(raw);
+          strategyContext = mf.promptContext || '';
+        }
+      } catch { /* ignore */ }
+
       const { data, error } = await supabase.functions.invoke('generate-carousel-visual', {
-        body: { context, angle, persona, channel, tone },
+        body: { context, angle, persona, channel, tone, strategyContext },
       });
       if (error) throw error;
       if (data?.error) {
