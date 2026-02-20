@@ -58,11 +58,13 @@ const PERSONAS = [
 const CHANNELS = ['Instagram Feed', 'Stories', 'TikTok', 'LinkedIn'];
 const TONES = ['Peer-to-peer', 'Editorial', 'Direto ao ponto'];
 
+const SLIDE_BG = '#E8603C'; // Laranja DQEF — caixa de texto recortável
+
 const BG_COLORS: Record<string, string> = {
-  dark: '#0A0A0A',
-  orange: '#1A0A00',
-  'dark-red': '#1A0000',
-  'dark-green': '#0A2E1A',
+  dark: SLIDE_BG,
+  orange: SLIDE_BG,
+  'dark-red': SLIDE_BG,
+  'dark-green': SLIDE_BG,
 };
 
 const TYPE_LABELS: Record<string, string> = {
@@ -76,7 +78,7 @@ const TYPE_LABELS: Record<string, string> = {
 
 // ─── Inject Google Fonts ──────────────────────────────────────────────────────
 const fontStyle = document.createElement('style');
-fontStyle.textContent = `@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Roboto+Condensed:wght@400;700;900&family=JetBrains+Mono:wght@400;700&display=swap');`;
+fontStyle.textContent = `@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;800;900&family=JetBrains+Mono:wght@400;700&display=swap');`;
 if (!document.head.querySelector('[data-dqef-fonts]')) {
   fontStyle.setAttribute('data-dqef-fonts', 'true');
   document.head.appendChild(fontStyle);
@@ -127,7 +129,7 @@ function SlidePreview({ slide }: { slide: SlideOutput }) {
     return (
       <>
         {before && <span style={{ color: '#FFFFFF' }}>{before}</span>}
-        <span style={{ color: '#FF8A00' }}>{word}</span>
+        <span style={{ color: '#0A0A0A', backgroundColor: 'rgba(255,255,255,0.25)', borderRadius: '2px', padding: '0 2px' }}>{word}</span>
         {after && <span style={{ color: '#FFFFFF' }}>{after}</span>}
       </>
     );
@@ -155,12 +157,13 @@ function SlidePreview({ slide }: { slide: SlideOutput }) {
         position: 'absolute',
         top: '14px',
         left: '16px',
-        fontFamily: 'JetBrains Mono, monospace',
+        fontFamily: 'Montserrat, sans-serif',
         fontSize: '10px',
-        fontWeight: 700,
-        color: '#FF8A00',
-        letterSpacing: '0.1em',
+        fontWeight: 800,
+        color: '#FFFFFF',
+        letterSpacing: '0.12em',
         lineHeight: 1,
+        opacity: 0.85,
       }}>
         {String(slide.number).padStart(2, '0')} · {TYPE_LABELS[slide.type] ?? slide.type.toUpperCase()}
       </div>
@@ -199,28 +202,33 @@ function SlidePreview({ slide }: { slide: SlideOutput }) {
       {isCTA && (
         <div style={{ textAlign: 'center', width: '100%' }}>
           <div style={{
-            fontFamily: 'Bebas Neue, sans-serif',
+            fontFamily: 'Montserrat, sans-serif',
             fontSize: '11px',
-            color: '#FF8A00',
-            letterSpacing: '0.2em',
+            fontWeight: 900,
+            color: '#FFFFFF',
+            letterSpacing: '0.3em',
             marginBottom: '12px',
+            opacity: 0.7,
           }}>DQEF</div>
           <div style={{
-            fontFamily: 'Bebas Neue, sans-serif',
-            fontSize: 'clamp(24px, 6vw, 36px)',
+            fontFamily: 'Montserrat, sans-serif',
+            fontWeight: 900,
+            fontSize: 'clamp(22px, 6vw, 32px)',
             color: '#FFFFFF',
             lineHeight: 1.05,
             marginBottom: '10px',
-            letterSpacing: '0.02em',
+            letterSpacing: '-0.01em',
+            textTransform: 'uppercase',
           }}>
             {renderHeadline(slide.headline, slide.headlineHighlight)}
           </div>
           {slide.subtext && (
             <div style={{
-              fontFamily: 'Roboto Condensed, sans-serif',
+              fontFamily: 'Montserrat, sans-serif',
+              fontWeight: 600,
               fontSize: '11px',
-              color: '#888888',
-              letterSpacing: '0.08em',
+              color: 'rgba(255,255,255,0.75)',
+              letterSpacing: '0.06em',
             }}>{slide.subtext}</div>
           )}
         </div>
@@ -230,23 +238,26 @@ function SlidePreview({ slide }: { slide: SlideOutput }) {
       {isDataSlide && !isCTA && (
         <div style={{ width: '100%', textAlign: 'left' }}>
           <div style={{
-            fontFamily: 'Bebas Neue, sans-serif',
+            fontFamily: 'Montserrat, sans-serif',
+            fontWeight: 900,
             fontSize: 'clamp(64px, 18vw, 96px)',
-            color: slide.bgStyle === 'dark-green' ? '#00C853' : '#FF8A00',
+            color: '#FFFFFF',
             lineHeight: 0.9,
-            letterSpacing: '-0.02em',
+            letterSpacing: '-0.03em',
             marginBottom: '12px',
+            textTransform: 'uppercase',
           }}>
             {slide.headline}
           </div>
           {slide.subtext && (
             <div style={{
-              fontFamily: 'Roboto Condensed, sans-serif',
+              fontFamily: 'Montserrat, sans-serif',
               fontWeight: 700,
               fontSize: '13px',
-              color: '#CCCCCC',
+              color: 'rgba(255,255,255,0.8)',
               lineHeight: 1.3,
-              letterSpacing: '0.04em',
+              letterSpacing: '0.02em',
+              textTransform: 'uppercase',
             }}>{slide.subtext}</div>
           )}
         </div>
@@ -256,22 +267,25 @@ function SlidePreview({ slide }: { slide: SlideOutput }) {
       {!isDataSlide && !isCTA && (
         <div style={{ width: '100%' }}>
           <div style={{
-            fontFamily: 'Bebas Neue, sans-serif',
-            fontSize: 'clamp(22px, 6vw, 32px)',
-            lineHeight: 1.05,
-            letterSpacing: '0.02em',
+            fontFamily: 'Montserrat, sans-serif',
+            fontWeight: 900,
+            fontSize: 'clamp(20px, 5.5vw, 30px)',
+            lineHeight: 1.1,
+            letterSpacing: '-0.01em',
             marginBottom: slide.subtext ? '10px' : '0',
             whiteSpace: 'pre-line',
+            textTransform: 'uppercase',
           }}>
             {renderHeadline(slide.headline, slide.headlineHighlight)}
           </div>
           {slide.subtext && (
             <div style={{
-              fontFamily: 'Roboto Condensed, sans-serif',
+              fontFamily: 'Montserrat, sans-serif',
+              fontWeight: 600,
               fontSize: '11px',
-              color: '#888888',
-              lineHeight: 1.4,
-              letterSpacing: '0.04em',
+              color: 'rgba(255,255,255,0.75)',
+              lineHeight: 1.45,
+              letterSpacing: '0.03em',
             }}>{slide.subtext}</div>
           )}
         </div>
@@ -282,10 +296,11 @@ function SlidePreview({ slide }: { slide: SlideOutput }) {
         position: 'absolute',
         bottom: '10px',
         right: '12px',
-        fontFamily: 'Bebas Neue, sans-serif',
+        fontFamily: 'Montserrat, sans-serif',
+        fontWeight: 800,
         fontSize: '8px',
-        color: '#333333',
-        letterSpacing: '0.15em',
+        color: 'rgba(255,255,255,0.3)',
+        letterSpacing: '0.2em',
       }}>DQEF</div>
     </div>
   );
@@ -447,36 +462,36 @@ function exportCarouselHTML(carousel: CarouselOutput) {
 <title>${carousel.title} · DQEF</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Roboto+Condensed:wght@400;700;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;800;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  body { background: #050505; color: #FFFFFF; font-family: 'Roboto Condensed', sans-serif; min-height: 100vh; }
-  .topbar { background: #FF8A00; padding: 10px 32px; display: flex; align-items: center; justify-content: space-between; }
-  .topbar-brand { font-family: 'Bebas Neue', sans-serif; font-size: 22px; color: #000; letter-spacing: 0.1em; }
-  .topbar-meta { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: rgba(0,0,0,0.7); letter-spacing: 0.1em; }
+  body { background: #1a1a1a; color: #FFFFFF; font-family: 'Montserrat', sans-serif; min-height: 100vh; }
+  .topbar { background: #E8603C; padding: 12px 32px; display: flex; align-items: center; justify-content: space-between; }
+  .topbar-brand { font-family: 'Montserrat', sans-serif; font-size: 18px; font-weight: 900; color: #FFFFFF; letter-spacing: 0.15em; }
+  .topbar-meta { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: rgba(255,255,255,0.7); letter-spacing: 0.1em; }
   .container { max-width: 680px; margin: 0 auto; padding: 40px 24px; }
-  .carousel-title { font-family: 'Bebas Neue', sans-serif; font-size: 42px; color: #FFFFFF; letter-spacing: 0.04em; line-height: 1; margin-bottom: 8px; }
-  .carousel-meta { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: #666; letter-spacing: 0.1em; margin-bottom: 6px; }
-  .viral-logic { font-size: 12px; color: #888; line-height: 1.5; margin-bottom: 32px; padding: 12px 16px; border-left: 2px solid #FF8A00; background: rgba(255,138,0,0.05); }
+  .carousel-title { font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 36px; color: #FFFFFF; letter-spacing: -0.02em; line-height: 1; margin-bottom: 8px; text-transform: uppercase; }
+  .carousel-meta { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: #888; letter-spacing: 0.1em; margin-bottom: 6px; }
+  .viral-logic { font-size: 12px; color: #aaa; line-height: 1.5; margin-bottom: 32px; padding: 12px 16px; border-left: 3px solid #E8603C; background: rgba(232,96,60,0.08); }
   .slide-section { margin-bottom: 40px; }
-  .slide-frame { aspect-ratio: 4/5; width: 100%; border-radius: 8px; position: relative; display: flex; flex-direction: column; justify-content: flex-end; padding: 20px; overflow: hidden; }
-  .slide-label { position: absolute; top: 14px; left: 16px; font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 700; color: #FF8A00; letter-spacing: 0.1em; }
-  .media-placeholder { position: absolute; top: 50px; left: 0; right: 0; bottom: 45%; display: flex; align-items: center; justify-content: center; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: #333; border: 1px dashed #222; margin: 8px; border-radius: 4px; }
+  .slide-frame { aspect-ratio: 4/5; width: 100%; border-radius: 10px; position: relative; display: flex; flex-direction: column; justify-content: flex-end; padding: 20px; overflow: hidden; background: #E8603C; }
+  .slide-label { position: absolute; top: 14px; left: 16px; font-family: 'Montserrat', sans-serif; font-size: 9px; font-weight: 800; color: rgba(255,255,255,0.8); letter-spacing: 0.14em; }
+  .media-placeholder { position: absolute; top: 50px; left: 0; right: 0; bottom: 45%; display: flex; align-items: center; justify-content: center; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: rgba(255,255,255,0.4); border: 1px dashed rgba(255,255,255,0.3); margin: 8px; border-radius: 4px; }
   .slide-content { position: relative; z-index: 2; }
   .cta-content { text-align: center; align-self: center; width: 100%; }
-  .headline { font-family: 'Bebas Neue', sans-serif; font-size: clamp(28px, 7vw, 40px); color: #FFFFFF; line-height: 1.05; letter-spacing: 0.02em; white-space: pre-line; }
-  .headline-data { font-family: 'Bebas Neue', sans-serif; font-size: clamp(72px, 18vw, 110px); color: #FF8A00; line-height: 0.9; letter-spacing: -0.02em; }
-  .highlight { color: #FF8A00; }
-  .subtext { font-family: 'Roboto Condensed', sans-serif; font-size: 12px; color: #888; margin-top: 8px; letter-spacing: 0.04em; line-height: 1.4; }
-  .watermark { position: absolute; bottom: 10px; right: 12px; font-family: 'Bebas Neue', sans-serif; font-size: 8px; color: #222; letter-spacing: 0.15em; }
-  .slide-meta { background: #0F0F0F; border-radius: 0 0 8px 8px; padding: 14px 16px; border: 1px solid #1a1a1a; border-top: none; }
-  .meta-label { font-family: 'JetBrains Mono', monospace; font-size: 9px; font-weight: 700; color: #FF8A00; letter-spacing: 0.15em; margin-bottom: 4px; }
+  .headline { font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: clamp(26px, 7vw, 38px); color: #FFFFFF; line-height: 1.08; letter-spacing: -0.01em; white-space: pre-line; text-transform: uppercase; }
+  .headline-data { font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: clamp(64px, 18vw, 100px); color: #FFFFFF; line-height: 0.9; letter-spacing: -0.03em; text-transform: uppercase; }
+  .highlight { background: rgba(255,255,255,0.25); border-radius: 2px; padding: 0 2px; color: #0A0A0A; }
+  .subtext { font-family: 'Montserrat', sans-serif; font-weight: 600; font-size: 12px; color: rgba(255,255,255,0.75); margin-top: 10px; letter-spacing: 0.03em; line-height: 1.45; }
+  .watermark { position: absolute; bottom: 10px; right: 12px; font-family: 'Montserrat', sans-serif; font-weight: 800; font-size: 8px; color: rgba(255,255,255,0.25); letter-spacing: 0.2em; }
+  .slide-meta { background: #111; border-radius: 0 0 8px 8px; padding: 14px 16px; border: 1px solid #1e1e1e; border-top: none; }
+  .meta-label { font-family: 'JetBrains Mono', monospace; font-size: 9px; font-weight: 700; color: #E8603C; letter-spacing: 0.15em; margin-bottom: 4px; }
   .meta-text { font-size: 11px; color: #777; line-height: 1.5; }
   .prompt-box { background: #0A0A0A; border: 1px solid #1e1e1e; border-radius: 6px; padding: 14px; margin-top: 12px; }
   .prompt-label { font-family: 'JetBrains Mono', monospace; font-size: 9px; font-weight: 700; color: #4A9EFF; letter-spacing: 0.15em; margin-bottom: 8px; }
   .prompt-text { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: #999; line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
-  .caption-section { background: #0F0F0F; border: 1px solid #1e1e1e; border-radius: 8px; padding: 20px; margin-top: 40px; }
-  .caption-label { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: #FF8A00; letter-spacing: 0.15em; margin-bottom: 10px; }
+  .caption-section { background: #111; border: 1px solid #1e1e1e; border-radius: 8px; padding: 20px; margin-top: 40px; }
+  .caption-label { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: #E8603C; letter-spacing: 0.15em; margin-bottom: 10px; }
   .caption-text { font-size: 13px; color: #ccc; line-height: 1.7; white-space: pre-line; }
   .footer { text-align: center; padding: 40px 0 20px; font-family: 'JetBrains Mono', monospace; font-size: 9px; color: #333; letter-spacing: 0.15em; }
   hr { border: none; border-top: 1px solid #1a1a1a; margin: 32px 0; }
@@ -551,7 +566,7 @@ export default function AiCarrosseis() {
   return (
     <div className="h-full overflow-y-auto">
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Roboto+Condensed:wght@400;700;900&family=JetBrains+Mono:wght@400;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;800;900&family=JetBrains+Mono:wght@400;700&display=swap');
       `}</style>
 
       <div className="p-6 max-w-[1400px] mx-auto">
