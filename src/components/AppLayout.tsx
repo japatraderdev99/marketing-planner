@@ -2,7 +2,9 @@ import { ReactNode } from 'react';
 import { useLocation } from 'react-router-dom';
 import { SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
 import { AppSidebar } from '@/components/AppSidebar';
-import { Bell, Search } from 'lucide-react';
+import { Bell, Search, LogOut } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
+import { useToast } from '@/hooks/use-toast';
 
 const pageTitles: Record<string, { title: string; subtitle: string }> = {
   '/': { title: 'Dashboard', subtitle: 'Visão geral da operação de marketing' },
@@ -15,6 +17,8 @@ const pageTitles: Record<string, { title: string; subtitle: string }> = {
 
 export function AppLayout({ children }: { children: ReactNode }) {
   const location = useLocation();
+  const { signOut, user } = useAuth();
+  const { toast } = useToast();
   const page = Object.entries(pageTitles).find(([path]) =>
     path === '/' ? location.pathname === '/' : location.pathname.startsWith(path)
   );
@@ -42,9 +46,22 @@ export function AppLayout({ children }: { children: ReactNode }) {
                 <Bell className="h-4 w-4" />
                 <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-primary" />
               </button>
-              <div className="flex h-8 w-8 items-center justify-center rounded-full gradient-orange text-xs font-bold text-white">
-                TM
+              <div
+                title={user?.email ?? ''}
+                className="flex h-8 w-8 items-center justify-center rounded-full gradient-orange text-xs font-bold text-white uppercase cursor-default"
+              >
+                {user?.email?.[0]?.toUpperCase() ?? 'U'}
               </div>
+              <button
+                onClick={async () => {
+                  await signOut();
+                  toast({ title: 'Até logo! 👋', description: 'Sessão encerrada.' });
+                }}
+                title="Sair"
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-destructive/20 hover:text-destructive"
+              >
+                <LogOut className="h-4 w-4" />
+              </button>
             </div>
           </header>
 

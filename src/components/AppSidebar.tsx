@@ -1,4 +1,5 @@
 import { useLocation, Link } from 'react-router-dom';
+import logoSvg from '@/assets/logo.svg';
 import {
   LayoutDashboard,
   Trello,
@@ -42,8 +43,8 @@ export function AppSidebar() {
         'flex items-center border-b border-border transition-all duration-300',
         collapsed ? 'h-16 justify-center px-2' : 'h-16 px-4 gap-3'
       )}>
-        <div className="gradient-orange flex h-9 w-9 shrink-0 items-center justify-center rounded-lg shadow-lg">
-          <span className="text-sm font-black text-white">DQ</span>
+        <div className={cn('flex shrink-0 items-center justify-center rounded-lg', collapsed ? 'h-9 w-9' : 'h-9 w-9')}>
+          <img src={logoSvg} alt="DQEF Logo" className="h-9 w-9 object-contain" />
         </div>
         {!collapsed && (
           <div className="min-w-0 flex-1 animate-fade-in">
