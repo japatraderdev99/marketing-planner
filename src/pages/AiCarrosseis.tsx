@@ -1,7 +1,6 @@
 import { useState, useRef, useCallback } from 'react';
-import { Layers, Wand2, Copy, Check, Download, ChevronDown, ChevronUp, ImageIcon, Video, Zap, RefreshCw, Image } from 'lucide-react';
+import { Layers, Wand2, Copy, Check, Download, ChevronDown, ChevronUp, ImageIcon, Video, Zap, RefreshCw, Image, Minimize2, Shuffle } from 'lucide-react';
 import dqfIcon from '@/assets/dqf-icon.svg';
-import dqfLogoWhite from '@/assets/dqf-logo-white.png';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
@@ -188,23 +187,9 @@ function SlidePreview({ slide, imageUrl, slideRef }: SlidePreviewProps) {
         </>
       )}
 
-      {/* DQF Icon — top left */}
-      <div style={{
-        position: 'absolute',
-        top: '12px',
-        left: '12px',
-        zIndex: 10,
-        opacity: 0.85,
-      }}>
-        <img src={dqfIcon} alt="DQF" style={{ width: '22px', height: '22px', filter: 'brightness(0) invert(1)' }} />
-      </div>
-
       {/* CTA Layout */}
       {isCTA && (
         <div style={{ textAlign: 'center', width: '100%', position: 'relative', zIndex: 10 }}>
-          <div style={{ marginBottom: '12px', display: 'flex', justifyContent: 'center' }}>
-            <img src={dqfLogoWhite} alt="DQF" style={{ height: '28px', opacity: 0.75, filter: 'brightness(0) invert(1)' }} />
-          </div>
           <div style={{
             fontFamily: 'Montserrat, sans-serif',
             fontWeight: 900,
@@ -309,17 +294,22 @@ interface SlideCardProps {
   onGenerateImage: (slideNumber: number, prompt: string, quality: 'fast' | 'high') => void;
 }
 
+// Build a generic image prompt for slides that don't have one defined
+function buildGenericImagePrompt(slide: SlideOutput): string {
+  return `Editorial photography for a Brazilian service brand carousel slide. Style: documentary, natural light, authentic moment. The slide headline is "${slide.headline}". Create a background image that evokes this concept — no text, no overlays, no logos. The image will have a semi-transparent orange (#E8603C) overlay, so use high-contrast composition. Shot on Canon EOS R5, 35mm lens, f/2.8. Professional but human.`;
+}
+
 function SlideCard({ slide, imageUrl, isGenerating, onGenerateImage }: SlideCardProps) {
   const [expanded, setExpanded] = useState(false);
   const slideRef = useRef<HTMLDivElement>(null);
   const [exporting, setExporting] = useState(false);
 
-  // Editable copy state — updates preview in real-time
+  // Editable copy state — live updates preview
   const [editedHeadline, setEditedHeadline] = useState(slide.headline);
   const [editedHighlight, setEditedHighlight] = useState(slide.headlineHighlight ?? '');
   const [editedSubtext, setEditedSubtext] = useState(slide.subtext ?? '');
 
-  // Image instruction — appended to original prompt for regeneration
+  // Image instruction — appended to prompt for regeneration
   const [imageInstruction, setImageInstruction] = useState('');
 
   const editedSlide: SlideOutput = {
@@ -330,12 +320,12 @@ function SlideCard({ slide, imageUrl, isGenerating, onGenerateImage }: SlideCard
   };
 
   const hasImage = !!imageUrl;
-  const hasImagePrompt = slide.needsMedia && slide.mediaType !== 'video' && !!slide.imagePrompt;
+  // ALL slides can generate image — use their own prompt or the generic builder
+  const basePrompt = slide.imagePrompt ?? buildGenericImagePrompt(slide);
 
   const buildImagePrompt = () => {
-    const base = slide.imagePrompt ?? '';
-    if (!imageInstruction.trim()) return base;
-    return `${base}\n\nADJUSTMENT: ${imageInstruction.trim()}`;
+    if (!imageInstruction.trim()) return basePrompt;
+    return `${basePrompt}\n\nADJUSTMENT: ${imageInstruction.trim()}`;
   };
 
   const handleExport = async () => {
@@ -353,183 +343,166 @@ function SlideCard({ slide, imageUrl, isGenerating, onGenerateImage }: SlideCard
     }
   };
 
+  // Quick-adjust buttons modify the headline state
+  const applyLessText = () => {
+    const words = editedHeadline.split(' ');
+    // Keep first ~60% of words, round up to at least 2
+    const keep = Math.max(2, Math.ceil(words.length * 0.6));
+    setEditedHeadline(words.slice(0, keep).join(' '));
+  };
+
+  const applyChangeApproach = () => {
+    const approaches = [
+      (h: string) => `E SE ${h}?`,
+      (h: string) => `${h.split(' ')[0]} QUE NINGUÉM TE CONTOU`,
+      (h: string) => `PARE. ${h}.`,
+      (h: string) => `A VERDADE SOBRE ${h}`,
+    ];
+    // Cycle through approaches based on current text length
+    const idx = editedHeadline.length % approaches.length;
+    const base = slide.headline; // always start from original for approach changes
+    setEditedHeadline(approaches[idx](base));
+  };
 
   return (
-    <div className="rounded-xl border border-border overflow-hidden bg-card">
-      {/* Live preview — uses editedSlide */}
+    <div className="rounded-xl border border-border overflow-hidden bg-card flex flex-col">
+
+      {/* ── Slide preview ── */}
       <div className="p-3">
         <SlidePreview slide={editedSlide} imageUrl={imageUrl} slideRef={slideRef} />
       </div>
 
-      {/* ── Copy editing panel ── */}
-      <div className="px-3 pb-3 space-y-2 border-t border-border pt-3">
-        <p className="text-[10px] font-bold text-muted-foreground tracking-widest uppercase">✏ Ajustar copy</p>
-
-        {/* Headline */}
-        <div>
-          <label className="text-[10px] text-muted-foreground mb-1 block">Headline</label>
-          <textarea
-            value={editedHeadline}
-            onChange={e => setEditedHeadline(e.target.value)}
-            rows={2}
-            className="w-full rounded-md border border-border bg-muted/20 px-2 py-1.5 text-xs text-foreground resize-none focus:outline-none focus:ring-1 focus:ring-primary/40 font-semibold uppercase"
-            placeholder="Headline do slide..."
-          />
-        </div>
-
-        {/* Highlight word */}
-        <div>
-          <label className="text-[10px] text-muted-foreground mb-1 block">Palavra em destaque <span className="text-muted-foreground/50">(laranja)</span></label>
-          <input
-            value={editedHighlight}
-            onChange={e => setEditedHighlight(e.target.value)}
-            className="w-full rounded-md border border-border bg-muted/20 px-2 py-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40"
-            placeholder="Ex: PROBLEMA"
-          />
-        </div>
-
-        {/* Subtext */}
-        {(slide.subtext !== undefined || editedSubtext) && (
-          <div>
-            <label className="text-[10px] text-muted-foreground mb-1 block">Subtexto</label>
-            <textarea
-              value={editedSubtext}
-              onChange={e => setEditedSubtext(e.target.value)}
-              rows={2}
-              className="w-full rounded-md border border-border bg-muted/20 px-2 py-1.5 text-xs text-foreground resize-none focus:outline-none focus:ring-1 focus:ring-primary/40"
-              placeholder="Subtexto opcional..."
-            />
-          </div>
-        )}
-      </div>
-
-      {/* ── Image instruction + action bar ── */}
-      {hasImagePrompt && (
-        <div className="px-3 pb-3 space-y-2 border-t border-border pt-3">
-          <p className="text-[10px] font-bold text-muted-foreground tracking-widest uppercase">🖼 Ajustar imagem</p>
-          <textarea
-            value={imageInstruction}
-            onChange={e => setImageInstruction(e.target.value)}
-            rows={2}
-            className="w-full rounded-md border border-border bg-muted/20 px-2 py-1.5 text-xs text-foreground resize-none focus:outline-none focus:ring-1 focus:ring-blue-500/40"
-            placeholder='Ex: "mais luz natural", "ângulo de baixo", "preto e branco"...'
-          />
-          <div className="flex items-center gap-1.5">
-            {!hasImage ? (
-              <button
-                onClick={() => onGenerateImage(slide.number, buildImagePrompt(), 'fast')}
-                disabled={isGenerating}
-                className={cn(
-                  'flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-all border flex-1 justify-center',
-                  isGenerating
-                    ? 'border-border text-muted-foreground cursor-not-allowed'
-                    : 'border-blue-500/40 text-blue-400 hover:bg-blue-500/10 hover:border-blue-500/60'
-                )}
-              >
-                {isGenerating
-                  ? <span className="h-3 w-3 border border-blue-400/40 border-t-blue-400 rounded-full animate-spin" />
-                  : <Image className="h-3 w-3" />}
-                {isGenerating ? 'Gerando...' : 'Gerar Imagem'}
-              </button>
-            ) : (
-              <button
-                onClick={() => onGenerateImage(slide.number, buildImagePrompt(), 'fast')}
-                disabled={isGenerating}
-                className={cn(
-                  'flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-all border flex-1 justify-center',
-                  isGenerating
-                    ? 'border-border text-muted-foreground cursor-not-allowed'
-                    : 'border-border text-muted-foreground hover:bg-muted/30 hover:text-foreground'
-                )}
-              >
-                {isGenerating
-                  ? <span className="h-3 w-3 border border-muted-foreground/40 border-t-muted-foreground rounded-full animate-spin" />
-                  : <RefreshCw className="h-3 w-3" />}
-                {isGenerating ? 'Trocando...' : imageInstruction.trim() ? 'Aplicar ajuste' : 'Trocar imagem'}
-              </button>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* ── PNG export ── */}
-      <div className="px-3 pb-3 flex items-center">
+      {/* ── Quick actions bar ── */}
+      <div className="px-3 pb-2 flex items-center gap-1.5">
+        <button
+          onClick={applyLessText}
+          className="flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-medium border border-border text-muted-foreground hover:bg-muted/40 hover:text-foreground transition-all"
+          title="Reduzir texto"
+        >
+          <Minimize2 className="h-2.5 w-2.5" />
+          Menos texto
+        </button>
+        <button
+          onClick={applyChangeApproach}
+          className="flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-medium border border-border text-muted-foreground hover:bg-muted/40 hover:text-foreground transition-all"
+          title="Mudar abordagem"
+        >
+          <Shuffle className="h-2.5 w-2.5" />
+          Mudar abordagem
+        </button>
         <button
           onClick={handleExport}
           disabled={exporting}
-          className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold border border-border text-muted-foreground hover:bg-muted/30 hover:text-foreground transition-all ml-auto disabled:opacity-50"
-          title="Exportar lâmina como PNG"
+          className="flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-medium border border-border text-muted-foreground hover:bg-muted/40 hover:text-foreground transition-all ml-auto disabled:opacity-40"
+          title="Baixar PNG"
         >
           {exporting
-            ? <span className="h-3 w-3 border border-muted-foreground/40 border-t-muted-foreground rounded-full animate-spin" />
-            : <Download className="h-3 w-3" />}
-          {exporting ? 'Exportando...' : 'Baixar PNG'}
+            ? <span className="h-2.5 w-2.5 border border-current border-t-transparent rounded-full animate-spin" />
+            : <Download className="h-2.5 w-2.5" />}
+          PNG
         </button>
       </div>
 
-      {/* ── Logic toggle ── */}
+      {/* ── Copy editing ── */}
+      <div className="px-3 pb-3 space-y-2 border-t border-border pt-2.5">
+        <p className="text-[9px] font-bold text-muted-foreground/60 tracking-[0.15em] uppercase">Copy</p>
+        <textarea
+          value={editedHeadline}
+          onChange={e => setEditedHeadline(e.target.value)}
+          rows={2}
+          className="w-full rounded-md border border-border bg-muted/20 px-2 py-1.5 text-xs text-foreground resize-none focus:outline-none focus:ring-1 focus:ring-primary/40 font-bold uppercase tracking-wide"
+          placeholder="Headline..."
+        />
+        <div className="flex gap-1.5">
+          <input
+            value={editedHighlight}
+            onChange={e => setEditedHighlight(e.target.value)}
+            className="flex-1 rounded-md border border-border bg-muted/20 px-2 py-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40"
+            placeholder="Destaque (laranja)"
+          />
+          <input
+            value={editedSubtext}
+            onChange={e => setEditedSubtext(e.target.value)}
+            className="flex-1 rounded-md border border-border bg-muted/20 px-2 py-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40"
+            placeholder="Subtexto"
+          />
+        </div>
+      </div>
+
+      {/* ── Image generation — all slides ── */}
+      <div className="px-3 pb-3 space-y-2 border-t border-border pt-2.5">
+        <p className="text-[9px] font-bold text-muted-foreground/60 tracking-[0.15em] uppercase">Imagem de fundo</p>
+        <textarea
+          value={imageInstruction}
+          onChange={e => setImageInstruction(e.target.value)}
+          rows={2}
+          className="w-full rounded-md border border-border bg-muted/20 px-2 py-1.5 text-xs text-foreground resize-none focus:outline-none focus:ring-1 focus:ring-primary/40"
+          placeholder='Instrução: "luz dourada", "ângulo de baixo", "preto e branco"...'
+        />
+        <button
+          onClick={() => onGenerateImage(slide.number, buildImagePrompt(), 'fast')}
+          disabled={isGenerating}
+          className={cn(
+            'w-full flex items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all border',
+            isGenerating
+              ? 'border-border text-muted-foreground cursor-not-allowed'
+              : hasImage
+                ? 'border-border text-muted-foreground hover:bg-muted/30 hover:text-foreground'
+                : 'border-primary/50 text-primary hover:bg-primary/10'
+          )}
+        >
+          {isGenerating
+            ? <span className="h-3 w-3 border border-current border-t-transparent rounded-full animate-spin" />
+            : hasImage ? <RefreshCw className="h-3 w-3" /> : <Image className="h-3 w-3" />}
+          {isGenerating ? 'Gerando...' : hasImage
+            ? (imageInstruction.trim() ? 'Aplicar ajuste' : 'Trocar imagem')
+            : 'Gerar imagem'}
+        </button>
+      </div>
+
+      {/* ── Logic toggle (collapsed by default) ── */}
       <button
         onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center justify-between px-4 py-2.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/30 transition-colors border-t border-border"
+        className="w-full flex items-center justify-between px-3 py-2 text-[10px] text-muted-foreground/50 hover:text-muted-foreground hover:bg-muted/20 transition-colors border-t border-border/50"
       >
-        <span className="font-medium">→ LÓGICA + MÍDIA</span>
+        <span className="tracking-widest uppercase font-medium">Lógica · Mídia</span>
         {expanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
       </button>
 
       {expanded && (
-        <div className="px-4 py-3 space-y-3 border-t border-border bg-muted/10">
+        <div className="px-3 py-3 space-y-3 border-t border-border/50 bg-muted/5">
           <div>
-            <p className="text-xs font-semibold text-primary mb-1">→ LÓGICA ESTRATÉGICA</p>
+            <p className="text-[9px] font-bold text-primary/70 tracking-widest uppercase mb-1">Lógica estratégica</p>
             <p className="text-xs text-muted-foreground leading-relaxed">{slide.logic}</p>
           </div>
           <div>
-            <p className="text-xs font-semibold text-muted-foreground mb-1">🎨 DIREÇÃO VISUAL</p>
+            <p className="text-[9px] font-bold text-muted-foreground/50 tracking-widest uppercase mb-1">Direção visual</p>
             <p className="text-xs text-muted-foreground leading-relaxed">{slide.visualDirection}</p>
           </div>
-          {!slide.needsMedia && (
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/40" />
-              Sem imagem — impacto tipográfico puro
-            </div>
-          )}
-          {slide.needsMedia && slide.mediaType === 'photo' && slide.imagePrompt && (
+          {(slide.imagePrompt || slide.veoPrompt) && (
             <div>
               <div className="flex items-center justify-between mb-1.5">
-                <div className="flex items-center gap-1.5 text-xs font-semibold text-blue-400">
-                  <ImageIcon className="h-3 w-3" />
-                  PROMPT IMAGEM (original)
-                </div>
-                <CopyButton text={slide.imagePrompt} label="Copiar" />
+                <p className="text-[9px] font-bold text-muted-foreground/50 tracking-widest uppercase">
+                  {slide.mediaType === 'video' ? 'Prompt VEO 3.1' : 'Prompt imagem'}
+                </p>
+                <CopyButton text={slide.imagePrompt ?? slide.veoPrompt ?? ''} label="Copiar" />
               </div>
-              <pre className="text-xs text-muted-foreground leading-relaxed bg-muted/20 p-2.5 rounded-lg overflow-x-auto whitespace-pre-wrap" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                {slide.imagePrompt}
-              </pre>
-            </div>
-          )}
-          {slide.needsMedia && slide.mediaType === 'video' && slide.veoPrompt && (
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <div className="flex items-center gap-1.5 text-xs font-semibold text-purple-400">
-                  <Video className="h-3 w-3" />
-                  PROMPT VEO 3.1
-                </div>
-                <CopyButton text={slide.veoPrompt} label="Copiar" />
-              </div>
-              <pre className="text-xs text-muted-foreground leading-relaxed bg-muted/20 p-2.5 rounded-lg overflow-x-auto whitespace-pre-wrap" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                {slide.veoPrompt}
+              <pre className="text-[10px] text-muted-foreground/70 leading-relaxed bg-muted/20 p-2 rounded-lg overflow-x-auto whitespace-pre-wrap" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                {slide.imagePrompt ?? slide.veoPrompt}
               </pre>
             </div>
           )}
         </div>
       )}
 
-      {/* Hidden ref for PNG export — uses editedSlide */}
+      {/* Hidden full-res ref for PNG export */}
       <div style={{ position: 'absolute', left: '-9999px', top: 0, width: '400px', pointerEvents: 'none' }}>
         <SlidePreview slide={editedSlide} imageUrl={imageUrl} slideRef={slideRef} />
       </div>
     </div>
   );
 }
+
 
 
 // ─── AngleRecommendation ──────────────────────────────────────────────────────
