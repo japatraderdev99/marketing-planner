@@ -16,6 +16,7 @@ import Auth from "./pages/Auth";
 import Criativo from "./pages/Criativo";
 import VideoIA from "./pages/VideoIA";
 import AiCarrosseis from "./pages/AiCarrosseis";
+import Estrategia from "./pages/Estrategia";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -44,6 +45,7 @@ const App = () => (
                       <Route path="/criativo" element={<Criativo />} />
                       <Route path="/ai-carrosseis" element={<AiCarrosseis />} />
                       <Route path="/video-ia" element={<VideoIA />} />
+                      <Route path="/estrategia" element={<Estrategia />} />
                       <Route path="*" element={<NotFound />} />
                     </Routes>
                   </AppLayout>

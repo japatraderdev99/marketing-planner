@@ -12,6 +12,7 @@ import {
   Layers,
   ChevronLeft,
   ChevronRight,
+  Target,
 } from 'lucide-react';
 import {
   Sidebar,
@@ -37,6 +38,8 @@ const navItems = [
   { title: 'Video IA', url: '/video-ia', icon: Clapperboard },
 ];
 
+const strategyItem = { title: 'Estratégia', url: '/estrategia', icon: Target };
+
 export function AppSidebar() {
   const location = useLocation();
   const { state, toggleSidebar } = useSidebar();
@@ -61,8 +64,41 @@ export function AppSidebar() {
       </div>
 
       <SidebarContent className="px-2 py-3">
+        {/* Strategy item — pinned at top, always highlighted */}
         <SidebarGroup>
           <SidebarGroupContent>
+            <SidebarMenu className="mb-2">
+              {(() => {
+                const isActive = location.pathname === strategyItem.url;
+                return (
+                  <SidebarMenuItem>
+                    <SidebarMenuButton asChild isActive={isActive} tooltip={strategyItem.title}>
+                      <Link
+                        to={strategyItem.url}
+                        className={cn(
+                          'group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-bold transition-all duration-200 border',
+                          isActive
+                            ? 'bg-primary/15 text-primary shadow-sm border-primary/30'
+                            : 'border-primary/20 bg-primary/5 text-primary/80 hover:bg-primary/10 hover:text-primary'
+                        )}
+                      >
+                        <strategyItem.icon className="h-4 w-4 shrink-0 text-primary" />
+                        {!collapsed && <span className="truncate">{strategyItem.title}</span>}
+                        {!collapsed && (
+                          <div className="ml-auto h-1.5 w-1.5 rounded-full bg-primary/60" />
+                        )}
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                );
+              })()}
+            </SidebarMenu>
+
+            {/* Separator */}
+            {!collapsed && (
+              <div className="mx-1 mb-2 h-px bg-border/50" />
+            )}
+
             <SidebarMenu className="gap-1">
               {navItems.map((item) => {
                 const isActive = location.pathname === item.url ||

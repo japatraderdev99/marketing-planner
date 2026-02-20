@@ -15,6 +15,7 @@ const pageTitles: Record<string, { title: string; subtitle: string }> = {
   '/campanhas': { title: 'Gestão de Campanhas', subtitle: 'CRUD completo de campanhas' },
   '/criativo': { title: 'AI Criativo', subtitle: 'Gere roteiros de carrossel com IA' },
   '/ai-carrosseis': { title: 'AI Carrosséis', subtitle: 'Gere carrosséis com arte visual, copy e prompts por lâmina' },
+  '/estrategia': { title: 'Playbook Estratégico', subtitle: 'Diretriz de marca que norteia todas as criações e comunicações' },
   '/video-ia': { title: 'Video IA — Higgsfield', subtitle: 'Workflow de diretor para vídeos com IA' },
 };
 
