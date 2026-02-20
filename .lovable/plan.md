@@ -1,274 +1,191 @@
 
-# Nova Aba: AI Carrosséis — Output Visual HTML por Lâmina
+# AI Carrosséis — Geração de Imagem por Lâmina + Export PNG
 
-## Visão do Produto
+## O Problema Identificado na Screenshot
 
-O objetivo é transformar a aba "AI Criativo" (atual) em uma ferramenta completa de geração de carrosséis onde o output **não é apenas texto**, mas sim um **artefato HTML visual interativo** — cada lâmina renderizada com tipografia real, paleta DQEF, hierarquia de texto e indicações de imagem/vídeo.
+A tela atual mostra que os slides com `needsMedia: true` renderizam um placeholder escuro com ícone no topo da lâmina, criando um overlay que atrapalha a legibilidade do texto. O objetivo é:
 
-Inspirado diretamente nos HTMLs enviados (Roboto Condensed, JetBrains Mono, dark background `#0A0A0A`, laranja `#FF8A00`, estrutura editorial), o output deve se parecer com o que Claude Artifacts gerou: lâminas prontas para recortar, testar e copiar.
+1. **Gerar a imagem de fundo** via IA usando o `imagePrompt` já produzido pelo edge function
+2. **Exibir como background real** da lâmina, com o texto DQEF sobreposto
+3. **Exportar cada lâmina como PNG** em alta resolução
 
 ---
 
-## O Que Será Criado
+## Tecnologias Confirmadas na Pesquisa
 
-### 1. Nova Página: `/ai-carrosseis`
+### Geração de Imagem
+A Lovable AI Gateway suporta nativamente:
+- `google/gemini-2.5-flash-image` — mais rápido (bom para preview)
+- `google/gemini-3-pro-image-preview` — maior qualidade
 
-Uma experiência em duas colunas:
-- **Esquerda**: Briefing estratégico (com opção de deixar em branco para a IA decidir)
-- **Direita**: Output visual com as lâminas renderizadas em HTML
+O retorno é um `data:image/png;base64,...` que pode ser usado diretamente como `background-image` no CSS.
 
-### 2. Novo Edge Function: `generate-carousel-visual`
-
-Diferente do `generate-carousel` existente, este novo edge function retorna um schema muito mais rico:
-
-```typescript
-interface CarouselOutput {
-  title: string;
-  angle: string;               // ângulo escolhido pela IA
-  angleRationale: string;      // por que esse ângulo agora
-  targetProfile: string;
-  channel: string;
-  slides: SlideOutput[];
-  caption: string;
-  bestTime: string;
-  viralLogic: string;
-  designNotes: string;         // notas gerais de design
-}
-
-interface SlideOutput {
-  number: number;
-  type: 'hook' | 'setup' | 'data' | 'contrast' | 'validation' | 'cta';
-  headline: string;            // texto principal (grande, impacto)
-  headlineHighlight?: string;  // palavra em laranja dentro do headline
-  subtext?: string;            // texto menor de suporte
-  logic: string;               // "→ LÓGICA:" — o raciocínio da IA
-  visualDirection: string;     // o que colocar visualmente
-  needsMedia: boolean;         // precisa de foto/vídeo?
-  mediaType?: 'photo' | 'video';
-  mediaDescription?: string;   // descrição da imagem/vídeo
-  veoPrompt?: string;          // prompt VEO 3.1 se for vídeo
-  imagePrompt?: string;        // prompt Flux/Gemini se for imagem
-  bgStyle: 'dark' | 'orange' | 'dark-red' | 'dark-green';
-  layout: 'text-only' | 'text-photo-split' | 'number-dominant' | 'cta-clean';
-}
+### Export PNG por Slide
+A biblioteca **`html-to-image`** (npm, MIT License) converte qualquer `div` React em PNG usando SVG + Canvas:
+```ts
+import { toPng } from 'html-to-image';
+toPng(ref.current, { pixelRatio: 2 }) // 2x para alta resolução
+  .then(dataUrl => { /* download */ });
 ```
-
-### 3. Renderização Visual das Lâminas em React
-
-Cada slide será renderizado como um componente React com estilos inline, imitando a estética dos HTMLs de referência:
-
-- **Fundo**: `#0A0A0A` (padrão), `#0A2E1A` (verde para resolução), `#1A0000` (vermelho escuro para tensão)
-- **Tipografia**: `Bebas Neue` (disponível via Google Fonts via CSS) para headlines; sans-serif regular para subtexto
-- **Laranja**: `#FF8A00` para highlights, não como cor dominante
-- **Proporção**: 4:5 (mobile-first, Instagram Feed) renderizado em miniatura responsiva
+É superior ao `html2canvas` para este caso porque lida melhor com fontes customizadas e CSS moderno.
 
 ---
 
 ## Arquitetura das Mudanças
 
-### Arquivos Novos
+```text
+NOVO: supabase/functions/generate-slide-image/index.ts
+   ↳ Recebe { imagePrompt: string, quality: 'fast' | 'high' }
+   ↳ Chama gemini-2.5-flash-image (fast) ou gemini-3-pro-image-preview (high)
+   ↳ Retorna { imageUrl: "data:image/png;base64,..." }
 
-```
-src/pages/AiCarrosseis.tsx          ← nova página principal
-supabase/functions/generate-carousel-visual/index.ts   ← novo edge function
-```
-
-### Arquivos Modificados
-
-```
-src/App.tsx                         ← adicionar rota /ai-carrosseis
-src/components/AppSidebar.tsx       ← adicionar item no nav
-```
-
----
-
-## Layout Detalhado da Página
-
-### Cabeçalho
-```
-[ícone Layers] AI Carrosséis
-Gere carrosséis completos com arte visual, copy e prompts de imagem por lâmina
-```
-
-### Coluna Esquerda — Briefing (colapsável)
-
-**Seção: Contexto Estratégico** (opcional — se vazio, a IA decide)
-- Textarea: "Descreva a ideia, ângulo ou deixe em branco para a IA criar do zero"
-- Ângulo: 5 botões (Raiva / Dinheiro / Orgulho / Urgência / Alívio) + opção "IA Decide"
-- Persona: grid igual ao Criativo atual
-- Canal: chips (Instagram Feed / Stories / TikTok / LinkedIn)
-
-**Seção: Estilo de Output**
-- Formato: Tipográfico / Visual+Foto / Dados Dominantes
-- Tom: Peer-to-peer / Editorial / Direto ao ponto
-
-**Botão**: "Gerar Carrossel" — tamanho grande, laranja
-
-### Coluna Direita — Output Visual
-
-#### Header do Resultado
-```
-[TÍTULO DO CARROSSEL em Bebas Neue]
-ÂNGULO: 🏆 ORGULHO · PERFIL: Piscineiro · CANAL: Instagram Feed
-→ LÓGICA VIRAL: por que vai ser salvo/compartilhado
-```
-
-#### Grid de Lâminas (cada lâmina como card visual)
-
-Cada lâmina será renderizada como um **mini-slide real**:
-
-```
-┌─────────────────────────────┐
-│ 01 · GANCHO                 │  ← número + tipo em laranja
-│                             │
-│   Tu é bom no               │  ← headline Bebas Neue, branco
-│   que faz.                  │     grande
-│   O problema                │
-│   não é TU.                 │  ← highlight em laranja
-│                             │
-│ [Fundo preto, só texto]     │
-└─────────────────────────────┘
-│ → LÓGICA: texto explicativo │  ← seção colapsável abaixo da lâmina
-│ 📷 VISUAL: sem imagem       │
-└─────────────────────────────┘
-```
-
-Para slides com `needsMedia: true`:
-```
-┌─────────────────────────────┐
-│ 02 · SETUP                  │
-│                             │
-│ [Área de imagem]            │  ← placeholder visual
-│                             │
-│ 15 anos de profissão.       │
-│ Ninguém te ensinou          │
-│ a APARECER.                 │
-└─────────────────────────────┘
-│ → LÓGICA: ...               │
-│ 📸 PROMPT IMAGEM:           │
-│   [caixa copiável do        │
-│    prompt em inglês]        │
-│ 🎬 PROMPT VEO 3.1:         │  ← se for vídeo
-│   [caixa copiável]          │
-└─────────────────────────────┘
-```
-
-#### Footer do Resultado
-```
-[Caption para copiar]          [Melhor horário]
-[Copiar tudo]  [Exportar HTML]
-```
-
-#### Botão "Exportar HTML"
-Gera um arquivo HTML standalone no estilo dos documentos de referência enviados pelo usuário — com todas as lâminas formatadas, tipografia Google Fonts, cores DQEF, pronto para abrir no browser e recortar.
-
----
-
-## Lógica do Edge Function `generate-carousel-visual`
-
-### System Prompt (em português, estruturado)
-
-O system prompt injeta:
-1. **DNA DQEF**: posicionamento, comissão 10-15% vs 27%, PIX na hora, Florianópolis, verão
-2. **Contexto de data**: Fevereiro 2026, pré-verão Floripa
-3. **Diretrizes de tom**: peer-to-peer, números reais, frases curtas
-4. **Regras de design por tipo de slide**:
-   - `hook`: só texto, impacto máximo, sem imagem
-   - `data`: número dominante em tipografia gigante (ex: "27%")
-   - `contrast`: dois blocos visuais (problema vs solução)
-   - `validation`: texto clean, emocional
-   - `cta`: logo + ação clara + link na bio
-5. **Instruções de imagem**: descrever a foto em inglês para Flux 1.1 Dev Pro ou Gemini Image
-6. **Instruções de vídeo**: quando um slide for melhor como vídeo, gerar prompt VEO 3.1 com gramática nativa
-
-### Lógica de IA Autônoma
-
-Se o usuário deixar o briefing em branco, a IA:
-1. Analisa o contexto (Fevereiro 2026, Floripa, pré-verão)
-2. Escolhe o ângulo mais estratégico para o momento
-3. Justifica a escolha no campo `angleRationale`
-4. Gera o carrossel completo
-
-Isso replica exatamente o comportamento do Perplexity mostrado pelo usuário.
-
----
-
-## Componentes React
-
-### `SlidePreview` — Renderização Visual
-Componente que recebe um `SlideOutput` e renderiza:
-- Background color baseado em `bgStyle`
-- Headline com `Bebas Neue` via `@import` no CSS
-- Highlight da palavra-chave em `#FF8A00`
-- Número do slide + tipo em laranja pequeno
-- Watermark DQEF no canto inferior direito
-
-### `SlideMediaCard` — Prompts de Mídia
-Exibido abaixo de cada slide quando `needsMedia: true`:
-- Tipo de mídia (foto/vídeo)
-- Prompt em inglês em caixa copiável (estilo `JetBrains Mono`)
-- Botão copiar individual
-
-### `CarouselExporter` — Exportação HTML
-Função que serializa todos os slides num HTML standalone usando template string, com estilos inline, Google Fonts, e identidade visual DQEF. Download via `Blob` + `URL.createObjectURL`.
-
-### `AngleRecommendation` — Card de Recomendação
-Quando a IA escolheu o ângulo autonomamente, exibe um card no topo do resultado:
-```
-RECOMENDAÇÃO ESTRATÉGICA · FEVEREIRO 2026
-ÂNGULO: 💸 DINHEIRO + ⏰ URGÊNCIA
-Por que: [raciocínio da IA]
-Alternativas consideradas: RAIVA · ORGULHO · ALÍVIO
+MODIFICADO: src/pages/AiCarrosseis.tsx
+   ↳ Instala html-to-image (nova dependência npm)
+   ↳ Estado por lâmina: slideImages: Record<number, string>
+   ↳ Estado de loading por lâmina: generatingImage: Record<number, boolean>
+   ↳ SlidePreview: aceita imageUrl? prop → renderiza como background-image com gradient overlay
+   ↳ SlideCard: adiciona botões Gerar Imagem / Trocar / Baixar PNG
+   ↳ Cada slide tem um ref para o elemento DOM → usado pelo toPng()
 ```
 
 ---
 
 ## Detalhes Técnicos
 
-### Tipografia nas Lâminas
+### 1. Novo Edge Function: `generate-slide-image`
 
-Para renderizar `Bebas Neue` dentro dos slides React sem instalar fontes, usamos um `<style>` tag injetado:
-```html
-@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Roboto+Condensed:wght@900&display=swap');
+Endpoint simples e focado. Recebe o `imagePrompt` da lâmina e retorna base64:
+
+```ts
+// Entrada
+{ imagePrompt: string, quality: 'fast' | 'high' }
+
+// Lógica
+const model = quality === 'high'
+  ? 'google/gemini-3-pro-image-preview'
+  : 'google/gemini-2.5-flash-image';
+
+// Resposta AI Gateway
+const imageUrl = response.choices[0].message.images[0].image_url.url;
+// → "data:image/png;base64,..."
+
+// Saída
+{ imageUrl: string }
 ```
 
-### Exportação HTML
+### 2. Overlay da Imagem na Lâmina
 
-O HTML exportado terá o mesmo estilo dos arquivos de referência enviados — topbar laranja, seções por slide, prompt boxes com `JetBrains Mono`, cores DQEF, pronto para screenshots e recorte.
+Quando `imageUrl` existe, o `SlidePreview` renderiza:
+```
+[Div laranja #E8603C — fundo]
+  └── [background-image: url(imageUrl), object-fit: cover, opacity: 0.55]
+  └── [gradient: linear-gradient(to top, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0.1) 50%)]
+  └── [Texto DQEF — z-index acima, sem mudança]
+```
 
-### JSON Parsing Robusto
+O fundo laranja permanece visível nos slides sem imagem — a identidade da marca não quebra. Quando há imagem, ela fica como background com opacity controlada para que o texto branco Montserrat 900 continue legível.
 
-O edge function usará o mesmo `extractJSON()` helper já implementado em `generate-video-assets` para garantir que respostas com texto conversacional não quebrem o parse.
+O usuário pode ajustar manualmente clicando "Trocar" para regenerar apenas aquela lâmina.
 
----
+### 3. UX dos Botões por Lâmina
 
-## Integração com a Página Existente
-
-A página `Criativo.tsx` atual **não será alterada** — continua em `/criativo`. A nova página vai para `/ai-carrosseis` com entrada no sidebar como:
+Cada `SlideCard` ganha uma barra de ações abaixo do slide:
 
 ```
-[ícone Layers] AI Carrosséis
+┌─────────────────────────────────────┐
+│ [SLIDE PREVIEW com imagem de fundo] │
+└─────────────────────────────────────┘
+│ [🖼 Gerar Imagem ↓]  [Trocar]  [⬇ PNG] │
+└─────────────────────────────────────────┘
 ```
+
+- **"Gerar Imagem"** — aparece quando `needsMedia: true` e ainda não há imagem gerada. Mostra spinner individual por slide enquanto gera.
+- **"Trocar"** (com ícone de refresh) — aparece quando imagem já foi gerada. Envia o mesmo prompt e substitui a imagem.
+- **"⬇ PNG"** — disponível para TODOS os slides (com ou sem imagem). Usa `html-to-image` com `pixelRatio: 2` para gerar PNG em alta resolução (equivalente a ~800x1000px para um slide 4:5).
+
+### 4. Fluxo de Geração de Imagem (UX)
+
+```
+Usuário clica "Gerar Imagem" no Slide 2
+    ↓
+Spinner aparece no botão do Slide 2 (só nele)
+    ↓
+supabase.functions.invoke('generate-slide-image', { imagePrompt, quality: 'fast' })
+    ↓
+base64 recebido → slideImages[2] = "data:image/png;base64,..."
+    ↓
+SlidePreview re-renderiza com a imagem de fundo real
+    ↓
+Botão muda para "Trocar" + ícone refresh
+```
+
+### 5. Export PNG por Lâmina
+
+```ts
+// Cada SlidePreview tem um ref
+const slideRef = useRef<HTMLDivElement>(null);
+
+// Ao clicar "⬇ PNG"
+const handleExportPng = async () => {
+  if (!slideRef.current) return;
+  const dataUrl = await toPng(slideRef.current, {
+    pixelRatio: 2,          // 2x resolução
+    cacheBust: true,
+  });
+  const link = document.createElement('a');
+  link.download = `dqef-slide-${slide.number}.png`;
+  link.href = dataUrl;
+  link.click();
+};
+```
+
+O PNG gerado reflete exatamente o que está na tela — com ou sem imagem de fundo, com o texto Montserrat 900 e o watermark DQEF.
 
 ---
 
 ## O Que Não Muda
 
-- Página `Criativo.tsx` e rota `/criativo`
-- Edge function `generate-carousel`
-- Sidebar: apenas adiciona um novo item
-- Design system geral do app (dark mode, laranja primário)
-- Autenticação e proteção de rotas
+- O fluxo de geração do carrossel (briefing + edge function principal)
+- A identidade visual laranja #E8603C nos slides sem imagem
+- O botão "Exportar HTML" (mantido para exportar todos os slides com prompts)
+- A tipografia Montserrat 900 e o watermark DQEF
+- O sistema de copy dos prompts imagePrompt / veoPrompt
 
 ---
 
-## Resultado Final Esperado
+## Arquivos Modificados / Criados
 
-1. **Usuário abre** `/ai-carrosseis`
-2. **Pode deixar em branco** ou preencher o briefing
-3. **Clica "Gerar"** — IA analisa o contexto, escolhe ângulo, justifica
-4. **Vê o carrossel renderizado** — cada lâmina como arte real com fundo, tipografia, highlights em laranja
-5. **Para slides com foto**: vê o prompt em inglês para Flux 1.1 Dev Pro em caixa copiável
-6. **Para slides com vídeo**: vê o prompt VEO 3.1 com gramática nativa
-7. **Clica "Exportar HTML"** — baixa o documento completo no estilo dos HTMLs de referência, pronto para abrir no browser e usar
+| Arquivo | Ação |
+|---|---|
+| `supabase/functions/generate-slide-image/index.ts` | NOVO — edge function de geração de imagem |
+| `src/pages/AiCarrosseis.tsx` | MODIFICADO — estado de imagens, botões, SlidePreview com background, export PNG |
+| `package.json` | MODIFICADO — adicionar `html-to-image` |
 
+---
+
+## Exemplo Visual do Resultado Esperado
+
+```
+Slide sem imagem gerada:          Slide com imagem gerada:
+┌──────────────────────┐          ┌──────────────────────┐
+│ 01 · GANCHO          │          │ 02 · SETUP           │
+│                      │          │ [foto real de mãos   │
+│                      │          │  com ferramentas,    │
+│  TU É BOM NO         │          │  escurecida com      │
+│  QUE FAZI.           │          │  gradient]           │
+│  O PROBLEMA          │          │  15 ANOS DE          │
+│  NÃO É TU.           │          │  PROFISSÃO.          │
+│               DQEF   │          │  NINGUÉM TE          │
+└──────────────────────┘          │  ENSINOU.     DQEF   │
+[Gerar Imagem] [⬇ PNG]           └──────────────────────┘
+                                  [Trocar 🔄] [⬇ PNG]
+```
+
+---
+
+## Impacto Esperado
+
+- Slides com `needsMedia: true` passam a ter imagem real gerada via IA em vez de placeholder
+- Cada lâmina pode ser exportada como PNG pronto para uso em templates ou Canva
+- O fluxo "Gerar → Trocar se não gostar → Baixar PNG" resolve a dor do designer de forma direta
+- A combinação texto branco Montserrat 900 + imagem com opacity + fundo laranja cria a identidade DQEF mesmo com foto
