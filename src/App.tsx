@@ -13,6 +13,7 @@ import Biblioteca from "./pages/Biblioteca";
 import Analytics from "./pages/Analytics";
 import Campanhas from "./pages/Campanhas";
 import Auth from "./pages/Auth";
+import Criativo from "./pages/Criativo";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -38,6 +39,7 @@ const App = () => (
                       <Route path="/biblioteca" element={<Biblioteca />} />
                       <Route path="/analytics" element={<Analytics />} />
                       <Route path="/campanhas" element={<Campanhas />} />
+                      <Route path="/criativo" element={<Criativo />} />
                       <Route path="*" element={<NotFound />} />
                     </Routes>
                   </AppLayout>

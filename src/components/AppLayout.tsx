@@ -13,6 +13,7 @@ const pageTitles: Record<string, { title: string; subtitle: string }> = {
   '/biblioteca': { title: 'Biblioteca de Copies', subtitle: 'Estratégias e conteúdos prontos' },
   '/analytics': { title: 'Analytics', subtitle: 'Performance e métricas' },
   '/campanhas': { title: 'Gestão de Campanhas', subtitle: 'CRUD completo de campanhas' },
+  '/criativo': { title: 'AI Criativo', subtitle: 'Gere roteiros de carrossel com IA' },
 };
 
 export function AppLayout({ children }: { children: ReactNode }) {
