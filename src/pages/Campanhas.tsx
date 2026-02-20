@@ -1,7 +1,24 @@
 import { useState, useEffect } from 'react';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
-import { initialCampaigns, Campaign, CampaignStatus, Channel, ContentFormat, Priority, Funnel, KanbanStatus } from '@/data/seedData';
+import { initialCampaigns, Campaign, CampaignStatus, Channel, ContentFormat, Priority, Funnel, KanbanStatus, ContentObjective } from '@/data/seedData';
 import { initialContents, ContentItem } from '@/data/seedData';
+
+// Local form type that uses simpler values for the UI
+interface CampaignForm {
+  name: string;
+  objective: string;
+  channel: Channel;
+  format: ContentFormat;
+  targetAudience: string;
+  budget: string;
+  startDate: string;
+  endDate: string;
+  priority: Priority;
+  status: CampaignStatus;
+  funnel: Funnel;
+  responsible: string;
+  description: string;
+}
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
@@ -78,13 +95,12 @@ const ANGLE_EMOJI: Record<string, string> = {
   Orgulho: '🏆', Dinheiro: '💸', Urgência: '⏰', Raiva: '🔴', Alívio: '💚',
 };
 
-const EMPTY_FORM = (): Partial<Campaign> => ({
-  name: '', objective: '', channel: 'Instagram' as Channel,
-  format: 'Carrossel' as ContentFormat, targetAudience: '', budget: '',
+const EMPTY_FORM = (): CampaignForm => ({
+  name: '', objective: '', channel: 'Instagram',
+  format: 'Carrossel', targetAudience: '', budget: '',
   startDate: new Date().toISOString().split('T')[0], endDate: '',
-  priority: 'Alta' as Priority, status: 'Rascunho' as CampaignStatus,
-  funnel: 'Topo' as Funnel, responsible: '', description: '',
-  kpis: [], channels: [], formats: [], frames: [],
+  priority: 'Alta', status: 'Rascunho',
+  funnel: 'Topo', responsible: '', description: '',
 });
 
 // ─── Strategy Pill (shows meta-field context) ─────────────────────────────────
@@ -140,8 +156,7 @@ function CampaignCard({
 
       <div className="flex flex-wrap gap-1.5 mb-3">
         <span className={cn('rounded-full border px-2 py-0.5 text-[10px] font-medium', PRIORITY_COLORS[campaign.priority])}>{campaign.priority}</span>
-        {campaign.channel && <span className="rounded-full border border-border bg-muted/30 px-2 py-0.5 text-[10px] text-muted-foreground">{campaign.channel}</span>}
-        {campaign.format && <span className="rounded-full border border-border bg-muted/30 px-2 py-0.5 text-[10px] text-muted-foreground">{campaign.format}</span>}
+        {campaign.channel?.length > 0 && <span className="rounded-full border border-border bg-muted/30 px-2 py-0.5 text-[10px] text-muted-foreground">{campaign.channel[0]}</span>}
         {campaign.funnel && <span className="rounded-full border border-border bg-muted/30 px-2 py-0.5 text-[10px] text-muted-foreground">{campaign.funnel}</span>}
       </div>
 
@@ -182,7 +197,7 @@ export default function Campanhas() {
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
-  const [form, setForm] = useState<Partial<Campaign>>(EMPTY_FORM());
+  const [form, setForm] = useState<CampaignForm>(EMPTY_FORM());
 
   // AI state
   const [generating, setGenerating] = useState(false);
@@ -225,7 +240,13 @@ export default function Campanhas() {
     setEditingId(c.id);
     setAiPlan(null);
     setExtraInstructions('');
-    setForm({ ...c });
+    setForm({
+      name: c.name, objective: c.objective || '', channel: c.channel?.[0] || 'Instagram',
+      format: 'Carrossel', targetAudience: c.audience || '',
+      budget: String(c.budget || ''), startDate: c.startDate || '', endDate: c.endDate || '',
+      priority: c.priority, status: c.status, funnel: c.funnel || 'Topo',
+      responsible: c.responsible || '', description: c.description || '',
+    });
     setShowAiPanel(false);
     setShowModal(true);
   };
@@ -240,23 +261,31 @@ export default function Campanhas() {
       toast({ title: 'Nome obrigatório', variant: 'destructive' });
       return;
     }
+    const ch: Channel = form.channel;
     if (editingId) {
-      setCampaigns(prev => prev.map(c => c.id === editingId ? { ...c, ...form } as Campaign : c));
+      setCampaigns(prev => prev.map(c => c.id === editingId ? {
+        ...c,
+        name: form.name, objective: form.objective,
+        channel: [ch], budget: Number(form.budget) || 0,
+        startDate: form.startDate, endDate: form.endDate,
+        priority: form.priority, status: form.status,
+        funnel: form.funnel, responsible: form.responsible,
+        description: form.description, audience: form.targetAudience,
+      } : c));
       toast({ title: 'Campanha atualizada ✅' });
     } else {
       const newCampaign: Campaign = {
         id: `camp-${Date.now()}`,
-        name: form.name!, objective: form.objective || '',
-        channel: form.channel || 'Instagram',
-        format: form.format || 'Carrossel',
-        targetAudience: form.targetAudience || '',
-        budget: form.budget || '', startDate: form.startDate || '',
-        endDate: form.endDate || '', priority: form.priority || 'Alta',
-        status: form.status || 'Rascunho', funnel: form.funnel || 'Topo',
-        responsible: form.responsible || 'Time Marketing',
-        description: form.description || '',
-        kpis: [], channels: [form.channel || 'Instagram'],
-        formats: [form.format || 'Carrossel'], frames: [],
+        name: form.name, objective: form.objective,
+        channel: [ch], kanbanStatus: 'ideia',
+        category: 'Awareness', avatar: (form.responsible || 'TM').split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2) || 'TM',
+        budget: Number(form.budget) || 0,
+        startDate: form.startDate, endDate: form.endDate,
+        priority: form.priority, status: form.status,
+        funnel: form.funnel, responsible: form.responsible,
+        description: form.description, audience: form.targetAudience,
+        subtasks: [], links: [],
+        history: [{ date: new Date().toISOString(), action: 'Campanha criada', user: form.responsible || 'CMO' }],
       };
       setCampaigns(prev => [...prev, newCampaign]);
       toast({ title: 'Campanha criada ✅' });
@@ -295,25 +324,30 @@ export default function Campanhas() {
     if (!aiPlan) return;
 
     const startMs = form.startDate ? new Date(form.startDate + 'T12:00:00').getTime() : Date.now();
+    const ch: Channel = form.channel;
 
     // First save the campaign
     const savedId = editingId || `camp-${Date.now()}`;
-    const campaignName = form.name!;
+    const campaignName = form.name;
     if (editingId) {
-      setCampaigns(prev => prev.map(c => c.id === editingId ? { ...c, ...form, description: aiPlan.campaignSummary } as Campaign : c));
+      setCampaigns(prev => prev.map(c => c.id === editingId ? {
+        ...c, name: form.name, objective: form.objective, channel: [ch],
+        budget: Number(form.budget) || 0, description: aiPlan.campaignSummary,
+        audience: form.targetAudience, status: 'Aprovada' as CampaignStatus,
+      } : c));
     } else {
       const newC: Campaign = {
         id: savedId, name: campaignName,
         objective: form.objective || aiPlan.keyMessage,
-        channel: form.channel || 'Instagram', format: form.format || 'Carrossel',
-        targetAudience: form.targetAudience || '', budget: form.budget || '',
-        startDate: form.startDate || '', endDate: form.endDate || '',
-        priority: form.priority || 'Alta', status: 'Aprovada',
-        funnel: form.funnel || 'Topo',
-        responsible: form.responsible || 'Time Marketing',
-        description: aiPlan.campaignSummary,
-        kpis: [], channels: [form.channel || 'Instagram'],
-        formats: [form.format || 'Carrossel'], frames: [],
+        channel: [ch], kanbanStatus: 'ideia', category: 'Awareness',
+        avatar: (form.responsible || 'TM').split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2) || 'TM',
+        budget: Number(form.budget) || 0,
+        startDate: form.startDate, endDate: form.endDate,
+        priority: form.priority, status: 'Aprovada',
+        funnel: form.funnel, responsible: form.responsible,
+        description: aiPlan.campaignSummary, audience: form.targetAudience,
+        subtasks: [], links: [],
+        history: [{ date: new Date().toISOString(), action: 'Campanha criada pela IA', user: form.responsible || 'CMO' }],
       };
       setCampaigns(prev => [...prev, newC]);
     }
@@ -323,15 +357,18 @@ export default function Campanhas() {
       id: `camp-${Date.now()}-k${i}`,
       name: `[${campaignName}] ${t.title}`,
       objective: t.description,
-      channel: t.channel, format: t.format,
-      targetAudience: '', budget: '',
+      channel: [t.channel], kanbanStatus: t.status,
+      category: 'Awareness' as ContentObjective,
+      avatar: 'TM',
+      budget: 0,
       startDate: new Date(startMs + t.daysFromStart * 86400000).toISOString().split('T')[0],
       endDate: '', priority: t.priority,
-      status: t.status as CampaignStatus,
-      funnel: form.funnel || 'Topo',
+      status: 'Rascunho' as CampaignStatus,
+      funnel: form.funnel,
       responsible: form.responsible || 'Time Marketing',
-      description: t.description,
-      kpis: [], channels: [t.channel], formats: [t.format], frames: [],
+      description: t.description, audience: '',
+      subtasks: [], links: [],
+      history: [],
     }));
     setKanbanCampaigns(prev => [...prev, ...kanbanItems]);
 
@@ -775,9 +812,8 @@ export default function Campanhas() {
                   <p className="text-xs text-muted-foreground leading-relaxed border-t border-border pt-3">{detailCampaign.description}</p>
                 )}
                 <div className="grid grid-cols-2 gap-3 text-xs">
-                  {detailCampaign.channel && <div><p className="text-muted-foreground/60 mb-0.5">Canal</p><p className="font-medium">{detailCampaign.channel}</p></div>}
-                  {detailCampaign.format && <div><p className="text-muted-foreground/60 mb-0.5">Formato</p><p className="font-medium">{detailCampaign.format}</p></div>}
-                  {detailCampaign.budget && <div><p className="text-muted-foreground/60 mb-0.5">Orçamento</p><p className="font-medium">R$ {detailCampaign.budget}</p></div>}
+                  {detailCampaign.channel?.length > 0 && <div><p className="text-muted-foreground/60 mb-0.5">Canal</p><p className="font-medium">{detailCampaign.channel.join(', ')}</p></div>}
+                  {detailCampaign.budget > 0 && <div><p className="text-muted-foreground/60 mb-0.5">Orçamento</p><p className="font-medium">R$ {detailCampaign.budget}</p></div>}
                   {detailCampaign.responsible && <div><p className="text-muted-foreground/60 mb-0.5">Responsável</p><p className="font-medium">{detailCampaign.responsible}</p></div>}
                   {detailCampaign.startDate && <div><p className="text-muted-foreground/60 mb-0.5">Início</p><p className="font-medium">{new Date(detailCampaign.startDate + 'T12:00:00').toLocaleDateString('pt-BR')}</p></div>}
                   {detailCampaign.endDate && <div><p className="text-muted-foreground/60 mb-0.5">Término</p><p className="font-medium">{new Date(detailCampaign.endDate + 'T12:00:00').toLocaleDateString('pt-BR')}</p></div>}
