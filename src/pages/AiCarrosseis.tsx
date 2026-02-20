@@ -307,82 +307,167 @@ interface SlideCardProps {
   imageUrl?: string;
   isGenerating?: boolean;
   onGenerateImage: (slideNumber: number, prompt: string, quality: 'fast' | 'high') => void;
-  onExportPng: (slideNumber: number) => void;
 }
 
-function SlideCard({ slide, imageUrl, isGenerating, onGenerateImage, onExportPng }: SlideCardProps) {
+function SlideCard({ slide, imageUrl, isGenerating, onGenerateImage }: SlideCardProps) {
   const [expanded, setExpanded] = useState(false);
   const slideRef = useRef<HTMLDivElement>(null);
+  const [exporting, setExporting] = useState(false);
 
-  // Expose ref via callback for parent to access
-  const handleExport = () => onExportPng(slide.number);
+  // Editable copy state — updates preview in real-time
+  const [editedHeadline, setEditedHeadline] = useState(slide.headline);
+  const [editedHighlight, setEditedHighlight] = useState(slide.headlineHighlight ?? '');
+  const [editedSubtext, setEditedSubtext] = useState(slide.subtext ?? '');
+
+  // Image instruction — appended to original prompt for regeneration
+  const [imageInstruction, setImageInstruction] = useState('');
+
+  const editedSlide: SlideOutput = {
+    ...slide,
+    headline: editedHeadline,
+    headlineHighlight: editedHighlight || undefined,
+    subtext: editedSubtext || undefined,
+  };
 
   const hasImage = !!imageUrl;
   const hasImagePrompt = slide.needsMedia && slide.mediaType !== 'video' && !!slide.imagePrompt;
 
+  const buildImagePrompt = () => {
+    const base = slide.imagePrompt ?? '';
+    if (!imageInstruction.trim()) return base;
+    return `${base}\n\nADJUSTMENT: ${imageInstruction.trim()}`;
+  };
+
+  const handleExport = async () => {
+    const el = slideRef.current;
+    if (!el) return;
+    setExporting(true);
+    try {
+      const dataUrl = await toPng(el, { pixelRatio: 2, cacheBust: true, style: { borderRadius: '0' } });
+      const link = document.createElement('a');
+      link.download = `dqef-slide-${String(slide.number).padStart(2, '0')}.png`;
+      link.href = dataUrl;
+      link.click();
+    } finally {
+      setExporting(false);
+    }
+  };
+
+
   return (
     <div className="rounded-xl border border-border overflow-hidden bg-card">
+      {/* Live preview — uses editedSlide */}
       <div className="p-3">
-        <SlidePreview slide={slide} imageUrl={imageUrl} slideRef={slideRef} />
+        <SlidePreview slide={editedSlide} imageUrl={imageUrl} slideRef={slideRef} />
       </div>
 
-      {/* Action bar */}
-      <div className="px-3 pb-3 flex items-center gap-1.5 flex-wrap">
-        {/* Generate / Retake image button — only for photo slides */}
-        {hasImagePrompt && (
-          <>
+      {/* ── Copy editing panel ── */}
+      <div className="px-3 pb-3 space-y-2 border-t border-border pt-3">
+        <p className="text-[10px] font-bold text-muted-foreground tracking-widest uppercase">✏ Ajustar copy</p>
+
+        {/* Headline */}
+        <div>
+          <label className="text-[10px] text-muted-foreground mb-1 block">Headline</label>
+          <textarea
+            value={editedHeadline}
+            onChange={e => setEditedHeadline(e.target.value)}
+            rows={2}
+            className="w-full rounded-md border border-border bg-muted/20 px-2 py-1.5 text-xs text-foreground resize-none focus:outline-none focus:ring-1 focus:ring-primary/40 font-semibold uppercase"
+            placeholder="Headline do slide..."
+          />
+        </div>
+
+        {/* Highlight word */}
+        <div>
+          <label className="text-[10px] text-muted-foreground mb-1 block">Palavra em destaque <span className="text-muted-foreground/50">(laranja)</span></label>
+          <input
+            value={editedHighlight}
+            onChange={e => setEditedHighlight(e.target.value)}
+            className="w-full rounded-md border border-border bg-muted/20 px-2 py-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40"
+            placeholder="Ex: PROBLEMA"
+          />
+        </div>
+
+        {/* Subtext */}
+        {(slide.subtext !== undefined || editedSubtext) && (
+          <div>
+            <label className="text-[10px] text-muted-foreground mb-1 block">Subtexto</label>
+            <textarea
+              value={editedSubtext}
+              onChange={e => setEditedSubtext(e.target.value)}
+              rows={2}
+              className="w-full rounded-md border border-border bg-muted/20 px-2 py-1.5 text-xs text-foreground resize-none focus:outline-none focus:ring-1 focus:ring-primary/40"
+              placeholder="Subtexto opcional..."
+            />
+          </div>
+        )}
+      </div>
+
+      {/* ── Image instruction + action bar ── */}
+      {hasImagePrompt && (
+        <div className="px-3 pb-3 space-y-2 border-t border-border pt-3">
+          <p className="text-[10px] font-bold text-muted-foreground tracking-widest uppercase">🖼 Ajustar imagem</p>
+          <textarea
+            value={imageInstruction}
+            onChange={e => setImageInstruction(e.target.value)}
+            rows={2}
+            className="w-full rounded-md border border-border bg-muted/20 px-2 py-1.5 text-xs text-foreground resize-none focus:outline-none focus:ring-1 focus:ring-blue-500/40"
+            placeholder='Ex: "mais luz natural", "ângulo de baixo", "preto e branco"...'
+          />
+          <div className="flex items-center gap-1.5">
             {!hasImage ? (
               <button
-                onClick={() => onGenerateImage(slide.number, slide.imagePrompt!, 'fast')}
+                onClick={() => onGenerateImage(slide.number, buildImagePrompt(), 'fast')}
                 disabled={isGenerating}
                 className={cn(
-                  'flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-all border flex-1',
+                  'flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-all border flex-1 justify-center',
                   isGenerating
                     ? 'border-border text-muted-foreground cursor-not-allowed'
                     : 'border-blue-500/40 text-blue-400 hover:bg-blue-500/10 hover:border-blue-500/60'
                 )}
               >
-                {isGenerating ? (
-                  <span className="h-3 w-3 border border-blue-400/40 border-t-blue-400 rounded-full animate-spin" />
-                ) : (
-                  <Image className="h-3 w-3" />
-                )}
+                {isGenerating
+                  ? <span className="h-3 w-3 border border-blue-400/40 border-t-blue-400 rounded-full animate-spin" />
+                  : <Image className="h-3 w-3" />}
                 {isGenerating ? 'Gerando...' : 'Gerar Imagem'}
               </button>
             ) : (
               <button
-                onClick={() => onGenerateImage(slide.number, slide.imagePrompt!, 'fast')}
+                onClick={() => onGenerateImage(slide.number, buildImagePrompt(), 'fast')}
                 disabled={isGenerating}
                 className={cn(
-                  'flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-all border',
+                  'flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-all border flex-1 justify-center',
                   isGenerating
                     ? 'border-border text-muted-foreground cursor-not-allowed'
                     : 'border-border text-muted-foreground hover:bg-muted/30 hover:text-foreground'
                 )}
               >
-                {isGenerating ? (
-                  <span className="h-3 w-3 border border-muted-foreground/40 border-t-muted-foreground rounded-full animate-spin" />
-                ) : (
-                  <RefreshCw className="h-3 w-3" />
-                )}
-                {isGenerating ? 'Trocando...' : 'Trocar'}
+                {isGenerating
+                  ? <span className="h-3 w-3 border border-muted-foreground/40 border-t-muted-foreground rounded-full animate-spin" />
+                  : <RefreshCw className="h-3 w-3" />}
+                {isGenerating ? 'Trocando...' : imageInstruction.trim() ? 'Aplicar ajuste' : 'Trocar imagem'}
               </button>
             )}
-          </>
-        )}
+          </div>
+        </div>
+      )}
 
-        {/* PNG export — always visible */}
+      {/* ── PNG export ── */}
+      <div className="px-3 pb-3 flex items-center">
         <button
           onClick={handleExport}
-          className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold border border-border text-muted-foreground hover:bg-muted/30 hover:text-foreground transition-all ml-auto"
+          disabled={exporting}
+          className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold border border-border text-muted-foreground hover:bg-muted/30 hover:text-foreground transition-all ml-auto disabled:opacity-50"
           title="Exportar lâmina como PNG"
         >
-          <Download className="h-3 w-3" />
-          PNG
+          {exporting
+            ? <span className="h-3 w-3 border border-muted-foreground/40 border-t-muted-foreground rounded-full animate-spin" />
+            : <Download className="h-3 w-3" />}
+          {exporting ? 'Exportando...' : 'Baixar PNG'}
         </button>
       </div>
 
-      {/* Logic toggle */}
+      {/* ── Logic toggle ── */}
       <button
         onClick={() => setExpanded(!expanded)}
         className="w-full flex items-center justify-between px-4 py-2.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/30 transition-colors border-t border-border"
@@ -393,43 +478,34 @@ function SlideCard({ slide, imageUrl, isGenerating, onGenerateImage, onExportPng
 
       {expanded && (
         <div className="px-4 py-3 space-y-3 border-t border-border bg-muted/10">
-          {/* Logic */}
           <div>
             <p className="text-xs font-semibold text-primary mb-1">→ LÓGICA ESTRATÉGICA</p>
             <p className="text-xs text-muted-foreground leading-relaxed">{slide.logic}</p>
           </div>
-
-          {/* Visual direction */}
           <div>
             <p className="text-xs font-semibold text-muted-foreground mb-1">🎨 DIREÇÃO VISUAL</p>
             <p className="text-xs text-muted-foreground leading-relaxed">{slide.visualDirection}</p>
           </div>
-
-          {/* Media info */}
           {!slide.needsMedia && (
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/40" />
               Sem imagem — impacto tipográfico puro
             </div>
           )}
-
-          {/* Image prompt */}
           {slide.needsMedia && slide.mediaType === 'photo' && slide.imagePrompt && (
             <div>
               <div className="flex items-center justify-between mb-1.5">
                 <div className="flex items-center gap-1.5 text-xs font-semibold text-blue-400">
                   <ImageIcon className="h-3 w-3" />
-                  PROMPT IMAGEM
+                  PROMPT IMAGEM (original)
                 </div>
-                <CopyButton text={slide.imagePrompt} label="Copiar prompt" />
+                <CopyButton text={slide.imagePrompt} label="Copiar" />
               </div>
               <pre className="text-xs text-muted-foreground leading-relaxed bg-muted/20 p-2.5 rounded-lg overflow-x-auto whitespace-pre-wrap" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
                 {slide.imagePrompt}
               </pre>
             </div>
           )}
-
-          {/* VEO prompt */}
           {slide.needsMedia && slide.mediaType === 'video' && slide.veoPrompt && (
             <div>
               <div className="flex items-center justify-between mb-1.5">
@@ -437,7 +513,7 @@ function SlideCard({ slide, imageUrl, isGenerating, onGenerateImage, onExportPng
                   <Video className="h-3 w-3" />
                   PROMPT VEO 3.1
                 </div>
-                <CopyButton text={slide.veoPrompt} label="Copiar prompt" />
+                <CopyButton text={slide.veoPrompt} label="Copiar" />
               </div>
               <pre className="text-xs text-muted-foreground leading-relaxed bg-muted/20 p-2.5 rounded-lg overflow-x-auto whitespace-pre-wrap" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
                 {slide.veoPrompt}
@@ -447,13 +523,14 @@ function SlideCard({ slide, imageUrl, isGenerating, onGenerateImage, onExportPng
         </div>
       )}
 
-      {/* Hidden ref holder for PNG export — must be rendered at full size */}
+      {/* Hidden ref for PNG export — uses editedSlide */}
       <div style={{ position: 'absolute', left: '-9999px', top: 0, width: '400px', pointerEvents: 'none' }}>
-        <SlidePreview slide={slide} imageUrl={imageUrl} slideRef={slideRef} />
+        <SlidePreview slide={editedSlide} imageUrl={imageUrl} slideRef={slideRef} />
       </div>
     </div>
   );
 }
+
 
 // ─── AngleRecommendation ──────────────────────────────────────────────────────
 
@@ -618,9 +695,6 @@ export default function AiCarrosseis() {
   const [slideImages, setSlideImages] = useState<Record<number, string>>({});
   const [generatingImage, setGeneratingImage] = useState<Record<number, boolean>>({});
 
-  // Refs per slide for PNG export
-  const slideRefs = useRef<Record<number, HTMLDivElement | null>>({});
-
   const handleGenerate = async () => {
     setLoading(true);
     setResult(null);
@@ -629,13 +703,11 @@ export default function AiCarrosseis() {
       const { data, error } = await supabase.functions.invoke('generate-carousel-visual', {
         body: { context, angle, persona, channel, tone },
       });
-
       if (error) throw error;
       if (data?.error) {
         toast({ title: 'Erro na geração', description: data.error, variant: 'destructive' });
         return;
       }
-
       setResult(data);
       toast({ title: 'Carrossel gerado! ✅', description: `${data.carousel.slides.length} lâminas prontas.` });
     } catch (e) {
@@ -652,13 +724,11 @@ export default function AiCarrosseis() {
       const { data, error } = await supabase.functions.invoke('generate-slide-image', {
         body: { imagePrompt: prompt, quality },
       });
-
       if (error) throw error;
       if (data?.error) {
         toast({ title: 'Erro na imagem', description: data.error, variant: 'destructive' });
         return;
       }
-
       if (data?.imageUrl) {
         setSlideImages(prev => ({ ...prev, [slideNumber]: data.imageUrl }));
         toast({ title: `Imagem gerada ✅`, description: `Lâmina ${slideNumber} atualizada.` });
@@ -668,30 +738,6 @@ export default function AiCarrosseis() {
       toast({ title: 'Erro', description: 'Falha ao gerar imagem. Tente novamente.', variant: 'destructive' });
     } finally {
       setGeneratingImage(prev => ({ ...prev, [slideNumber]: false }));
-    }
-  }, [toast]);
-
-  const handleExportPng = useCallback(async (slideNumber: number) => {
-    const el = slideRefs.current[slideNumber];
-    if (!el) {
-      toast({ title: 'Erro', description: 'Referência da lâmina não encontrada.', variant: 'destructive' });
-      return;
-    }
-    try {
-      toast({ title: 'Exportando...', description: `Gerando PNG da lâmina ${slideNumber}` });
-      const dataUrl = await toPng(el, {
-        pixelRatio: 2,
-        cacheBust: true,
-        style: { borderRadius: '0' },
-      });
-      const link = document.createElement('a');
-      link.download = `dqef-slide-${String(slideNumber).padStart(2, '0')}.png`;
-      link.href = dataUrl;
-      link.click();
-      toast({ title: `PNG exportado ✅`, description: `dqef-slide-${String(slideNumber).padStart(2, '0')}.png` });
-    } catch (e) {
-      console.error(e);
-      toast({ title: 'Erro ao exportar', description: 'Falha ao gerar PNG. Tente novamente.', variant: 'destructive' });
     }
   }, [toast]);
 
@@ -890,17 +936,15 @@ export default function AiCarrosseis() {
                   </div>
                 </div>
 
-                {/* Slides grid — with hidden full-res refs for PNG export */}
+                {/* Slides grid */}
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-3 gap-3 mb-6">
                   {result.carousel.slides.map(slide => (
-                    <SlideCardWithRef
+                    <SlideCard
                       key={slide.number}
                       slide={slide}
                       imageUrl={slideImages[slide.number]}
                       isGenerating={generatingImage[slide.number]}
                       onGenerateImage={handleGenerateImage}
-                      onExportPng={handleExportPng}
-                      onRefReady={(num, el) => { slideRefs.current[num] = el; }}
                     />
                   ))}
                 </div>
@@ -949,150 +993,3 @@ export default function AiCarrosseis() {
   );
 }
 
-// ─── SlideCardWithRef — bridges parent ref collection ─────────────────────────
-
-interface SlideCardWithRefProps extends SlideCardProps {
-  onRefReady: (slideNumber: number, el: HTMLDivElement | null) => void;
-}
-
-function SlideCardWithRef({ slide, imageUrl, isGenerating, onGenerateImage, onExportPng, onRefReady }: SlideCardWithRefProps) {
-  const slideRef = useRef<HTMLDivElement>(null);
-  const [expanded, setExpanded] = useState(false);
-
-  // Register ref with parent on mount/unmount
-  const refCallback = useCallback((el: HTMLDivElement | null) => {
-    (slideRef as React.MutableRefObject<HTMLDivElement | null>).current = el;
-    onRefReady(slide.number, el);
-  }, [slide.number, onRefReady]);
-
-  const hasImage = !!imageUrl;
-  const hasImagePrompt = slide.needsMedia && slide.mediaType !== 'video' && !!slide.imagePrompt;
-
-  const handleExport = async () => {
-    const el = slideRef.current;
-    if (!el) { onExportPng(slide.number); return; }
-    onExportPng(slide.number);
-  };
-
-  return (
-    <div className="rounded-xl border border-border overflow-hidden bg-card">
-      <div className="p-3">
-        {/* The actual slide preview with ref for PNG export */}
-        <div ref={refCallback} style={{ aspectRatio: '4/5', width: '100%', borderRadius: '8px', overflow: 'hidden' }}>
-          <SlidePreview slide={slide} imageUrl={imageUrl} />
-        </div>
-      </div>
-
-      {/* Action bar */}
-      <div className="px-3 pb-3 flex items-center gap-1.5 flex-wrap">
-        {hasImagePrompt && (
-          <>
-            {!hasImage ? (
-              <button
-                onClick={() => onGenerateImage(slide.number, slide.imagePrompt!, 'fast')}
-                disabled={isGenerating}
-                className={cn(
-                  'flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-all border flex-1',
-                  isGenerating
-                    ? 'border-border text-muted-foreground cursor-not-allowed'
-                    : 'border-blue-500/40 text-blue-400 hover:bg-blue-500/10 hover:border-blue-500/60'
-                )}
-              >
-                {isGenerating ? (
-                  <span className="h-3 w-3 border border-blue-400/40 border-t-blue-400 rounded-full animate-spin" />
-                ) : (
-                  <Image className="h-3 w-3" />
-                )}
-                {isGenerating ? 'Gerando...' : 'Gerar Imagem'}
-              </button>
-            ) : (
-              <button
-                onClick={() => onGenerateImage(slide.number, slide.imagePrompt!, 'fast')}
-                disabled={isGenerating}
-                className={cn(
-                  'flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-all border',
-                  isGenerating
-                    ? 'border-border text-muted-foreground cursor-not-allowed'
-                    : 'border-border text-muted-foreground hover:bg-muted/30 hover:text-foreground'
-                )}
-              >
-                {isGenerating ? (
-                  <span className="h-3 w-3 border border-muted-foreground/40 border-t-muted-foreground rounded-full animate-spin" />
-                ) : (
-                  <RefreshCw className="h-3 w-3" />
-                )}
-                {isGenerating ? 'Trocando...' : 'Trocar'}
-              </button>
-            )}
-          </>
-        )}
-
-        {/* PNG export */}
-        <button
-          onClick={handleExport}
-          className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold border border-border text-muted-foreground hover:bg-muted/30 hover:text-foreground transition-all ml-auto"
-          title="Exportar lâmina como PNG"
-        >
-          <Download className="h-3 w-3" />
-          PNG
-        </button>
-      </div>
-
-      {/* Logic toggle */}
-      <button
-        onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center justify-between px-4 py-2.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/30 transition-colors border-t border-border"
-      >
-        <span className="font-medium">→ LÓGICA + MÍDIA</span>
-        {expanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-      </button>
-
-      {expanded && (
-        <div className="px-4 py-3 space-y-3 border-t border-border bg-muted/10">
-          <div>
-            <p className="text-xs font-semibold text-primary mb-1">→ LÓGICA ESTRATÉGICA</p>
-            <p className="text-xs text-muted-foreground leading-relaxed">{slide.logic}</p>
-          </div>
-          <div>
-            <p className="text-xs font-semibold text-muted-foreground mb-1">🎨 DIREÇÃO VISUAL</p>
-            <p className="text-xs text-muted-foreground leading-relaxed">{slide.visualDirection}</p>
-          </div>
-          {!slide.needsMedia && (
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/40" />
-              Sem imagem — impacto tipográfico puro
-            </div>
-          )}
-          {slide.needsMedia && slide.mediaType === 'photo' && slide.imagePrompt && (
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <div className="flex items-center gap-1.5 text-xs font-semibold text-blue-400">
-                  <ImageIcon className="h-3 w-3" />
-                  PROMPT IMAGEM
-                </div>
-                <CopyButton text={slide.imagePrompt} label="Copiar prompt" />
-              </div>
-              <pre className="text-xs text-muted-foreground leading-relaxed bg-muted/20 p-2.5 rounded-lg overflow-x-auto whitespace-pre-wrap" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                {slide.imagePrompt}
-              </pre>
-            </div>
-          )}
-          {slide.needsMedia && slide.mediaType === 'video' && slide.veoPrompt && (
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <div className="flex items-center gap-1.5 text-xs font-semibold text-purple-400">
-                  <Video className="h-3 w-3" />
-                  PROMPT VEO 3.1
-                </div>
-                <CopyButton text={slide.veoPrompt} label="Copiar prompt" />
-              </div>
-              <pre className="text-xs text-muted-foreground leading-relaxed bg-muted/20 p-2.5 rounded-lg overflow-x-auto whitespace-pre-wrap" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                {slide.veoPrompt}
-              </pre>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
