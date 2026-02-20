@@ -447,6 +447,7 @@ export default function Estrategia() {
   const [knowledgeDocs, setKnowledgeDocs] = useState<KnowledgeDoc[]>([]);
   const [brandBookUploading, setBrandBookUploading] = useState(false);
   const [expandedKnowledge, setExpandedKnowledge] = useState<string | null>(null);
+  const [fillingFromKnowledge, setFillingFromKnowledge] = useState(false);
   const brandBookInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -532,6 +533,54 @@ export default function Estrategia() {
       toast({ title: 'Erro na análise', description: msg, variant: 'destructive' });
     }
     await loadKnowledgeDocs();
+  };
+
+  const handleFillFromKnowledge = async () => {
+    const doneDocs = knowledgeDocs.filter(d => d.status === 'done');
+    if (doneDocs.length === 0) {
+      toast({ title: 'Nenhum documento analisado', description: 'Faça upload de um brand book e aguarde a análise da IA antes de preencher.', variant: 'destructive' });
+      return;
+    }
+    setFillingFromKnowledge(true);
+    try {
+      const { data: result, error } = await supabase.functions.invoke('fill-playbook-from-knowledge', {
+        body: { currentData: data },
+      });
+      if (error) throw error;
+      if (result?.error) throw new Error(result.error);
+
+      const playbook = result.playbook;
+      const filled = result.playbook?.filledFields as string[] ?? [];
+
+      setData(prev => {
+        const updated = {
+          ...prev,
+          positioning: playbook.positioning || prev.positioning,
+          differentials: playbook.differentials || prev.differentials,
+          targetAudience: playbook.targetAudience || prev.targetAudience,
+          pains: playbook.pains || prev.pains,
+          toneOfVoice: playbook.toneOfVoice || prev.toneOfVoice,
+          competitors: playbook.competitors || prev.competitors,
+          forbiddenTopics: playbook.forbiddenTopics || prev.forbiddenTopics,
+          currentObjective: playbook.currentObjective || prev.currentObjective,
+          kpis: playbook.kpis || prev.kpis,
+        };
+        localStorage.setItem(STRATEGY_STORAGE_KEY, JSON.stringify(updated));
+        return updated;
+      });
+      setSaved(false);
+      toast({
+        title: `✅ Playbook preenchido com knowledge base`,
+        description: filled.length > 0
+          ? `${filled.length} seção(ões) preenchidas: ${filled.slice(0, 3).join(', ')}${filled.length > 3 ? '...' : ''}`
+          : `Campos atualizados com base em ${result.documentsUsed} documento(s).`,
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Erro desconhecido';
+      toast({ title: 'Erro ao preencher playbook', description: msg, variant: 'destructive' });
+    } finally {
+      setFillingFromKnowledge(false);
+    }
   };
 
   const handleDeleteKnowledgeDoc = async (doc: KnowledgeDoc) => {
@@ -865,6 +914,18 @@ export default function Estrategia() {
             </div>
           )}
 
+          {knowledgeDocs.some(d => d.status === 'done') && (
+            <button
+              onClick={handleFillFromKnowledge}
+              disabled={fillingFromKnowledge}
+              className="w-full flex items-center justify-center gap-2 rounded-xl border border-primary/40 bg-primary/8 hover:bg-primary/15 hover:border-primary/60 transition-all py-3 text-sm font-semibold text-primary disabled:opacity-40"
+            >
+              {fillingFromKnowledge
+                ? <><Loader2 className="h-4 w-4 animate-spin" /> Lendo knowledge base e preenchendo...</>
+                : <><Sparkles className="h-4 w-4" /> Preencher playbook com knowledge base</>
+              }
+            </button>
+          )}
           <input ref={brandBookInputRef} type="file" multiple
             accept=".pdf,.doc,.docx,.ppt,.pptx,.png,.jpg,.jpeg,.webp" className="hidden"
             onChange={e => handleBrandBookUpload(e.target.files)} />
