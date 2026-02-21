@@ -618,6 +618,7 @@ export default function Campanhas() {
   const [aiPlan, setAiPlan] = useState<AiPlan | null>(null);
   const [extraInstructions, setExtraInstructions] = useState('');
   const [showAiPanel, setShowAiPanel] = useState(false);
+  const [cmoDirectives, setCmoDirectives] = useState({ emotionalAngle: '', toneGuidance: '', targetPain: '', keyMessage: '', avoid: '', freeNotes: '' });
 
   const [metafields, setMetafields] = useState<MetaFields | null>(null);
   useEffect(() => {
@@ -643,6 +644,7 @@ export default function Campanhas() {
     setEditingId(null);
     setAiPlan(null);
     setExtraInstructions('');
+    setCmoDirectives({ emotionalAngle: '', toneGuidance: '', targetPain: '', keyMessage: '', avoid: '', freeNotes: '' });
     setForm(EMPTY_FORM());
     setShowAiPanel(false);
     setShowModal(true);
@@ -711,9 +713,19 @@ export default function Campanhas() {
     }
     setGenerating(true);
     setAiPlan(null);
+    // Build extra instructions from CMO directives
+    const directiveParts = [
+      cmoDirectives.emotionalAngle && `ÂNGULO EMOCIONAL: ${cmoDirectives.emotionalAngle}`,
+      cmoDirectives.toneGuidance && `TOM DE VOZ: ${cmoDirectives.toneGuidance}`,
+      cmoDirectives.targetPain && `DOR DO PÚBLICO: ${cmoDirectives.targetPain}`,
+      cmoDirectives.keyMessage && `MENSAGEM CENTRAL: ${cmoDirectives.keyMessage}`,
+      cmoDirectives.avoid && `EVITAR: ${cmoDirectives.avoid}`,
+      cmoDirectives.freeNotes && `NOTAS DO CMO: ${cmoDirectives.freeNotes}`,
+    ].filter(Boolean).join('\n');
+    const combinedInstructions = [directiveParts, extraInstructions].filter(Boolean).join('\n\n');
     try {
       const { data: result, error } = await supabase.functions.invoke('generate-campaign-plan', {
-        body: { campaignForm: form, strategyMetafields: metafields, extraInstructions },
+        body: { campaignForm: form, strategyMetafields: metafields, extraInstructions: combinedInstructions },
       });
       if (error) throw error;
       if (result?.error) throw new Error(result.error);
@@ -1058,9 +1070,99 @@ export default function Campanhas() {
                     <Input placeholder="Ex: Guilherme" value={form.responsible || ''} onChange={e => setForm(f => ({ ...f, responsible: e.target.value }))} className="bg-muted/20 border-border/60" />
                   </div>
                 </div>
-                <div>
+              <div>
                   <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">Público-alvo</label>
                   <Input placeholder={metafields?.targetPersona?.profile || 'Descreva quem é o público desta campanha'} value={form.targetAudience || ''} onChange={e => setForm(f => ({ ...f, targetAudience: e.target.value }))} className="bg-muted/20 border-border/60" />
+                </div>
+              </div>
+
+              {/* ── CMO Directives Panel ── */}
+              <div className="rounded-xl border border-border bg-muted/10 p-4 space-y-3">
+                <div className="flex items-center gap-2 mb-1">
+                  <div className="rounded-lg bg-accent/15 p-1.5 border border-accent/20">
+                    <Brain className="h-4 w-4 text-accent-foreground" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-bold text-foreground">Diretrizes do CMO</p>
+                    <p className="text-[10px] text-muted-foreground">Preencha apenas o que desejar — cada campo será usado como diretriz estratégica pela IA</p>
+                  </div>
+                  {metafields && (
+                    <button
+                      onClick={() => {
+                        setCmoDirectives(prev => ({
+                          ...prev,
+                          toneGuidance: prev.toneGuidance || (metafields.toneRules?.use || []).join(', '),
+                          emotionalAngle: prev.emotionalAngle || metafields.brandEssence || '',
+                          targetPain: prev.targetPain || metafields.targetPersona?.biggestPain || '',
+                          keyMessage: prev.keyMessage || (metafields.keyMessages?.[0] || ''),
+                        }));
+                        toast({ title: 'Diretrizes preenchidas ✅', description: 'Usamos os meta-fields como ponto de partida.' });
+                      }}
+                      className="text-[10px] font-bold text-primary hover:underline flex items-center gap-1"
+                    >
+                      <RefreshCw className="h-3 w-3" /> Preencher da estratégia
+                    </button>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[10px] font-bold text-muted-foreground/80 uppercase tracking-wider mb-1 block">🎯 Ângulo emocional</label>
+                    <Input
+                      placeholder="Ex: Orgulho profissional, Urgência..."
+                      value={cmoDirectives.emotionalAngle}
+                      onChange={e => setCmoDirectives(d => ({ ...d, emotionalAngle: e.target.value }))}
+                      className="bg-muted/20 border-border/60 text-xs h-9"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-muted-foreground/80 uppercase tracking-wider mb-1 block">🗣️ Tom de voz</label>
+                    <Input
+                      placeholder="Ex: Direto, motivacional, sem ser forçado"
+                      value={cmoDirectives.toneGuidance}
+                      onChange={e => setCmoDirectives(d => ({ ...d, toneGuidance: e.target.value }))}
+                      className="bg-muted/20 border-border/60 text-xs h-9"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[10px] font-bold text-muted-foreground/80 uppercase tracking-wider mb-1 block">💢 Dor principal do público</label>
+                    <Input
+                      placeholder="Ex: Não saber divulgar seu serviço"
+                      value={cmoDirectives.targetPain}
+                      onChange={e => setCmoDirectives(d => ({ ...d, targetPain: e.target.value }))}
+                      className="bg-muted/20 border-border/60 text-xs h-9"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-muted-foreground/80 uppercase tracking-wider mb-1 block">💡 Mensagem central</label>
+                    <Input
+                      placeholder="Ex: Você merece ser visto pelo seu trabalho"
+                      value={cmoDirectives.keyMessage}
+                      onChange={e => setCmoDirectives(d => ({ ...d, keyMessage: e.target.value }))}
+                      className="bg-muted/20 border-border/60 text-xs h-9"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-muted-foreground/80 uppercase tracking-wider mb-1 block">🚫 O que evitar nesta campanha</label>
+                  <Input
+                    placeholder="Ex: Não usar humor, não mencionar concorrentes"
+                    value={cmoDirectives.avoid}
+                    onChange={e => setCmoDirectives(d => ({ ...d, avoid: e.target.value }))}
+                    className="bg-muted/20 border-border/60 text-xs h-9"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-muted-foreground/80 uppercase tracking-wider mb-1 block">✏️ Ajustes pontuais do CMO</label>
+                  <Textarea
+                    placeholder="Escreva qualquer orientação extra: estilo de CTA, referência visual, restrição de formato, contexto sazonal..."
+                    value={cmoDirectives.freeNotes}
+                    onChange={e => setCmoDirectives(d => ({ ...d, freeNotes: e.target.value }))}
+                    rows={2}
+                    className="bg-muted/20 border-border/60 resize-none text-xs placeholder:text-muted-foreground/40"
+                  />
                 </div>
               </div>
 
@@ -1073,17 +1175,19 @@ export default function Campanhas() {
                   <div>
                     <p className="text-sm font-bold text-foreground">Gerar plano de campanha com IA</p>
                     <p className="text-[11px] text-muted-foreground">
-                      {hasStrategy ? 'Usa os meta-fields da estratégia + knowledge base' : 'Preencha os campos acima e deixe a IA sugerir tarefas e conteúdos'}
+                      {hasStrategy ? 'Usa os meta-fields da estratégia + knowledge base + diretrizes CMO' : 'Preencha os campos acima e deixe a IA sugerir tarefas e conteúdos'}
                     </p>
                   </div>
                 </div>
-                <Textarea
-                  placeholder="Instruções adicionais (opcional)"
-                  value={extraInstructions}
-                  onChange={e => setExtraInstructions(e.target.value)}
-                  rows={2}
-                  className="bg-muted/20 border-border/60 resize-none text-sm placeholder:text-muted-foreground/40"
-                />
+                {Object.values(cmoDirectives).some((v: string) => v.trim()) && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {cmoDirectives.emotionalAngle && <span className="rounded-full bg-primary/10 border border-primary/20 px-2 py-0.5 text-[9px] font-bold text-primary">🎯 {cmoDirectives.emotionalAngle}</span>}
+                    {cmoDirectives.toneGuidance && <span className="rounded-full bg-primary/10 border border-primary/20 px-2 py-0.5 text-[9px] font-bold text-primary">🗣️ {cmoDirectives.toneGuidance}</span>}
+                    {cmoDirectives.targetPain && <span className="rounded-full bg-primary/10 border border-primary/20 px-2 py-0.5 text-[9px] font-bold text-primary">💢 {cmoDirectives.targetPain}</span>}
+                    {cmoDirectives.keyMessage && <span className="rounded-full bg-primary/10 border border-primary/20 px-2 py-0.5 text-[9px] font-bold text-primary">💡 {cmoDirectives.keyMessage}</span>}
+                    {cmoDirectives.avoid && <span className="rounded-full bg-destructive/10 border border-destructive/20 px-2 py-0.5 text-[9px] font-bold text-destructive">🚫 {cmoDirectives.avoid}</span>}
+                  </div>
+                )}
                 <Button onClick={handleGenerateAI} disabled={generating} variant="outline" className="w-full border-primary/40 text-primary hover:bg-primary/10 hover:border-primary/60 gap-2 font-bold">
                   {generating ? <><Loader2 className="h-4 w-4 animate-spin" /> Gerando plano com IA...</> : <><Sparkles className="h-4 w-4" /> Gerar plano com IA</>}
                 </Button>
