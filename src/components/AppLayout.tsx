@@ -1,10 +1,11 @@
-import { ReactNode } from 'react';
+import { ReactNode, useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
 import { AppSidebar } from '@/components/AppSidebar';
-import { Bell, Search, LogOut } from 'lucide-react';
+import { Bell, Search, LogOut, HelpCircle } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
+import { OnboardingTutorial } from '@/components/OnboardingTutorial';
 
 const pageTitles: Record<string, { title: string; subtitle: string }> = {
   '/': { title: 'Dashboard', subtitle: 'Visão geral da operação de marketing' },
@@ -28,6 +29,16 @@ export function AppLayout({ children }: { children: ReactNode }) {
   );
   const { title, subtitle } = page?.[1] ?? { title: 'DQEF Hub', subtitle: '' };
 
+  const [tutorialOpen, setTutorialOpen] = useState(false);
+
+  // Auto-open on first visit
+  useEffect(() => {
+    const completed = localStorage.getItem('dqef_tutorial_completed');
+    if (!completed) {
+      setTutorialOpen(true);
+    }
+  }, []);
+
   return (
     <SidebarProvider defaultOpen={true}>
       <div className="flex min-h-screen w-full bg-background">
@@ -43,6 +54,13 @@ export function AppLayout({ children }: { children: ReactNode }) {
               </div>
             </div>
             <div className="flex items-center gap-2">
+              <button
+                onClick={() => setTutorialOpen(true)}
+                title="Tutorial de onboarding"
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground animate-pulse-orange"
+              >
+                <HelpCircle className="h-4 w-4" />
+              </button>
               <button className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
                 <Search className="h-4 w-4" />
               </button>
@@ -75,6 +93,8 @@ export function AppLayout({ children }: { children: ReactNode }) {
           </main>
         </div>
       </div>
+
+      <OnboardingTutorial open={tutorialOpen} onOpenChange={setTutorialOpen} />
     </SidebarProvider>
   );
 }
