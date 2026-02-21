@@ -332,10 +332,13 @@ function MetaTagList({ label, items }: { label: string; items: string[] }) {
   );
 }
 
-function MetaFieldsPanel({ metafields, onRegenerate, loading }: {
+function MetaFieldsPanel({ metafields, onRegenerate, loading, onFillFromKB, fillingFromKB, hasKBDocs }: {
   metafields: MetaFields | null;
   onRegenerate: () => void;
   loading: boolean;
+  onFillFromKB: () => void;
+  fillingFromKB: boolean;
+  hasKBDocs: boolean;
 }) {
   if (!metafields) return null;
   const score = metafields.completenessScore;
@@ -358,7 +361,7 @@ function MetaFieldsPanel({ metafields, onRegenerate, loading }: {
           <span className={cn('text-lg font-black font-mono', scoreColor)}>{score}%</span>
           <button
             onClick={onRegenerate}
-            disabled={loading}
+            disabled={loading || fillingFromKB}
             className="rounded-lg border border-border/60 p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors disabled:opacity-40"
             title="Regenerar"
           >
@@ -366,6 +369,26 @@ function MetaFieldsPanel({ metafields, onRegenerate, loading }: {
           </button>
         </div>
       </div>
+
+      {/* Fill from KB button */}
+      {hasKBDocs && score < 100 && (
+        <button
+          onClick={onFillFromKB}
+          disabled={fillingFromKB || loading}
+          className={cn(
+            'w-full flex items-center justify-center gap-2 rounded-lg border px-4 py-2.5 text-sm font-semibold transition-all',
+            fillingFromKB
+              ? 'border-primary/30 bg-primary/10 text-primary cursor-wait'
+              : 'border-teal/30 bg-teal/5 text-teal hover:bg-teal/10 hover:border-teal/50'
+          )}
+        >
+          {fillingFromKB ? (
+            <><Loader2 className="h-4 w-4 animate-spin" /> Analisando KB com modelo avançado...</>
+          ) : (
+            <><BookMarked className="h-4 w-4" /> Preencher campos faltantes com Knowledge Base (IA Pro)</>
+          )}
+        </button>
+      )}
       <div className="h-1.5 w-full rounded-full bg-muted/50 overflow-hidden">
         <div className={cn('h-full rounded-full transition-all duration-700', scoreBarColor)} style={{ width: `${score}%` }} />
       </div>
@@ -467,6 +490,7 @@ export default function Estrategia() {
   const [brandBookUploading, setBrandBookUploading] = useState(false);
   const [expandedKnowledge, setExpandedKnowledge] = useState<string | null>(null);
   const [fillingFromKnowledge, setFillingFromKnowledge] = useState(false);
+  const [fillingMetaFromKB, setFillingMetaFromKB] = useState(false);
   const brandBookInputRef = useRef<HTMLInputElement>(null);
 
   const [benchmarks, setBenchmarks] = useState<BenchmarkDoc[]>([]);
@@ -743,6 +767,41 @@ export default function Estrategia() {
       toast({ title: 'Erro ao extrair meta-fields', description: msg, variant: 'destructive' });
     } finally {
       setExtracting(false);
+    }
+  };
+
+  const handleFillMetaFromKB = async () => {
+    const doneDocs = knowledgeDocs.filter(d => d.status === 'done');
+    if (doneDocs.length === 0) {
+      toast({ title: 'Nenhum documento analisado', description: 'Envie e analise documentos no Knowledge Base primeiro.', variant: 'destructive' });
+      return;
+    }
+    setFillingMetaFromKB(true);
+    try {
+      const { data: result, error } = await supabase.functions.invoke('fill-metafields-from-knowledge', {
+        body: { currentMetafields: metafields, strategyData: data },
+      });
+      if (error) throw error;
+      if (result?.error) throw new Error(result.error);
+
+      const mf = result.metafields as MetaFields;
+      setMetafields(mf);
+      localStorage.setItem(METAFIELDS_STORAGE_KEY, JSON.stringify(mf));
+
+      const filledFromKB = (mf as any).filledFromKB as string[] | undefined;
+      const confidenceNotes = (mf as any).confidenceNotes as { high?: string[]; medium?: string[]; low?: string[] } | undefined;
+
+      toast({
+        title: `✅ Meta-fields preenchidos via Knowledge Base`,
+        description: filledFromKB && filledFromKB.length > 0
+          ? `${filledFromKB.length} campo(s) preenchidos/melhorados. ${confidenceNotes?.low?.length ? `⚠️ ${confidenceNotes.low.length} campo(s) precisam de validação.` : 'Valide os resultados abaixo.'}`
+          : `Análise concluída com ${result.documentsUsed} documento(s). Valide os resultados.`,
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Erro desconhecido';
+      toast({ title: 'Erro ao preencher meta-fields', description: msg, variant: 'destructive' });
+    } finally {
+      setFillingMetaFromKB(false);
     }
   };
 
@@ -1365,7 +1424,14 @@ export default function Estrategia() {
               A IA analisa seu playbook e extrai campos estruturados que norteiam campanhas e copies
             </p>
           )}
-          <MetaFieldsPanel metafields={metafields} onRegenerate={handleExtract} loading={extracting} />
+          <MetaFieldsPanel
+            metafields={metafields}
+            onRegenerate={handleExtract}
+            loading={extracting}
+            onFillFromKB={handleFillMetaFromKB}
+            fillingFromKB={fillingMetaFromKB}
+            hasKBDocs={knowledgeDocs.some(d => d.status === 'done')}
+          />
         </div>
 
         {/* ── Save ── */}
