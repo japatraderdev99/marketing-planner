@@ -270,6 +270,136 @@ function KanbanCard({
   );
 }
 
+// ─── Workflow Actions (quick mention) ─────────────────────────────────────────
+
+const WORKFLOW_ACTIONS = [
+  { id: 'analisar-copy',   label: 'Analisar copy',         emoji: '📝', suggest: 'gabriel' },
+  { id: 'aprovar-arte',    label: 'Aprovar arte',           emoji: '🎨', suggest: 'gabriel' },
+  { id: 'revisar-roteiro', label: 'Revisar roteiro',        emoji: '📋', suggest: 'guilherme' },
+  { id: 'validar-orcamento', label: 'Validar orçamento',    emoji: '💰', suggest: 'marcelo' },
+  { id: 'aprovar-final',   label: 'Aprovação final',        emoji: '✅', suggest: 'leandro' },
+  { id: 'implementar',     label: 'Implementar',            emoji: '⚙️', suggest: 'gustavo' },
+  { id: 'revisar-criativos', label: 'Revisar criativos',    emoji: '👁️', suggest: 'guilherme' },
+  { id: 'dar-feedback',    label: 'Dar feedback',           emoji: '💬', suggest: 'gabriel' },
+] as const;
+
+function QuickMentionSection({
+  campaign,
+  onMention,
+}: {
+  campaign: Campaign;
+  onMention: (memberName: string, action: string) => void;
+}) {
+  const [selectedMember, setSelectedMember] = useState<TeamMemberId | null>(null);
+  const [customAction, setCustomAction] = useState('');
+
+  // Mentions already made (parsed from history)
+  const mentions = campaign.history.filter(h => h.action.startsWith('📌 @'));
+
+  const handleQuickAction = (action: typeof WORKFLOW_ACTIONS[number]) => {
+    const member = selectedMember
+      ? TEAM.find(t => t.id === selectedMember)!
+      : TEAM.find(t => t.id === action.suggest)!;
+    onMention(member.name, action.label);
+    setSelectedMember(null);
+  };
+
+  const handleCustom = () => {
+    if (!customAction.trim() || !selectedMember) return;
+    const member = TEAM.find(t => t.id === selectedMember)!;
+    onMention(member.name, customAction.trim());
+    setCustomAction('');
+    setSelectedMember(null);
+  };
+
+  return (
+    <div className="p-4 border-b border-border">
+      <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60 mb-3 flex items-center gap-1.5">
+        <Target className="h-3 w-3" /> Mencionar para ação
+      </p>
+
+      {/* Team member selector */}
+      <div className="flex gap-1.5 mb-3">
+        {TEAM.map(t => (
+          <button
+            key={t.id}
+            onClick={() => setSelectedMember(selectedMember === t.id ? null : t.id)}
+            className={cn(
+              'flex items-center gap-1 rounded-lg border px-2 py-1.5 text-[10px] font-bold transition-all',
+              selectedMember === t.id
+                ? `${t.bg} ${t.border} ${t.text} ring-1 ${t.ring}`
+                : 'border-border text-muted-foreground hover:border-primary/30'
+            )}
+          >
+            <div className={cn('h-4 w-4 rounded-full flex items-center justify-center text-[8px] font-black text-white', t.color)}>{t.initials}</div>
+            {t.name}
+          </button>
+        ))}
+      </div>
+
+      {/* Quick action pills */}
+      <div className="flex flex-wrap gap-1.5 mb-3">
+        {WORKFLOW_ACTIONS.map(action => {
+          const suggestedMember = TEAM.find(t => t.id === action.suggest)!;
+          const targetMember = selectedMember ? TEAM.find(t => t.id === selectedMember)! : suggestedMember;
+          return (
+            <button
+              key={action.id}
+              onClick={() => handleQuickAction(action)}
+              className="group flex items-center gap-1.5 rounded-lg border border-border bg-muted/20 px-2.5 py-1.5 text-[10px] font-semibold text-muted-foreground hover:border-primary/40 hover:bg-primary/5 hover:text-foreground transition-all"
+            >
+              <span>{action.emoji}</span>
+              <span>{action.label}</span>
+              <span className={cn('rounded-full px-1.5 py-0.5 text-[8px] font-black', targetMember.bg, targetMember.text)}>
+                @{targetMember.name}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Custom action input */}
+      {selectedMember && (
+        <div className="flex gap-1.5 mb-3">
+          <Input
+            placeholder={`Ação para @${TEAM.find(t => t.id === selectedMember)?.name}...`}
+            value={customAction}
+            onChange={e => setCustomAction(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && handleCustom()}
+            className="h-7 text-xs bg-muted/20 border-border/60 flex-1"
+          />
+          <Button size="sm" variant="ghost" onClick={handleCustom} className="h-7 px-2 text-xs">
+            <Send className="h-3 w-3" />
+          </Button>
+        </div>
+      )}
+
+      {/* Active mentions */}
+      {mentions.length > 0 && (
+        <div className="space-y-1.5">
+          {mentions.slice(-4).map((m, i) => {
+            const nameMatch = m.action.match(/@(\w+)/);
+            const mentionedMember = nameMatch ? getTeamMember(nameMatch[1]) : null;
+            return (
+              <div key={i} className="flex items-center gap-2 rounded-lg bg-muted/30 px-2.5 py-1.5">
+                {mentionedMember && (
+                  <div className={cn('h-4 w-4 rounded-full flex items-center justify-center text-[7px] font-black text-white', mentionedMember.color)}>
+                    {mentionedMember.initials}
+                  </div>
+                )}
+                <span className="text-[10px] text-foreground/70 flex-1">{m.action.replace('📌 ', '')}</span>
+                <span className="text-[9px] text-muted-foreground/40">
+                  {new Date(m.date).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Detail Side Panel ────────────────────────────────────────────────────────
 
 function DetailPanel({
@@ -562,6 +692,17 @@ function DetailPanel({
             </Button>
           </div>
         </div>
+
+        {/* Quick Mention / Tag for workflow */}
+        <QuickMentionSection
+          campaign={localCampaign}
+          onMention={(memberName, action) => {
+            const entry = { date: new Date().toISOString(), action: `📌 @${memberName} — ${action}`, user: 'Sistema' };
+            const updated = { ...localCampaign, history: [...localCampaign.history, entry] };
+            setLocalCampaign(updated);
+            onSave(updated);
+          }}
+        />
 
         {/* Comments */}
         <div className="p-4 border-b border-border">
