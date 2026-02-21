@@ -19,6 +19,9 @@ import AiCarrosseis from "./pages/AiCarrosseis";
 import Estrategia from "./pages/Estrategia";
 import Forum from "./pages/Forum";
 import Formatos from "./pages/Formatos";
+import CriativosAtivos from "./pages/CriativosAtivos";
+import GridInstagram from "./pages/GridInstagram";
+import BrandKit from "./pages/BrandKit";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -50,6 +53,9 @@ const App = () => (
                       <Route path="/estrategia" element={<Estrategia />} />
                       <Route path="/forum" element={<Forum />} />
                       <Route path="/formatos" element={<Formatos />} />
+                      <Route path="/criativos-ativos" element={<CriativosAtivos />} />
+                      <Route path="/grid-instagram" element={<GridInstagram />} />
+                      <Route path="/brand-kit" element={<BrandKit />} />
                       <Route path="*" element={<NotFound />} />
                     </Routes>
                   </AppLayout>
