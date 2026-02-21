@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { Layers, Wand2, Copy, Check, Download, ChevronDown, ChevronUp, ImageIcon, Video, Zap, RefreshCw, Image, Minimize2, Shuffle, Upload, Trash2, Library, X, Star, Target, FileText, Users, Megaphone, TrendingUp, BookOpen, AlertTriangle, PlusCircle, File, Eye, Save, MessageSquare, Clock, CheckCircle, XCircle, Send, BookMarked, Inbox } from 'lucide-react';
+import { Layers, Wand2, Copy, Check, Download, ChevronDown, ChevronUp, ImageIcon, Video, Zap, RefreshCw, Image, Minimize2, Shuffle, Upload, Trash2, Library, X, Star, Target, FileText, Users, Megaphone, TrendingUp, BookOpen, AlertTriangle, PlusCircle, File, Eye, Save, MessageSquare, Clock, CheckCircle, XCircle, Send, BookMarked, Inbox, ShieldCheck, Loader2 } from 'lucide-react';
 import dqfIcon from '@/assets/dqf-icon.svg';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -923,6 +923,203 @@ interface StrategyData {
 }
 
 const STRATEGY_STORAGE_KEY = 'dqef_strategy_v1';
+
+// ─── Strategic Review Button (Knowledge Base summary) ─────────────────────────
+
+function StrategicReviewButton({ userId }: { userId: string | null }) {
+  const { toast } = useToast();
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [review, setReview] = useState<{
+    docs: { name: string; status: string; fields: string[] }[];
+    metafields: Record<string, string>;
+    missingAreas: string[];
+    readiness: number;
+  } | null>(null);
+
+  const handleReview = async () => {
+    if (!userId) {
+      toast({ title: 'Faça login primeiro', variant: 'destructive' });
+      return;
+    }
+    setOpen(true);
+    setLoading(true);
+    try {
+      // Fetch knowledge base docs
+      const { data: docs } = await supabase
+        .from('strategy_knowledge')
+        .select('document_name, status, extracted_knowledge')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+
+      // Fetch local meta-fields
+      let metafields: Record<string, string> = {};
+      try {
+        const raw = localStorage.getItem('dqef_strategy_metafields_v1');
+        if (raw) metafields = JSON.parse(raw);
+      } catch { /* ignore */ }
+
+      // Fetch local playbook
+      let playbook: Record<string, string> = {};
+      try {
+        const raw = localStorage.getItem(STRATEGY_STORAGE_KEY);
+        if (raw) playbook = JSON.parse(raw);
+      } catch { /* ignore */ }
+
+      // Build review
+      const docsSummary = (docs || []).map((d: any) => {
+        const k = d.extracted_knowledge as Record<string, unknown> | null;
+        const fields: string[] = [];
+        if (k) {
+          if (k.brandName) fields.push('Marca');
+          if (k.brandEssence) fields.push('Essência');
+          if (k.positioning) fields.push('Posicionamento');
+          if (k.toneOfVoice) fields.push('Tom de Voz');
+          if (k.uniqueValueProp) fields.push('Proposta de Valor');
+          if (k.targetAudience) fields.push('Persona');
+          if (Array.isArray(k.keyMessages) && k.keyMessages.length) fields.push('Mensagens-chave');
+          if (Array.isArray(k.contentAngles) && k.contentAngles.length) fields.push('Ângulos');
+          if (k.ctaStyle) fields.push('Estilo CTA');
+          if (k.promptContext) fields.push('System Prompt');
+        }
+        return { name: d.document_name, status: d.status, fields };
+      });
+
+      const missingAreas: string[] = [];
+      const allFields = docsSummary.flatMap((d: any) => d.fields);
+      const metaKeys = Object.keys(metafields).filter(k => metafields[k] && metafields[k].length > 10);
+      const playbookKeys = Object.keys(playbook).filter(k => playbook[k] && playbook[k].length > 10);
+
+      if (!allFields.includes('Posicionamento') && !playbookKeys.includes('positioning')) missingAreas.push('Posicionamento da marca');
+      if (!allFields.includes('Tom de Voz') && !playbookKeys.includes('toneOfVoice')) missingAreas.push('Tom de voz');
+      if (!allFields.includes('Persona') && !playbookKeys.includes('targetAudience')) missingAreas.push('Perfil do público-alvo');
+      if (!allFields.includes('Proposta de Valor')) missingAreas.push('Proposta de valor única');
+      if (!metaKeys.includes('promptContext')) missingAreas.push('System Prompt da marca');
+
+      const doneDocs = docsSummary.filter((d: any) => d.status === 'done').length;
+      const totalChecks = 5;
+      const passedChecks = totalChecks - missingAreas.length;
+      const readiness = Math.round((passedChecks / totalChecks) * 100);
+
+      setReview({ docs: docsSummary, metafields, missingAreas, readiness });
+    } catch (e) {
+      console.error(e);
+      toast({ title: 'Erro ao carregar revisão', variant: 'destructive' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <>
+      <Button
+        variant="outline"
+        onClick={handleReview}
+        className="w-full flex items-center gap-2 text-sm font-semibold border-primary/30 text-primary hover:bg-primary/10"
+      >
+        <ShieldCheck className="h-4 w-4" />
+        Revisão Estratégica
+      </Button>
+
+      {open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => setOpen(false)}>
+          <div
+            className="bg-card border border-border rounded-2xl shadow-2xl w-full max-w-lg max-h-[80vh] overflow-y-auto p-6 mx-4"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-5">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="h-5 w-5 text-primary" />
+                <h3 className="text-base font-bold text-foreground">Revisão Estratégica</h3>
+              </div>
+              <button onClick={() => setOpen(false)} className="text-muted-foreground hover:text-foreground">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {loading ? (
+              <div className="flex flex-col items-center gap-3 py-12">
+                <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                <p className="text-sm text-muted-foreground">Analisando materiais...</p>
+              </div>
+            ) : review ? (
+              <div className="space-y-5">
+                {/* Readiness Score */}
+                <div className={cn(
+                  'rounded-xl p-4 border text-center',
+                  review.readiness >= 80 ? 'border-green-500/30 bg-green-500/5' :
+                  review.readiness >= 50 ? 'border-yellow-500/30 bg-yellow-500/5' :
+                  'border-red-500/30 bg-red-500/5'
+                )}>
+                  <p className="text-3xl font-black text-foreground">{review.readiness}%</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {review.readiness >= 80 ? '✅ Estratégia robusta — pronto para gerar' :
+                     review.readiness >= 50 ? '⚠️ Estratégia parcial — resultados podem ser genéricos' :
+                     '🔴 Estratégia fraca — preencha o playbook primeiro'}
+                  </p>
+                </div>
+
+                {/* Knowledge Base Docs */}
+                <div>
+                  <p className="text-xs font-bold text-muted-foreground tracking-widest mb-2">BRAND BOOK / KNOWLEDGE BASE</p>
+                  {review.docs.length === 0 ? (
+                    <p className="text-xs text-muted-foreground italic py-2">Nenhum documento no knowledge base. Envie na aba Estratégia.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {review.docs.map((doc, i) => (
+                        <div key={i} className="rounded-lg border border-border bg-muted/20 p-3">
+                          <div className="flex items-center justify-between mb-1.5">
+                            <p className="text-xs font-semibold text-foreground truncate max-w-[250px]">{doc.name}</p>
+                            <Badge variant={doc.status === 'done' ? 'default' : 'secondary'} className="text-[9px] h-5">
+                              {doc.status === 'done' ? '✅ Analisado' : doc.status === 'analyzing' ? '⏳ Analisando' : '⏸ Pendente'}
+                            </Badge>
+                          </div>
+                          {doc.fields.length > 0 && (
+                            <div className="flex flex-wrap gap-1">
+                              {doc.fields.map(f => (
+                                <span key={f} className="text-[9px] bg-primary/10 text-primary rounded-full px-2 py-0.5 font-medium">{f}</span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Missing Areas */}
+                {review.missingAreas.length > 0 && (
+                  <div>
+                    <p className="text-xs font-bold text-muted-foreground tracking-widest mb-2">⚠️ ÁREAS NÃO MAPEADAS</p>
+                    <div className="space-y-1.5">
+                      {review.missingAreas.map(area => (
+                        <div key={area} className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <XCircle className="h-3.5 w-3.5 text-destructive flex-shrink-0" />
+                          <span>{area}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <p className="text-[10px] text-muted-foreground mt-2 italic">
+                      Preencha no Playbook (aba Estratégia) ou envie documentos ao Knowledge Base para melhorar as gerações.
+                    </p>
+                  </div>
+                )}
+
+                {/* All clear */}
+                {review.missingAreas.length === 0 && (
+                  <div className="flex items-center gap-2 text-xs text-green-600">
+                    <CheckCircle className="h-4 w-4" />
+                    <span className="font-semibold">Todas as áreas estratégicas estão mapeadas. A IA tem contexto completo.</span>
+                  </div>
+                )}
+              </div>
+            ) : null}
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
 
 function StrategicPanel() {
   const { toast } = useToast();
@@ -2375,6 +2572,9 @@ export default function AiCarrosseis() {
                       )}
                     </div>
                   </div>
+
+                  {/* Strategic Review Button */}
+                  <StrategicReviewButton userId={userId} />
 
                   {/* Generate button */}
                   <Button
