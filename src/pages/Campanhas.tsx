@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { initialCampaigns, Campaign, CampaignStatus, Channel, ContentFormat, Priority, Funnel, KanbanStatus, ContentObjective, SEED_VERSION } from '@/data/seedData';
 import { initialContents, ContentItem } from '@/data/seedData';
+import { toPng } from 'html-to-image';
 
 interface CampaignForm {
   name: string;
@@ -43,7 +44,8 @@ import {
   DollarSign, AlertTriangle, CheckCircle2, Loader2, ChevronRight,
   LayoutGrid, List, Brain, Zap, Copy, Eye, Trash2, PenLine,
   ArrowRight, X, Info, RefreshCw, BarChart3, ArrowUpRight,
-  ArrowDownRight, Filter, Activity, TrendingDown, Layers
+  ArrowDownRight, Filter, Activity, TrendingDown, Layers, Download,
+  Clock, Hash, Crosshair
 } from 'lucide-react';
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
@@ -231,85 +233,139 @@ function CampaignCard({
 }) {
   const st = STATUS_CONFIG[campaign.status];
   const budgetPct = campaign.budgetPaid && campaign.budget ? Math.round((campaign.budgetPaid / campaign.budget) * 100) : 0;
+  const hasMetrics = !!(campaign.leads || campaign.conversions || campaign.roas);
+  const isTemplate = campaign.id.includes('template');
+
   return (
     <div
-      className="rounded-xl border border-border bg-card p-4 hover:border-primary/30 transition-all duration-200 group cursor-pointer flex flex-col gap-3"
+      className="group relative rounded-2xl border border-border bg-card overflow-hidden transition-all duration-300 hover:border-primary/40 hover:shadow-[0_8px_30px_-12px_hsl(var(--primary)/0.15)] cursor-pointer flex flex-col"
       onClick={onView}
     >
-      {/* Header */}
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex-1 min-w-0">
-          <h3 className="text-sm font-bold text-foreground truncate">{campaign.name}</h3>
-          <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-1">{campaign.objective}</p>
+      {/* ── Top accent bar ── */}
+      <div className="h-1 w-full" style={{ background: isTemplate ? `linear-gradient(90deg, ${C.orange}, ${C.teal})` : (CHANNEL_COLORS[campaign.channel?.[0]] || C.purple) }} />
+
+      {/* ── Header ── */}
+      <div className="px-5 pt-4 pb-3">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-1.5">
+              <span className={cn('flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-[10px] font-bold tracking-wide uppercase', st.color)}>
+                <span className={cn('h-1.5 w-1.5 rounded-full animate-pulse', st.dot)} />
+                {st.label}
+              </span>
+              <span className={cn('rounded-md border px-1.5 py-0.5 text-[10px] font-bold', PRIORITY_COLORS[campaign.priority])}>
+                {campaign.priority}
+              </span>
+            </div>
+            <h3 className="text-[15px] font-black text-foreground leading-tight tracking-tight line-clamp-2">
+              {campaign.name}
+            </h3>
+          </div>
+          {/* Actions */}
+          <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" onClick={e => e.stopPropagation()}>
+            <button onClick={onEdit} className="rounded-lg p-1.5 hover:bg-muted transition-colors" title="Editar">
+              <PenLine className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground" />
+            </button>
+            <button onClick={onDelete} className="rounded-lg p-1.5 hover:bg-destructive/10 transition-colors" title="Excluir">
+              <Trash2 className="h-3.5 w-3.5 text-muted-foreground hover:text-destructive" />
+            </button>
+          </div>
         </div>
-        <span className={cn('flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold shrink-0', st.color)}>
-          <span className={cn('h-1.5 w-1.5 rounded-full', st.dot)} />
-          {st.label}
-        </span>
       </div>
 
-      {/* Tags */}
-      <div className="flex flex-wrap gap-1.5">
-        <span className={cn('rounded-full border px-2 py-0.5 text-[10px] font-medium', PRIORITY_COLORS[campaign.priority])}>{campaign.priority}</span>
-        {(campaign.channel || []).slice(0, 2).map(ch => (
-          <span key={ch} className="rounded-full border border-border bg-muted/30 px-2 py-0.5 text-[10px] text-muted-foreground flex items-center gap-1">
-            <span className="h-1.5 w-1.5 rounded-full" style={{ background: CHANNEL_COLORS[ch] || C.purple }} />
+      {/* ── Description ── */}
+      {campaign.objective && (
+        <div className="px-5 pb-3">
+          <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2">{campaign.objective}</p>
+        </div>
+      )}
+
+      {/* ── Tags row ── */}
+      <div className="px-5 pb-3 flex flex-wrap gap-1.5">
+        {(campaign.channel || []).map(ch => (
+          <span key={ch} className="flex items-center gap-1 rounded-md border border-border/60 bg-muted/20 px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+            <span className="h-2 w-2 rounded-full" style={{ background: CHANNEL_COLORS[ch] || C.purple }} />
             {ch}
           </span>
         ))}
         {campaign.funnel && (
-          <span className="rounded-full border border-border bg-muted/30 px-2 py-0.5 text-[10px] text-muted-foreground">{campaign.funnel}</span>
+          <span className="flex items-center gap-1 rounded-md border border-border/60 bg-muted/20 px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+            <Crosshair className="h-2.5 w-2.5" /> {campaign.funnel}
+          </span>
+        )}
+        {campaign.category && (
+          <span className="rounded-md border border-primary/20 bg-primary/5 px-2 py-0.5 text-[10px] font-semibold text-primary">
+            {campaign.category}
+          </span>
         )}
       </div>
 
-      {/* Metrics row */}
-      {(campaign.leads || campaign.conversions || campaign.roas) ? (
-        <div className="grid grid-cols-3 gap-2 border-t border-border/50 pt-2.5">
-          {[
-            { label: 'Leads', value: campaign.leads?.toLocaleString('pt-BR') || '—', color: C.orange },
-            { label: 'Conv.', value: campaign.conversions?.toLocaleString('pt-BR') || '—', color: C.teal },
-            { label: 'ROAS', value: campaign.roas ? `${campaign.roas}x` : '—', color: C.green },
-          ].map(({ label, value, color }) => (
-            <div key={label} className="text-center">
-              <p className="text-xs font-black" style={{ color }}>{value}</p>
-              <p className="text-[9px] text-muted-foreground">{label}</p>
-            </div>
-          ))}
-        </div>
-      ) : null}
-
-      {/* Budget progress */}
-      {campaign.budget > 0 && (
-        <div>
-          <div className="flex justify-between text-[10px] mb-1">
-            <span className="text-muted-foreground">Budget</span>
-            <span className="font-semibold text-foreground">R${(campaign.budgetPaid || 0).toLocaleString('pt-BR')} / R${campaign.budget.toLocaleString('pt-BR')}</span>
-          </div>
-          <div className="h-1.5 w-full rounded-full bg-border overflow-hidden">
-            <div className="h-full rounded-full transition-all duration-700" style={{ width: `${budgetPct}%`, background: budgetPct > 90 ? C.red : C.orange }} />
+      {/* ── Metrics panel ── */}
+      {hasMetrics && (
+        <div className="mx-5 mb-3 rounded-xl border border-border/60 bg-muted/10 p-3">
+          <div className="grid grid-cols-3 gap-3">
+            {[
+              { label: 'Leads', value: campaign.leads?.toLocaleString('pt-BR') || '—', color: C.orange, icon: Users },
+              { label: 'Conv.', value: campaign.conversions?.toLocaleString('pt-BR') || '—', color: C.teal, icon: Target },
+              { label: 'ROAS', value: campaign.roas ? `${campaign.roas}x` : '—', color: campaign.roas && campaign.roas >= 3 ? C.green : C.amber, icon: TrendingUp },
+            ].map(({ label, value, color, icon: Icon }) => (
+              <div key={label} className="text-center space-y-0.5">
+                <Icon className="h-3 w-3 mx-auto mb-0.5" style={{ color, opacity: 0.6 }} />
+                <p className="text-sm font-black tracking-tight" style={{ color }}>{value}</p>
+                <p className="text-[9px] font-semibold text-muted-foreground/60 uppercase tracking-widest">{label}</p>
+              </div>
+            ))}
           </div>
         </div>
       )}
 
-      {/* Footer */}
-      <div className="flex items-center justify-between pt-1">
-        <span className="text-[10px] text-muted-foreground/60">
-          {campaign.startDate ? new Date(campaign.startDate + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }) : '—'}
-          {campaign.endDate ? ` → ${new Date(campaign.endDate + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}` : ''}
-        </span>
-        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
-          <button onClick={onEdit} className="rounded p-1 hover:bg-muted transition-colors">
-            <PenLine className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground" />
-          </button>
-          <button onClick={onDelete} className="rounded p-1 hover:bg-destructive/15 transition-colors group/del">
-            <Trash2 className="h-3.5 w-3.5 text-muted-foreground group-hover/del:text-destructive" />
-          </button>
+      {/* ── Budget bar ── */}
+      {campaign.budget > 0 && (
+        <div className="px-5 pb-3">
+          <div className="flex justify-between text-[10px] mb-1.5">
+            <span className="text-muted-foreground/60 font-medium flex items-center gap-1"><DollarSign className="h-2.5 w-2.5" /> Budget</span>
+            <span className="font-bold text-foreground tabular-nums">
+              R${(campaign.budgetPaid || 0).toLocaleString('pt-BR')} <span className="text-muted-foreground/40">/ R${campaign.budget.toLocaleString('pt-BR')}</span>
+            </span>
+          </div>
+          <div className="h-1.5 w-full rounded-full bg-border/60 overflow-hidden">
+            <div
+              className="h-full rounded-full transition-all duration-1000 ease-out"
+              style={{
+                width: `${budgetPct}%`,
+                background: budgetPct > 90 ? C.red : `linear-gradient(90deg, ${C.orange}, ${C.teal})`,
+              }}
+            />
+          </div>
         </div>
+      )}
+
+      {/* ── Footer ── */}
+      <div className="mt-auto border-t border-border/40 px-5 py-2.5 flex items-center justify-between">
+        <div className="flex items-center gap-3 text-[10px] text-muted-foreground/50">
+          {campaign.startDate && (
+            <span className="flex items-center gap-1">
+              <Clock className="h-2.5 w-2.5" />
+              {new Date(campaign.startDate + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}
+              {campaign.endDate && ` → ${new Date(campaign.endDate + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}`}
+            </span>
+          )}
+          {campaign.responsible && (
+            <span className="flex items-center gap-1">
+              <span className="h-4 w-4 rounded-full bg-primary/15 flex items-center justify-center text-[8px] font-bold text-primary">{campaign.avatar}</span>
+              {campaign.responsible}
+            </span>
+          )}
+        </div>
+        {isTemplate && (
+          <span className="rounded-md bg-primary/10 border border-primary/20 px-2 py-0.5 text-[9px] font-bold text-primary uppercase tracking-wider">
+            Template
+          </span>
+        )}
       </div>
     </div>
   );
 }
-
 // ─── Analytics Panel ──────────────────────────────────────────────────────────
 
 function AnalyticsPanel({ campaigns }: { campaigns: Campaign[] }) {
@@ -622,6 +678,8 @@ export default function Campanhas() {
   const [refinementNote, setRefinementNote] = useState('');
   const [showRefinement, setShowRefinement] = useState(false);
   const [knowledgeDocs, setKnowledgeDocs] = useState<Array<{ document_name: string; status: string }>>([]);
+  const [exporting, setExporting] = useState(false);
+  const exportRef = useRef<HTMLDivElement>(null);
 
   const [metafields, setMetafields] = useState<MetaFields | null>(null);
   useEffect(() => {
@@ -663,6 +721,27 @@ export default function Campanhas() {
   };
 
   const detailCampaign = campaigns.find(c => c.id === detailId);
+
+  const handleExportPNG = useCallback(async () => {
+    if (!exportRef.current) return;
+    setExporting(true);
+    try {
+      const dataUrl = await toPng(exportRef.current, {
+        pixelRatio: 3,
+        backgroundColor: '#1a1a2e',
+        style: { borderRadius: '0' },
+      });
+      const link = document.createElement('a');
+      link.download = `campanha-${detailCampaign?.name?.replace(/[^a-zA-Z0-9]/g, '-').slice(0, 40) || 'plano'}.png`;
+      link.href = dataUrl;
+      link.click();
+      toast({ title: 'PNG exportado ✅', description: 'Resolução 3x para qualidade profissional.' });
+    } catch (err) {
+      toast({ title: 'Erro ao exportar', variant: 'destructive' });
+    } finally {
+      setExporting(false);
+    }
+  }, [detailCampaign, toast]);
 
   const openCreate = () => {
     setEditingId(null);
@@ -1400,56 +1479,139 @@ export default function Campanhas() {
           </DialogContent>
         </Dialog>
 
-        {/* Detail drawer */}
+        {/* Detail drawer — Figma-quality export view */}
         {detailCampaign && (
           <Dialog open={!!detailId} onOpenChange={v => { if (!v) setDetailId(null); }}>
-            <DialogContent className="max-w-xl bg-card border-border">
+            <DialogContent className="max-w-2xl bg-card border-border overflow-y-auto max-h-[90vh]">
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-2">
                   <Megaphone className="h-4 w-4 text-primary" />
-                  {detailCampaign.name}
+                  Detalhes da Campanha
                 </DialogTitle>
               </DialogHeader>
-              <div className="space-y-4">
-                <div className="flex flex-wrap gap-2">
-                  <span className={cn('flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-semibold', STATUS_CONFIG[detailCampaign.status].color)}>
-                    <span className={cn('h-1.5 w-1.5 rounded-full', STATUS_CONFIG[detailCampaign.status].dot)} />
-                    {detailCampaign.status}
-                  </span>
-                  <span className={cn('rounded-full border px-2 py-0.5 text-xs font-medium', PRIORITY_COLORS[detailCampaign.priority])}>{detailCampaign.priority}</span>
-                  {detailCampaign.funnel && <span className="rounded-full border border-border bg-muted/30 px-2 py-0.5 text-xs">{detailCampaign.funnel}</span>}
-                </div>
-                {detailCampaign.objective && <p className="text-sm text-foreground/85 leading-relaxed">{detailCampaign.objective}</p>}
 
-                {/* Metrics grid */}
-                {(detailCampaign.leads || detailCampaign.conversions || detailCampaign.roas || detailCampaign.impressions) ? (
-                  <div className="grid grid-cols-4 gap-2 border border-border rounded-xl p-3">
-                    {[
-                      { label: 'Impressões', value: detailCampaign.impressions?.toLocaleString('pt-BR') || '—', color: C.purple },
-                      { label: 'Leads', value: detailCampaign.leads?.toLocaleString('pt-BR') || '—', color: C.orange },
-                      { label: 'Conv.', value: detailCampaign.conversions?.toLocaleString('pt-BR') || '—', color: C.teal },
-                      { label: 'ROAS', value: detailCampaign.roas ? `${detailCampaign.roas}x` : '—', color: C.green },
-                    ].map(({ label, value, color }) => (
-                      <div key={label} className="text-center">
-                        <p className="text-sm font-black" style={{ color }}>{value}</p>
-                        <p className="text-[10px] text-muted-foreground">{label}</p>
+              {/* ── Exportable card ── */}
+              <div
+                ref={exportRef}
+                className="rounded-2xl border border-border bg-gradient-to-br from-card to-muted/20 overflow-hidden"
+                style={{ fontFamily: "'Inter', 'Montserrat', system-ui, sans-serif" }}
+              >
+                {/* Accent bar */}
+                <div className="h-1.5 w-full" style={{ background: `linear-gradient(90deg, ${CHANNEL_COLORS[detailCampaign.channel?.[0]] || C.orange}, ${C.teal})` }} />
+
+                {/* Header section */}
+                <div className="px-6 pt-5 pb-4">
+                  <div className="flex items-start justify-between gap-4 mb-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className={cn('flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider', STATUS_CONFIG[detailCampaign.status].color)}>
+                          <span className={cn('h-2 w-2 rounded-full', STATUS_CONFIG[detailCampaign.status].dot)} />
+                          {detailCampaign.status}
+                        </span>
+                        <span className={cn('rounded-md border px-2 py-1 text-[11px] font-bold', PRIORITY_COLORS[detailCampaign.priority])}>
+                          {detailCampaign.priority}
+                        </span>
+                        {detailCampaign.funnel && (
+                          <span className="rounded-md border border-border bg-muted/30 px-2 py-1 text-[11px] font-medium text-muted-foreground">
+                            {detailCampaign.funnel}
+                          </span>
+                        )}
                       </div>
-                    ))}
+                      <h2 className="text-lg font-black text-foreground tracking-tight leading-tight">{detailCampaign.name}</h2>
+                    </div>
+                    {detailCampaign.category && (
+                      <span className="rounded-lg bg-primary/10 border border-primary/20 px-3 py-1.5 text-xs font-bold text-primary shrink-0">
+                        {detailCampaign.category}
+                      </span>
+                    )}
                   </div>
-                ) : null}
+                  {detailCampaign.objective && (
+                    <p className="text-sm text-foreground/80 leading-relaxed">{detailCampaign.objective}</p>
+                  )}
+                </div>
 
-                <div className="grid grid-cols-2 gap-3 text-xs">
-                  {detailCampaign.channel?.length > 0 && <div><p className="text-muted-foreground/60 mb-0.5">Canal</p><p className="font-medium">{detailCampaign.channel.join(', ')}</p></div>}
-                  {detailCampaign.budget > 0 && <div><p className="text-muted-foreground/60 mb-0.5">Orçamento</p><p className="font-medium">R$ {detailCampaign.budget.toLocaleString('pt-BR')}</p></div>}
-                  {detailCampaign.responsible && <div><p className="text-muted-foreground/60 mb-0.5">Responsável</p><p className="font-medium">{detailCampaign.responsible}</p></div>}
-                  {detailCampaign.startDate && <div><p className="text-muted-foreground/60 mb-0.5">Início</p><p className="font-medium">{new Date(detailCampaign.startDate + 'T12:00:00').toLocaleDateString('pt-BR')}</p></div>}
-                  {detailCampaign.endDate && <div><p className="text-muted-foreground/60 mb-0.5">Término</p><p className="font-medium">{new Date(detailCampaign.endDate + 'T12:00:00').toLocaleDateString('pt-BR')}</p></div>}
+                {/* ── Metrics grid ── */}
+                {(detailCampaign.leads || detailCampaign.conversions || detailCampaign.roas || detailCampaign.impressions) && (
+                  <div className="mx-6 mb-4 rounded-xl border border-border/60 bg-muted/10 p-4">
+                    <p className="text-[10px] font-bold text-muted-foreground/50 uppercase tracking-widest mb-3">Performance</p>
+                    <div className="grid grid-cols-4 gap-4">
+                      {[
+                        { label: 'Impressões', value: detailCampaign.impressions?.toLocaleString('pt-BR') || '—', color: C.purple },
+                        { label: 'Leads', value: detailCampaign.leads?.toLocaleString('pt-BR') || '—', color: C.orange },
+                        { label: 'Conversões', value: detailCampaign.conversions?.toLocaleString('pt-BR') || '—', color: C.teal },
+                        { label: 'ROAS', value: detailCampaign.roas ? `${detailCampaign.roas}x` : '—', color: detailCampaign.roas && detailCampaign.roas >= 3 ? C.green : C.amber },
+                      ].map(({ label, value, color }) => (
+                        <div key={label} className="text-center">
+                          <p className="text-xl font-black tracking-tight" style={{ color }}>{value}</p>
+                          <p className="text-[10px] font-semibold text-muted-foreground/50 uppercase tracking-widest mt-0.5">{label}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* ── Info grid ── */}
+                <div className="mx-6 mb-4 grid grid-cols-2 gap-x-6 gap-y-3">
+                  {[
+                    { label: 'Canais', value: detailCampaign.channel?.join(', '), show: detailCampaign.channel?.length > 0 },
+                    { label: 'Orçamento', value: detailCampaign.budget > 0 ? `R$ ${detailCampaign.budget.toLocaleString('pt-BR')}` : null, show: detailCampaign.budget > 0 },
+                    { label: 'Responsável', value: detailCampaign.responsible, show: !!detailCampaign.responsible },
+                    { label: 'Público', value: detailCampaign.audience, show: !!detailCampaign.audience },
+                    { label: 'Início', value: detailCampaign.startDate ? new Date(detailCampaign.startDate + 'T12:00:00').toLocaleDateString('pt-BR') : null, show: !!detailCampaign.startDate },
+                    { label: 'Término', value: detailCampaign.endDate ? new Date(detailCampaign.endDate + 'T12:00:00').toLocaleDateString('pt-BR') : null, show: !!detailCampaign.endDate },
+                  ].filter(f => f.show && f.value).map(({ label, value }) => (
+                    <div key={label} className="border-b border-border/30 pb-2">
+                      <p className="text-[10px] font-bold text-muted-foreground/40 uppercase tracking-widest mb-0.5">{label}</p>
+                      <p className="text-sm font-semibold text-foreground">{value}</p>
+                    </div>
+                  ))}
+                </div>
+
+                {/* ── Description / instructions ── */}
+                {detailCampaign.description && (
+                  <div className="mx-6 mb-4 rounded-xl bg-muted/15 border border-border/40 p-4">
+                    <p className="text-[10px] font-bold text-muted-foreground/40 uppercase tracking-widest mb-2">Briefing</p>
+                    <p className="text-xs text-foreground/75 leading-relaxed whitespace-pre-line">{detailCampaign.description}</p>
+                  </div>
+                )}
+
+                {/* ── Subtasks ── */}
+                {detailCampaign.subtasks?.length > 0 && (
+                  <div className="mx-6 mb-4">
+                    <p className="text-[10px] font-bold text-muted-foreground/40 uppercase tracking-widest mb-2">Tarefas</p>
+                    <div className="space-y-1.5">
+                      {detailCampaign.subtasks.map(t => (
+                        <div key={t.id} className="flex items-center gap-2 text-xs">
+                          <span className={cn('h-4 w-4 rounded-md border flex items-center justify-center text-[10px] shrink-0', t.done ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400' : 'border-border text-muted-foreground/30')}>
+                            {t.done ? '✓' : ''}
+                          </span>
+                          <span className={cn('font-medium', t.done ? 'text-muted-foreground line-through' : 'text-foreground')}>{t.title}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Footer watermark */}
+                <div className="px-6 py-3 border-t border-border/30 flex items-center justify-between">
+                  <p className="text-[9px] text-muted-foreground/30 font-semibold uppercase tracking-widest">DQEF Hub · Plano de Campanha</p>
+                  <p className="text-[9px] text-muted-foreground/30 tabular-nums">{new Date().toLocaleDateString('pt-BR')}</p>
                 </div>
               </div>
-              <DialogFooter>
+
+              <DialogFooter className="gap-2">
                 <Button variant="ghost" onClick={() => setDetailId(null)}>Fechar</Button>
-                <Button onClick={() => { setDetailId(null); openEdit(detailCampaign); }} className="bg-primary text-primary-foreground hover:bg-primary/90">
-                  <PenLine className="mr-1.5 h-4 w-4" /> Editar
+                <Button
+                  variant="outline"
+                  onClick={handleExportPNG}
+                  disabled={exporting}
+                  className="gap-2 border-border"
+                >
+                  {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                  Exportar PNG
+                </Button>
+                <Button onClick={() => { setDetailId(null); openEdit(detailCampaign); }} className="bg-primary text-primary-foreground hover:bg-primary/90 gap-2">
+                  <PenLine className="h-4 w-4" /> Editar
                 </Button>
               </DialogFooter>
             </DialogContent>
