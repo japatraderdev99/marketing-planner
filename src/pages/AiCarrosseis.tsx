@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils';
 import { toPng } from 'html-to-image';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
+import { Slider } from '@/components/ui/slider';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -303,9 +304,19 @@ interface SlidePreviewProps {
   format?: CreativeFormat;
   /** When true, renders at exact export dimensions (offscreen). When false (default), renders responsively for UI display */
   exportMode?: boolean;
+  /** Text scale multiplier (0.5 to 2.0, default 1.0) */
+  textScale?: number;
 }
 
-function SlidePreview({ slide, imageUrl, slideRef, format, exportMode = false }: SlidePreviewProps) {
+function SlidePreview({ slide, imageUrl, slideRef, format, exportMode = false, textScale = 1 }: SlidePreviewProps) {
+  const ts = (size: string) => {
+    // Scale clamp() and px values
+    const pxMatch = size.match(/^(\d+(?:\.\d+)?)px$/);
+    if (pxMatch) return `${parseFloat(pxMatch[1]) * textScale}px`;
+    const clampMatch = size.match(/^clamp\((\d+(?:\.\d+)?)px,\s*([^,]+),\s*(\d+(?:\.\d+)?)px\)$/);
+    if (clampMatch) return `clamp(${parseFloat(clampMatch[1]) * textScale}px, ${clampMatch[2]}, ${parseFloat(clampMatch[3]) * textScale}px)`;
+    return size;
+  };
   const bg = BG_COLORS[slide.bgStyle] ?? SLIDE_BG;
   const isDataSlide = slide.layout === 'number-dominant';
   const isCTA = slide.layout === 'cta-clean';
@@ -391,7 +402,7 @@ function SlidePreview({ slide, imageUrl, slideRef, format, exportMode = false }:
           <div style={{
             fontFamily: 'Montserrat, sans-serif',
             fontWeight: 900,
-            fontSize: 'clamp(16px, 4.5vw, 24px)',
+            fontSize: ts('clamp(16px, 4.5vw, 24px)'),
             color: '#FFFFFF',
             lineHeight: 1.05,
             marginBottom: '10px',
@@ -404,7 +415,7 @@ function SlidePreview({ slide, imageUrl, slideRef, format, exportMode = false }:
             <div style={{
               fontFamily: 'Montserrat, sans-serif',
               fontWeight: 600,
-              fontSize: '10px',
+              fontSize: ts('10px'),
               color: 'rgba(255,255,255,0.75)',
               letterSpacing: '0.06em',
             }}>{slide.subtext}</div>
@@ -413,7 +424,7 @@ function SlidePreview({ slide, imageUrl, slideRef, format, exportMode = false }:
           <div style={{
             fontFamily: 'Montserrat, sans-serif',
             fontWeight: 700,
-            fontSize: '10px',
+            fontSize: ts('10px'),
             marginTop: '18px',
             letterSpacing: '0.04em',
           }}>
@@ -428,7 +439,7 @@ function SlidePreview({ slide, imageUrl, slideRef, format, exportMode = false }:
           <div style={{
             fontFamily: 'Montserrat, sans-serif',
             fontWeight: 900,
-            fontSize: 'clamp(44px, 13vw, 72px)',
+            fontSize: ts('clamp(44px, 13vw, 72px)'),
             color: '#FFFFFF',
             lineHeight: 0.9,
             letterSpacing: '-0.03em',
@@ -441,7 +452,7 @@ function SlidePreview({ slide, imageUrl, slideRef, format, exportMode = false }:
             <div style={{
               fontFamily: 'Montserrat, sans-serif',
               fontWeight: 700,
-              fontSize: '11px',
+              fontSize: ts('11px'),
               color: 'rgba(255,255,255,0.8)',
               lineHeight: 1.3,
               letterSpacing: '0.02em',
@@ -456,7 +467,7 @@ function SlidePreview({ slide, imageUrl, slideRef, format, exportMode = false }:
           <div style={{
             fontFamily: 'Montserrat, sans-serif',
             fontWeight: 900,
-            fontSize: 'clamp(14px, 3.8vw, 22px)',
+            fontSize: ts('clamp(14px, 3.8vw, 22px)'),
             lineHeight: 1.1,
             letterSpacing: '-0.01em',
             marginBottom: slide.subtext ? '8px' : '0',
@@ -469,7 +480,7 @@ function SlidePreview({ slide, imageUrl, slideRef, format, exportMode = false }:
             <div style={{
               fontFamily: 'Montserrat, sans-serif',
               fontWeight: 600,
-              fontSize: '10px',
+              fontSize: ts('10px'),
               color: 'rgba(255,255,255,0.75)',
               lineHeight: 1.45,
               letterSpacing: '0.03em',
@@ -504,13 +515,14 @@ interface SlideCardProps {
   userId: string | null;
   onLibraryChange: () => void;
   format: CreativeFormat;
+  textScale?: number;
 }
 
 function buildGenericImagePrompt(slide: SlideOutput): string {
   return `Editorial photography for a Brazilian service brand carousel slide. Style: documentary, natural light, authentic moment. The slide headline is "${slide.headline}". Create a background image that evokes this concept — no text, no overlays, no logos. The image will have a semi-transparent orange (#E8603C) overlay, so use high-contrast composition. Shot on Canon EOS R5, 35mm lens, f/2.8. Professional but human.`;
 }
 
-function SlideCard({ slide, imageUrl, isGenerating, onGenerateImage, onClearImage, onApplyLibraryImage, mediaLibraryCount, userId, onLibraryChange, format }: SlideCardProps) {
+function SlideCard({ slide, imageUrl, isGenerating, onGenerateImage, onClearImage, onApplyLibraryImage, mediaLibraryCount, userId, onLibraryChange, format, textScale }: SlideCardProps) {
   const { toast } = useToast();
   const [expanded, setExpanded] = useState(false);
   const slideRef = useRef<HTMLDivElement>(null);
@@ -662,7 +674,7 @@ function SlideCard({ slide, imageUrl, isGenerating, onGenerateImage, onClearImag
 
       {/* ── Slide preview (display — fluid) ── */}
       <div className="p-3">
-        <SlidePreview slide={editedSlide} imageUrl={imageUrl} slideRef={slideRef} format={format} />
+        <SlidePreview slide={editedSlide} imageUrl={imageUrl} slideRef={slideRef} format={format} textScale={textScale} />
       </div>
 
       {/* ── Quick actions bar ── */}
@@ -892,7 +904,7 @@ function SlideCard({ slide, imageUrl, isGenerating, onGenerateImage, onClearImag
 
       {/* Offscreen full-res node for PNG export */}
       <div style={{ position: 'fixed', left: '-99999px', top: 0, pointerEvents: 'none', zIndex: -1 }}>
-        <SlidePreview slide={editedSlide} imageUrl={imageUrl} slideRef={exportRef} format={format} exportMode />
+        <SlidePreview slide={editedSlide} imageUrl={imageUrl} slideRef={exportRef} format={format} exportMode textScale={textScale} />
       </div>
     </div>
   );
@@ -2328,6 +2340,7 @@ export default function AiCarrosseis() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<{ carousel: CarouselOutput; autonomous: boolean } | null>(null);
   const [selectedFormat, setSelectedFormat] = useState<CreativeFormat>(CREATIVE_FORMATS[0]);
+  const [textScale, setTextScale] = useState(1);
 
   // Per-slide image state
   const [slideImages, setSlideImages] = useState<Record<number, string>>({});
@@ -2833,6 +2846,22 @@ export default function AiCarrosseis() {
                   </div>
                 </div>
 
+                {/* Text size slider */}
+                <div className="flex items-center gap-3 mb-4 rounded-lg border border-border bg-card px-4 py-2.5">
+                  <span className="text-[10px] font-bold text-muted-foreground tracking-widest uppercase whitespace-nowrap">Texto</span>
+                  <span className="text-[10px] text-muted-foreground">A</span>
+                  <Slider
+                    value={[textScale]}
+                    onValueChange={([v]) => setTextScale(v)}
+                    min={0.5}
+                    max={2}
+                    step={0.05}
+                    className="flex-1"
+                  />
+                  <span className="text-sm font-bold text-muted-foreground">A</span>
+                  <span className="text-[10px] font-mono text-primary min-w-[36px] text-right">{Math.round(textScale * 100)}%</span>
+                </div>
+
                 {/* Slides grid */}
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-3 gap-3 mb-6">
                   {result.carousel.slides.map(slide => (
@@ -2848,6 +2877,7 @@ export default function AiCarrosseis() {
                       userId={userId}
                       onLibraryChange={fetchLibrary}
                       format={selectedFormat}
+                      textScale={textScale}
                     />
                   ))}
                 </div>
