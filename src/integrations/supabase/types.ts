@@ -14,6 +14,204 @@ export type Database = {
   }
   public: {
     Tables: {
+      active_creatives: {
+        Row: {
+          campaign_id: string | null
+          clicks: number | null
+          conversions: number | null
+          created_at: string
+          dimensions: string | null
+          engagement_rate: number | null
+          file_url: string | null
+          format_type: string | null
+          grid_position: number | null
+          id: string
+          impressions: number | null
+          notes: string | null
+          platform: string | null
+          published_at: string | null
+          spend: number | null
+          status: string
+          tags: string[] | null
+          thumbnail_url: string | null
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          campaign_id?: string | null
+          clicks?: number | null
+          conversions?: number | null
+          created_at?: string
+          dimensions?: string | null
+          engagement_rate?: number | null
+          file_url?: string | null
+          format_type?: string | null
+          grid_position?: number | null
+          id?: string
+          impressions?: number | null
+          notes?: string | null
+          platform?: string | null
+          published_at?: string | null
+          spend?: number | null
+          status?: string
+          tags?: string[] | null
+          thumbnail_url?: string | null
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          campaign_id?: string | null
+          clicks?: number | null
+          conversions?: number | null
+          created_at?: string
+          dimensions?: string | null
+          engagement_rate?: number | null
+          file_url?: string | null
+          format_type?: string | null
+          grid_position?: number | null
+          id?: string
+          impressions?: number | null
+          notes?: string | null
+          platform?: string | null
+          published_at?: string | null
+          spend?: number | null
+          status?: string
+          tags?: string[] | null
+          thumbnail_url?: string | null
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      brand_assets: {
+        Row: {
+          asset_type: string
+          category: string | null
+          created_at: string
+          file_format: string | null
+          file_size: number | null
+          file_url: string
+          height: number | null
+          id: string
+          is_favorite: boolean | null
+          name: string
+          sort_order: number | null
+          tags: string[] | null
+          thumbnail_url: string | null
+          usage_notes: string | null
+          user_id: string
+          width: number | null
+        }
+        Insert: {
+          asset_type?: string
+          category?: string | null
+          created_at?: string
+          file_format?: string | null
+          file_size?: number | null
+          file_url: string
+          height?: number | null
+          id?: string
+          is_favorite?: boolean | null
+          name: string
+          sort_order?: number | null
+          tags?: string[] | null
+          thumbnail_url?: string | null
+          usage_notes?: string | null
+          user_id: string
+          width?: number | null
+        }
+        Update: {
+          asset_type?: string
+          category?: string | null
+          created_at?: string
+          file_format?: string | null
+          file_size?: number | null
+          file_url?: string
+          height?: number | null
+          id?: string
+          is_favorite?: boolean | null
+          name?: string
+          sort_order?: number | null
+          tags?: string[] | null
+          thumbnail_url?: string | null
+          usage_notes?: string | null
+          user_id?: string
+          width?: number | null
+        }
+        Relationships: []
+      }
+      brand_colors: {
+        Row: {
+          category: string | null
+          created_at: string
+          hex_value: string
+          id: string
+          name: string
+          rgb_value: string | null
+          sort_order: number | null
+          user_id: string
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string
+          hex_value: string
+          id?: string
+          name: string
+          rgb_value?: string | null
+          sort_order?: number | null
+          user_id: string
+        }
+        Update: {
+          category?: string | null
+          created_at?: string
+          hex_value?: string
+          id?: string
+          name?: string
+          rgb_value?: string | null
+          sort_order?: number | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      brand_fonts: {
+        Row: {
+          created_at: string
+          font_name: string
+          font_url: string | null
+          font_weight: string | null
+          id: string
+          sample_text: string | null
+          sort_order: number | null
+          usage: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          font_name: string
+          font_url?: string | null
+          font_weight?: string | null
+          id?: string
+          sample_text?: string | null
+          sort_order?: number | null
+          usage?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          font_name?: string
+          font_url?: string | null
+          font_weight?: string | null
+          id?: string
+          sample_text?: string | null
+          sort_order?: number | null
+          usage?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       competitor_benchmarks: {
         Row: {
           ai_insights: Json | null

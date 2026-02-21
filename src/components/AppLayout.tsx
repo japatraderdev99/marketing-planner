@@ -18,6 +18,9 @@ const pageTitles: Record<string, { title: string; subtitle: string }> = {
   '/ai-carrosseis': { title: 'AI Carrosséis', subtitle: 'Gere carrosséis com arte visual, copy e prompts por lâmina' },
   '/estrategia': { title: 'Playbook Estratégico', subtitle: 'Diretriz de marca que norteia todas as criações e comunicações' },
   '/video-ia': { title: 'Video IA — Higgsfield', subtitle: 'Workflow de diretor para vídeos com IA' },
+  '/criativos-ativos': { title: 'Criativos Ativos', subtitle: 'Galeria de peças em produção com métricas de performance' },
+  '/grid-instagram': { title: 'Grid Instagram', subtitle: 'Mockup visual do feed para planejamento estético' },
+  '/brand-kit': { title: 'Brand Kit', subtitle: 'Central de identidade visual — logos, cores e tipografia' },
 };
 
 export function AppLayout({ children }: { children: ReactNode }) {

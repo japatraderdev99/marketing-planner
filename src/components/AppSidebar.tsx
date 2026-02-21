@@ -15,6 +15,9 @@ import {
   Target,
   MessageSquareText,
   Ruler,
+  Image,
+  Grid3X3,
+  Palette,
 } from 'lucide-react';
 import {
   Sidebar,
@@ -41,6 +44,9 @@ const navItems = [
   { title: 'AI Carrosséis', url: '/ai-carrosseis', icon: Layers },
   { title: 'Video IA', url: '/video-ia', icon: Clapperboard },
   { title: 'Formatos', url: '/formatos', icon: Ruler },
+  { title: 'Criativos Ativos', url: '/criativos-ativos', icon: Image },
+  { title: 'Grid Instagram', url: '/grid-instagram', icon: Grid3X3 },
+  { title: 'Brand Kit', url: '/brand-kit', icon: Palette },
 ];
 
 export function AppSidebar() {
