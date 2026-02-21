@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
-import { initialCampaigns, Campaign, CampaignStatus, Channel, ContentFormat, Priority, Funnel, KanbanStatus, ContentObjective } from '@/data/seedData';
+import { initialCampaigns, Campaign, CampaignStatus, Channel, ContentFormat, Priority, Funnel, KanbanStatus, ContentObjective, SEED_VERSION } from '@/data/seedData';
 import { initialContents, ContentItem } from '@/data/seedData';
 
 interface CampaignForm {
@@ -626,6 +626,17 @@ export default function Campanhas() {
       const raw = localStorage.getItem('dqef_strategy_metafields_v1');
       if (raw) setMetafields(JSON.parse(raw));
     } catch { /* noop */ }
+  }, []);
+
+  useEffect(() => {
+    const storedVersion = localStorage.getItem('dqef-seed-version');
+    if (storedVersion !== SEED_VERSION) {
+      localStorage.removeItem('dqef-campaigns');
+      localStorage.removeItem('dqef-contents');
+      localStorage.setItem('dqef-seed-version', SEED_VERSION);
+      setCampaigns(initialCampaigns);
+      setContents(initialContents);
+    }
   }, []);
 
   const autofillFromStrategy = () => {
