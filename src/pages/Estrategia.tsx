@@ -4,8 +4,9 @@ import {
   X, Zap, FileText, PlusCircle, File, Eye, Download, Trash2,
   ImageIcon, Check, Shield, Save, ChevronDown, ChevronUp, Info,
   Sparkles, Brain, RefreshCw, Copy, BookMarked, Loader2, CheckCircle2,
-  XCircle, Clock,
+  XCircle, Clock, Search, ExternalLink, Lightbulb, BarChart3,
 } from 'lucide-react';
+import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
@@ -72,6 +73,24 @@ interface KnowledgeDoc {
   error_message: string | null;
   created_at: string;
 }
+
+interface BenchmarkDoc {
+  id: string;
+  competitor_name: string;
+  platform: string | null;
+  format_type: string | null;
+  file_url: string | null;
+  file_name: string | null;
+  file_size: number | null;
+  notes: string | null;
+  ai_insights: Record<string, unknown> | null;
+  tags: string[];
+  status: 'pending' | 'analyzing' | 'done' | 'error';
+  created_at: string;
+}
+
+const PLATFORMS_LIST = ['Instagram', 'TikTok', 'LinkedIn', 'Facebook', 'YouTube', 'Google Ads', 'Pinterest', 'X/Twitter'] as const;
+const FORMAT_TYPES = ['Carrossel', 'Reels/Shorts', 'Stories', 'Feed Post', 'Anúncio', 'Landing Page', 'Email', 'Banner'] as const;
 
 const STRATEGY_STORAGE_KEY = 'dqef_strategy_v1';
 const METAFIELDS_STORAGE_KEY = 'dqef_strategy_metafields_v1';
@@ -450,6 +469,14 @@ export default function Estrategia() {
   const [fillingFromKnowledge, setFillingFromKnowledge] = useState(false);
   const brandBookInputRef = useRef<HTMLInputElement>(null);
 
+  const [benchmarks, setBenchmarks] = useState<BenchmarkDoc[]>([]);
+  const [benchmarkUploading, setBenchmarkUploading] = useState(false);
+  const [expandedBenchmark, setExpandedBenchmark] = useState<string | null>(null);
+  const [benchmarkCompetitor, setBenchmarkCompetitor] = useState('');
+  const [benchmarkPlatform, setBenchmarkPlatform] = useState('');
+  const [benchmarkFormat, setBenchmarkFormat] = useState('');
+  const benchmarkInputRef = useRef<HTMLInputElement>(null);
+
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setUserId(data.user?.id ?? null));
   }, []);
@@ -462,9 +489,18 @@ export default function Estrategia() {
     if (docs) setKnowledgeDocs(docs as KnowledgeDoc[]);
   }, []);
 
+  const loadBenchmarks = useCallback(async () => {
+    const { data: docs } = await supabase
+      .from('competitor_benchmarks')
+      .select('*')
+      .order('created_at', { ascending: false });
+    if (docs) setBenchmarks(docs as unknown as BenchmarkDoc[]);
+  }, []);
+
   useEffect(() => {
     loadKnowledgeDocs();
-  }, [loadKnowledgeDocs]);
+    loadBenchmarks();
+  }, [loadKnowledgeDocs, loadBenchmarks]);
 
   const handleBrandBookUpload = async (files: FileList | null) => {
     if (!files || !userId) return;
@@ -591,6 +627,94 @@ export default function Estrategia() {
     toast({ title: 'Documento removido', description: doc.document_name });
   };
 
+  // ─── Benchmark handlers ────────────────────────────────────────────────────
+  const handleBenchmarkUpload = async (files: FileList | null) => {
+    if (!files || !userId || !benchmarkCompetitor.trim()) {
+      if (!benchmarkCompetitor.trim()) {
+        toast({ title: 'Nome do concorrente obrigatório', description: 'Preencha o nome antes de enviar.', variant: 'destructive' });
+      }
+      return;
+    }
+    setBenchmarkUploading(true);
+
+    for (const file of Array.from(files)) {
+      if (file.size > 20 * 1024 * 1024) {
+        toast({ title: 'Arquivo muito grande', description: `${file.name} excede 20MB.`, variant: 'destructive' });
+        continue;
+      }
+      const ext = file.name.split('.').pop()?.toLowerCase() ?? 'bin';
+      const uuid = crypto.randomUUID();
+      const storagePath = `${userId}/benchmarks/${uuid}.${ext}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('benchmarks')
+        .upload(storagePath, file, { contentType: file.type, upsert: false });
+
+      if (uploadError) {
+        toast({ title: 'Erro no upload', description: uploadError.message, variant: 'destructive' });
+        continue;
+      }
+
+      const { data: urlData } = supabase.storage.from('benchmarks').getPublicUrl(storagePath);
+
+      const { data: inserted, error: insertError } = await supabase
+        .from('competitor_benchmarks')
+        .insert({
+          user_id: userId,
+          competitor_name: benchmarkCompetitor.trim(),
+          platform: benchmarkPlatform || null,
+          format_type: benchmarkFormat || null,
+          file_url: urlData.publicUrl,
+          file_name: file.name,
+          file_size: file.size,
+          status: 'pending',
+        })
+        .select()
+        .single();
+
+      if (insertError || !inserted) {
+        toast({ title: 'Erro ao registrar benchmark', description: insertError?.message, variant: 'destructive' });
+        continue;
+      }
+
+      await loadBenchmarks();
+      toast({ title: `${file.name} enviado ✅`, description: 'Analisando com IA...' });
+
+      await triggerBenchmarkAnalysis(inserted.id, urlData.publicUrl, benchmarkCompetitor.trim(), benchmarkPlatform, benchmarkFormat);
+    }
+
+    setBenchmarkUploading(false);
+    setBenchmarkCompetitor('');
+    setBenchmarkPlatform('');
+    setBenchmarkFormat('');
+  };
+
+  const triggerBenchmarkAnalysis = async (benchmarkId: string, fileUrl: string, competitorName: string, platform: string, formatType: string) => {
+    setBenchmarks(prev => prev.map(b => b.id === benchmarkId ? { ...b, status: 'analyzing' } : b));
+    try {
+      const { data: result, error } = await supabase.functions.invoke('analyze-benchmark', {
+        body: { benchmarkId, fileUrl, competitorName, platform, formatType },
+      });
+      if (error) throw error;
+      if (result?.error) throw new Error(result.error);
+      toast({ title: 'Benchmark analisado ✅', description: 'Insights gerados com a voz da sua marca.' });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Erro desconhecido';
+      toast({ title: 'Erro na análise', description: msg, variant: 'destructive' });
+    }
+    await loadBenchmarks();
+  };
+
+  const handleDeleteBenchmark = async (doc: BenchmarkDoc) => {
+    if (doc.file_url) {
+      const parts = doc.file_url.split('/benchmarks/');
+      if (parts[1]) await supabase.storage.from('benchmarks').remove([parts[1]]);
+    }
+    await supabase.from('competitor_benchmarks').delete().eq('id', doc.id);
+    setBenchmarks(prev => prev.filter(b => b.id !== doc.id));
+    toast({ title: 'Benchmark removido' });
+  };
+
   const update = (field: SectionKey, value: string) => {
     setData(prev => ({ ...prev, [field]: value }));
     setSaved(false);
@@ -687,6 +811,7 @@ export default function Estrategia() {
     { label: 'Seções Críticas', value: `${criticalFilled}/${criticalSections.length}`, ok: criticalFilled === criticalSections.length, icon: Target },
     { label: 'Completude Geral', value: `${pct}%`, ok: pct >= 80, icon: TrendingUp },
     { label: 'Brand Book', value: knowledgeDocs.filter(d => d.status === 'done').length > 0 ? 'Ativo' : 'Pendente', ok: knowledgeDocs.some(d => d.status === 'done'), icon: BookMarked },
+    { label: 'Benchmarks', value: benchmarks.filter(b => b.status === 'done').length > 0 ? `${benchmarks.filter(b => b.status === 'done').length} ref.` : 'Nenhum', ok: benchmarks.some(b => b.status === 'done'), icon: BarChart3 },
     { label: 'Meta-Fields IA', value: metafields ? `${metafields.completenessScore}%` : 'Não gerado', ok: !!metafields && (metafields.completenessScore ?? 0) >= 70, icon: Brain },
   ];
 
@@ -695,7 +820,7 @@ export default function Estrategia() {
       <div className="max-w-3xl mx-auto px-4 py-6 space-y-6">
 
         {/* ── C-Level Scorecard ── */}
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
           {scorecardItems.map(({ label, value, ok, icon: Icon }) => (
             <div key={label} className={cn(
               'rounded-xl border p-3.5 flex flex-col gap-2',
@@ -1060,6 +1185,263 @@ export default function Estrategia() {
               : <><PlusCircle className="h-4 w-4" /> Adicionar arquivo de referência</>
             }
           </button>
+        </div>
+
+        {/* ── Benchmark de Concorrentes ── */}
+        <div className="rounded-xl border border-amber-500/20 bg-card p-5 space-y-4">
+          <div className="flex items-center gap-3">
+            <div className="rounded-lg bg-amber-500/15 p-2 border border-amber-500/20">
+              <BarChart3 className="h-4 w-4 text-amber-400" />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-foreground flex items-center gap-2">
+                Benchmark de Concorrentes
+                {benchmarks.length > 0 && (
+                  <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-bold text-amber-400">
+                    {benchmarks.length}
+                  </span>
+                )}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Envie materiais de concorrentes — a IA analisa e gera insights adaptados à comunicação da sua marca
+              </p>
+            </div>
+          </div>
+
+          {/* Upload form */}
+          <div className="space-y-3 rounded-xl border border-border bg-muted/10 p-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <Input
+                value={benchmarkCompetitor}
+                onChange={e => setBenchmarkCompetitor(e.target.value)}
+                placeholder="Nome do concorrente *"
+                className="text-sm bg-muted/20"
+              />
+              <select
+                value={benchmarkPlatform}
+                onChange={e => setBenchmarkPlatform(e.target.value)}
+                className="flex h-10 w-full rounded-md border border-input bg-muted/20 px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <option value="">Plataforma (opcional)</option>
+                {PLATFORMS_LIST.map(p => <option key={p} value={p}>{p}</option>)}
+              </select>
+              <select
+                value={benchmarkFormat}
+                onChange={e => setBenchmarkFormat(e.target.value)}
+                className="flex h-10 w-full rounded-md border border-input bg-muted/20 px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <option value="">Formato (opcional)</option>
+                {FORMAT_TYPES.map(f => <option key={f} value={f}>{f}</option>)}
+              </select>
+            </div>
+            <input ref={benchmarkInputRef} type="file" multiple
+              accept="image/*,.pdf,.png,.jpg,.jpeg,.webp,.gif" className="hidden"
+              onChange={e => handleBenchmarkUpload(e.target.files)} />
+            <button
+              onClick={() => benchmarkInputRef.current?.click()}
+              disabled={benchmarkUploading || !userId || !benchmarkCompetitor.trim()}
+              className="w-full flex items-center justify-center gap-2 rounded-xl border-2 border-dashed border-amber-500/30 hover:border-amber-500/60 hover:bg-amber-500/5 transition-all py-4 text-sm font-medium text-muted-foreground hover:text-amber-400 disabled:opacity-40"
+            >
+              {benchmarkUploading
+                ? <><Loader2 className="h-4 w-4 animate-spin" /> Enviando e analisando...</>
+                : <><Search className="h-4 w-4" /> Upload de material do concorrente <span className="text-[11px] text-muted-foreground/50">· Print, anúncio, carrossel · máx 20MB</span></>
+              }
+            </button>
+          </div>
+
+          {/* Benchmark list */}
+          {benchmarks.length > 0 && (
+            <div className="space-y-3">
+              {benchmarks.map(doc => (
+                <div key={doc.id} className="rounded-xl border border-border bg-muted/20 overflow-hidden">
+                  <div className="flex items-center gap-3 px-3 py-3">
+                    {doc.file_url && doc.file_url.match(/\.(png|jpg|jpeg|webp|gif)$/i) ? (
+                      <img src={doc.file_url} alt="" className="h-12 w-12 rounded-lg object-cover border border-border shrink-0" />
+                    ) : (
+                      <div className="h-12 w-12 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center shrink-0">
+                        <FileText className="h-5 w-5 text-amber-400" />
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-foreground truncate">{doc.competitor_name}</p>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {doc.platform && <span className="text-[10px] rounded-full bg-muted/50 px-1.5 py-0.5 text-muted-foreground">{doc.platform}</span>}
+                        {doc.format_type && <span className="text-[10px] rounded-full bg-muted/50 px-1.5 py-0.5 text-muted-foreground">{doc.format_type}</span>}
+                        <span className="text-[10px] text-muted-foreground/50">{doc.file_name}</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {doc.status === 'pending' && (
+                        <button onClick={() => doc.file_url && triggerBenchmarkAnalysis(doc.id, doc.file_url, doc.competitor_name, doc.platform || '', doc.format_type || '')}
+                          className="flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-400 hover:bg-amber-500/25 transition-colors">
+                          <Sparkles className="h-2.5 w-2.5" /> Analisar
+                        </button>
+                      )}
+                      {doc.status === 'analyzing' && (
+                        <span className="flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-400">
+                          <Loader2 className="h-2.5 w-2.5 animate-spin" /> Analisando...
+                        </span>
+                      )}
+                      {doc.status === 'done' && (
+                        <button onClick={() => setExpandedBenchmark(expandedBenchmark === doc.id ? null : doc.id)}
+                          className="flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-400 hover:bg-emerald-500/25 transition-colors">
+                          <Lightbulb className="h-2.5 w-2.5" /> Insights · {expandedBenchmark === doc.id ? 'Fechar' : 'Ver'}
+                        </button>
+                      )}
+                      {doc.status === 'error' && (
+                        <button onClick={() => doc.file_url && triggerBenchmarkAnalysis(doc.id, doc.file_url, doc.competitor_name, doc.platform || '', doc.format_type || '')}
+                          className="flex items-center gap-1 rounded-full bg-red-500/15 px-2 py-0.5 text-[10px] font-semibold text-red-400 hover:bg-red-500/25 transition-colors">
+                          <XCircle className="h-2.5 w-2.5" /> Erro · Tentar novamente
+                        </button>
+                      )}
+                      {doc.file_url && (
+                        <a href={doc.file_url} target="_blank" rel="noopener noreferrer" className="rounded p-1.5 hover:bg-muted transition-colors">
+                          <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
+                        </a>
+                      )}
+                      <button onClick={() => handleDeleteBenchmark(doc)} className="rounded p-1.5 hover:bg-destructive/15 transition-colors group">
+                        <Trash2 className="h-3.5 w-3.5 text-muted-foreground group-hover:text-destructive" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Expanded insights */}
+                  {doc.status === 'done' && expandedBenchmark === doc.id && doc.ai_insights && (
+                    <div className="border-t border-border bg-muted/10 px-4 py-4 space-y-4">
+                      {doc.ai_insights.summary && (
+                        <div className="rounded-lg bg-amber-500/5 border border-amber-500/15 px-3 py-2.5">
+                          <p className="text-[10px] font-bold uppercase tracking-wider text-amber-400/70 mb-1">📊 Resumo da Análise</p>
+                          <p className="text-xs text-foreground/85 leading-relaxed">{String(doc.ai_insights.summary)}</p>
+                        </div>
+                      )}
+
+                      {doc.ai_insights.competitorAnalysis && (() => {
+                        const ca = doc.ai_insights.competitorAnalysis as Record<string, unknown>;
+                        return (
+                          <div className="space-y-2">
+                            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60">Análise do Concorrente</p>
+                            <div className="grid grid-cols-2 gap-2">
+                              {Array.isArray(ca.strengths) && ca.strengths.length > 0 && (
+                                <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-2">
+                                  <p className="text-[10px] font-bold text-emerald-400 mb-1">✅ Pontos fortes</p>
+                                  {(ca.strengths as string[]).map((s, i) => <p key={i} className="text-[11px] text-foreground/80">• {s}</p>)}
+                                </div>
+                              )}
+                              {Array.isArray(ca.weaknesses) && ca.weaknesses.length > 0 && (
+                                <div className="rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-2">
+                                  <p className="text-[10px] font-bold text-red-400 mb-1">❌ Pontos fracos</p>
+                                  {(ca.weaknesses as string[]).map((s, i) => <p key={i} className="text-[11px] text-foreground/80">• {s}</p>)}
+                                </div>
+                              )}
+                            </div>
+                            <div className="grid grid-cols-2 gap-2 text-xs">
+                              {ca.copyStyle && (
+                                <div className="rounded-lg border border-border/60 bg-muted/20 px-3 py-2">
+                                  <p className="text-[10px] font-bold text-muted-foreground/60 mb-0.5">ESTILO DE COPY</p>
+                                  <p className="text-foreground">{String(ca.copyStyle)}</p>
+                                </div>
+                              )}
+                              {ca.hook && (
+                                <div className="rounded-lg border border-border/60 bg-muted/20 px-3 py-2">
+                                  <p className="text-[10px] font-bold text-muted-foreground/60 mb-0.5">GANCHO</p>
+                                  <p className="text-foreground">{String(ca.hook)}</p>
+                                </div>
+                              )}
+                              {ca.cta && (
+                                <div className="rounded-lg border border-border/60 bg-muted/20 px-3 py-2">
+                                  <p className="text-[10px] font-bold text-muted-foreground/60 mb-0.5">CTA</p>
+                                  <p className="text-foreground">{String(ca.cta)}</p>
+                                </div>
+                              )}
+                              {ca.visualStyle && (
+                                <div className="rounded-lg border border-border/60 bg-muted/20 px-3 py-2">
+                                  <p className="text-[10px] font-bold text-muted-foreground/60 mb-0.5">ESTILO VISUAL</p>
+                                  <p className="text-foreground">{String(ca.visualStyle)}</p>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })()}
+
+                      {doc.ai_insights.adaptationInsights && (() => {
+                        const ai = doc.ai_insights.adaptationInsights as Record<string, unknown>;
+                        return (
+                          <div className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-3 space-y-2">
+                            <p className="text-[10px] font-bold uppercase tracking-wider text-primary/70">🎯 Como adaptar para a sua marca</p>
+                            {Array.isArray(ai.whatToAdapt) && ai.whatToAdapt.length > 0 && (
+                              <div>
+                                <p className="text-[10px] font-semibold text-emerald-400 mb-1">Adaptar:</p>
+                                {(ai.whatToAdapt as string[]).map((s, i) => <p key={i} className="text-[11px] text-foreground/80 pl-2 border-l border-emerald-400/30">→ {s}</p>)}
+                              </div>
+                            )}
+                            {Array.isArray(ai.whatToAvoid) && ai.whatToAvoid.length > 0 && (
+                              <div>
+                                <p className="text-[10px] font-semibold text-red-400 mb-1">Não copiar:</p>
+                                {(ai.whatToAvoid as string[]).map((s, i) => <p key={i} className="text-[11px] text-foreground/80 pl-2 border-l border-red-400/30">✗ {s}</p>)}
+                              </div>
+                            )}
+                            {ai.suggestedAngle && (
+                              <div className="rounded bg-primary/10 px-2.5 py-1.5">
+                                <p className="text-[10px] font-bold text-primary/70">Ângulo sugerido</p>
+                                <p className="text-xs text-foreground">{String(ai.suggestedAngle)}</p>
+                              </div>
+                            )}
+                            {ai.suggestedHook && (
+                              <div className="rounded bg-primary/10 px-2.5 py-1.5">
+                                <p className="text-[10px] font-bold text-primary/70">Gancho adaptado</p>
+                                <p className="text-xs text-foreground">{String(ai.suggestedHook)}</p>
+                              </div>
+                            )}
+                            {ai.suggestedCTA && (
+                              <div className="rounded bg-primary/10 px-2.5 py-1.5">
+                                <p className="text-[10px] font-bold text-primary/70">CTA adaptado</p>
+                                <p className="text-xs text-foreground">{String(ai.suggestedCTA)}</p>
+                              </div>
+                            )}
+                            {ai.differentiationOpportunity && (
+                              <div className="rounded bg-amber-500/10 px-2.5 py-1.5">
+                                <p className="text-[10px] font-bold text-amber-400/70">💡 Oportunidade de diferenciação</p>
+                                <p className="text-xs text-foreground">{String(ai.differentiationOpportunity)}</p>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
+
+                      {Array.isArray(doc.ai_insights.actionItems) && (doc.ai_insights.actionItems as string[]).length > 0 && (
+                        <div>
+                          <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60 mb-2">📋 Ações Concretas</p>
+                          <div className="space-y-1">
+                            {(doc.ai_insights.actionItems as string[]).map((item, i) => (
+                              <div key={i} className="flex items-start gap-2 rounded-lg border border-border/50 bg-muted/20 px-3 py-2">
+                                <span className="text-primary text-xs mt-0.5 font-bold">{i + 1}.</span>
+                                <p className="text-xs text-foreground/80">{item}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {typeof doc.ai_insights.overallScore === 'number' && (
+                        <div className="flex items-center gap-2">
+                          <span className="text-[11px] text-muted-foreground">Relevância para benchmark:</span>
+                          <span className={cn('text-sm font-bold font-mono',
+                            (doc.ai_insights.overallScore as number) >= 70 ? 'text-emerald-400'
+                              : (doc.ai_insights.overallScore as number) >= 40 ? 'text-amber-400' : 'text-red-400'
+                          )}>{String(doc.ai_insights.overallScore)}%</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          <p className="text-center text-[11px] text-muted-foreground/40">
+            A IA analisa o material do concorrente e gera insights com a comunicação e marca pessoal da Deixa Que Eu Faço
+          </p>
         </div>
 
         {/* ── AI Extract + MetaFields ── */}
