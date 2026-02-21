@@ -966,7 +966,7 @@ export default function Estrategia() {
                   )}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  Envie seu playbook de marketing, brand book, guias de marca e documentos estratégicos. A IA extrai e salva o conhecimento automaticamente.
+                  Envie seu playbook de marketing, brand book, pitch deck, guias de marca e documentos estratégicos. A IA extrai e salva o conhecimento automaticamente.
                 </p>
               </div>
             </div>
@@ -975,8 +975,8 @@ export default function Estrategia() {
           <div className="flex items-start gap-2 rounded-lg bg-muted/30 border border-border px-3 py-2.5">
             <Lightbulb className="h-3.5 w-3.5 text-amber-400 shrink-0 mt-0.5" />
             <p className="text-[11px] text-muted-foreground leading-relaxed">
-              <strong className="text-foreground">Dica:</strong> Envie PDFs do playbook de marketing, apresentações de brand book, documentos de posicionamento e guias de tom de voz. 
-              Quanto mais completa a base, mais precisa será a IA nas campanhas e criativos.
+               <strong className="text-foreground">Dica:</strong> Envie PDFs do playbook de marketing, pitch decks, apresentações de brand book, documentos de posicionamento e guias de tom de voz. 
+               Quanto mais completa a base, mais precisa será a IA nas campanhas e criativos.
             </p>
           </div>
 
