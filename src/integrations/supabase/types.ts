@@ -14,6 +14,60 @@ export type Database = {
   }
   public: {
     Tables: {
+      competitor_benchmarks: {
+        Row: {
+          ai_insights: Json | null
+          competitor_name: string
+          created_at: string
+          file_name: string | null
+          file_size: number | null
+          file_url: string | null
+          format_type: string | null
+          id: string
+          notes: string | null
+          platform: string | null
+          status: string
+          tags: string[] | null
+          thumbnail_url: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          ai_insights?: Json | null
+          competitor_name: string
+          created_at?: string
+          file_name?: string | null
+          file_size?: number | null
+          file_url?: string | null
+          format_type?: string | null
+          id?: string
+          notes?: string | null
+          platform?: string | null
+          status?: string
+          tags?: string[] | null
+          thumbnail_url?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          ai_insights?: Json | null
+          competitor_name?: string
+          created_at?: string
+          file_name?: string | null
+          file_size?: number | null
+          file_url?: string | null
+          format_type?: string | null
+          id?: string
+          notes?: string | null
+          platform?: string | null
+          status?: string
+          tags?: string[] | null
+          thumbnail_url?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       creative_drafts: {
         Row: {
           angle: string | null
