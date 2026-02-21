@@ -1121,6 +1121,141 @@ function StrategicReviewButton({ userId }: { userId: string | null }) {
   );
 }
 
+function StrategyInputSection({ userId, strategyEnabled, setStrategyEnabled }: { userId: string | null; strategyEnabled: boolean; setStrategyEnabled: (v: boolean) => void }) {
+  const [metaFields, setMetaFields] = useState<Record<string, string> | null>(null);
+  const [kbDocs, setKbDocs] = useState<{ name: string; status: string }[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    // Load meta-fields from localStorage
+    try {
+      const raw = localStorage.getItem('dqef_strategy_metafields_v1');
+      if (raw) setMetaFields(JSON.parse(raw));
+    } catch { /* ignore */ }
+
+    // Load KB docs from backend
+    if (userId) {
+      supabase
+        .from('strategy_knowledge')
+        .select('document_name, status')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(5)
+        .then(({ data }) => {
+          if (data) setKbDocs(data.map(d => ({ name: d.document_name, status: d.status })));
+          setLoading(false);
+        });
+    } else {
+      setLoading(false);
+    }
+  }, [userId]);
+
+  const hasEssencia = !!metaFields?.essencia;
+  const hasPositioning = !!metaFields?.posicionamento;
+  const hasPersona = !!metaFields?.persona;
+  const hasTom = !!metaFields?.tomDeVoz;
+  const hasPrompt = !!metaFields?.promptContext;
+  const pillars = [
+    { label: 'Essência', ok: hasEssencia },
+    { label: 'Posicionamento', ok: hasPositioning },
+    { label: 'Persona', ok: hasPersona },
+    { label: 'Tom', ok: hasTom },
+    { label: 'System Prompt', ok: hasPrompt },
+  ];
+  const score = pillars.filter(p => p.ok).length;
+  const doneDocs = kbDocs.filter(d => d.status === 'done').length;
+
+  return (
+    <div className="rounded-xl border border-border bg-muted/20 p-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Target className="h-4 w-4 text-primary" />
+          <span className="text-xs font-bold text-foreground uppercase tracking-wider">Fundação Estratégica</span>
+        </div>
+        <button
+          onClick={() => setStrategyEnabled(!strategyEnabled)}
+          className={cn(
+            'relative inline-flex h-5 w-9 items-center rounded-full transition-colors',
+            strategyEnabled ? 'bg-primary' : 'bg-muted-foreground/30'
+          )}
+        >
+          <span className={cn(
+            'inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform',
+            strategyEnabled ? 'translate-x-[18px]' : 'translate-x-[3px]'
+          )} />
+        </button>
+      </div>
+
+      {strategyEnabled && (
+        <>
+          {loading ? (
+            <div className="h-12 rounded-lg bg-muted/30 animate-pulse" />
+          ) : (
+            <>
+              {/* Pillars mini-scorecard */}
+              <div className="flex flex-wrap gap-1.5">
+                {pillars.map(p => (
+                  <span
+                    key={p.label}
+                    className={cn(
+                      'rounded-full border px-2 py-0.5 text-[10px] font-bold',
+                      p.ok
+                        ? 'border-green-500/30 bg-green-500/10 text-green-400'
+                        : 'border-border bg-muted/30 text-muted-foreground'
+                    )}
+                  >
+                    {p.ok ? '✓' : '○'} {p.label}
+                  </span>
+                ))}
+              </div>
+
+              {/* Score bar */}
+              <div className="flex items-center gap-2">
+                <div className="flex-1 h-1.5 rounded-full bg-muted/40 overflow-hidden">
+                  <div
+                    className={cn(
+                      'h-full rounded-full transition-all',
+                      score >= 4 ? 'bg-green-500' : score >= 2 ? 'bg-yellow-500' : 'bg-red-500'
+                    )}
+                    style={{ width: `${(score / 5) * 100}%` }}
+                  />
+                </div>
+                <span className="text-[10px] font-bold text-muted-foreground">{score}/5</span>
+              </div>
+
+              {/* KB docs status */}
+              {kbDocs.length > 0 ? (
+                <div className="space-y-1">
+                  <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Knowledge Base ({doneDocs} doc{doneDocs !== 1 ? 's' : ''})</p>
+                  {kbDocs.slice(0, 3).map((doc, i) => (
+                    <div key={i} className="flex items-center gap-2 text-[11px]">
+                      <span className={cn(
+                        'h-1.5 w-1.5 rounded-full shrink-0',
+                        doc.status === 'done' ? 'bg-green-500' : doc.status === 'pending' ? 'bg-yellow-500 animate-pulse' : 'bg-red-500'
+                      )} />
+                      <span className="text-muted-foreground truncate">{doc.name}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-[10px] text-muted-foreground italic">
+                  Nenhum documento na KB. <a href="/estrategia" className="text-primary hover:underline">Envie na aba Estratégia →</a>
+                </p>
+              )}
+
+              <p className="text-[10px] text-muted-foreground leading-relaxed">
+                {strategyEnabled
+                  ? '✓ A IA usará posicionamento, tom e persona da estratégia na geração.'
+                  : 'Desativado — a IA gerará sem contexto estratégico.'}
+              </p>
+            </>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 function StrategicPanel() {
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -2209,6 +2344,7 @@ export default function AiCarrosseis() {
   const [showSaveDraftModal, setShowSaveDraftModal] = useState(false);
   const [draftsRefreshTrigger, setDraftsRefreshTrigger] = useState(0);
   const [lastSavedSigla, setLastSavedSigla] = useState<string | null>(null);
+  const [strategyEnabled, setStrategyEnabled] = useState(true);
 
   // Fetch current user id + profile name
   useEffect(() => {
@@ -2572,6 +2708,9 @@ export default function AiCarrosseis() {
                       )}
                     </div>
                   </div>
+
+                  {/* ── Fundação Estratégica ── */}
+                  <StrategyInputSection userId={userId} strategyEnabled={strategyEnabled} setStrategyEnabled={setStrategyEnabled} />
 
                   {/* Strategic Review Button */}
                   <StrategicReviewButton userId={userId} />
