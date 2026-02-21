@@ -890,170 +890,73 @@ export default function Estrategia() {
           </div>
         )}
 
-        {/* ── Sections ── */}
-        <div className="space-y-3">
-          {SECTIONS.map(section => (
-            <SectionCard
-              key={section.key}
-              section={section}
-              value={data[section.key as SectionKey] as string}
-              onChange={v => update(section.key as SectionKey, v)}
-            />
-          ))}
-        </div>
-
-        {/* ── Brand Book / Knowledge Base ── */}
-        <div className="rounded-xl border border-primary/20 bg-card p-5 space-y-4">
+        {/* ── Knowledge Base Upload (prominent position) ── */}
+        <div className="rounded-xl border-2 border-primary/30 bg-gradient-to-br from-primary/8 to-transparent p-5 space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="rounded-lg bg-primary/15 p-2 border border-primary/20">
-                <BookMarked className="h-4 w-4 text-primary" />
+              <div className="rounded-lg bg-primary/15 p-2.5 border border-primary/20">
+                <BookMarked className="h-5 w-5 text-primary" />
               </div>
               <div>
-                <p className="text-sm font-bold text-foreground flex items-center gap-2">
-                  Brand Book / Playbook de Marca
+                <p className="text-base font-black text-foreground flex items-center gap-2">
+                  📚 Knowledge Base
                   {knowledgeDocs.length > 0 && (
-                    <span className="rounded-full bg-primary/15 px-2 py-0.5 text-xs font-bold text-primary">
-                      {knowledgeDocs.length}
+                    <span className="rounded-full bg-primary/15 px-2.5 py-0.5 text-xs font-bold text-primary">
+                      {knowledgeDocs.filter(d => d.status === 'done').length}/{knowledgeDocs.length} analisados
                     </span>
                   )}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  A IA lê o documento e extrai o knowledge base estratégico — salvo permanentemente no backend
+                  Envie seu playbook de marketing, brand book, guias de marca e documentos estratégicos. A IA extrai e salva o conhecimento automaticamente.
                 </p>
               </div>
             </div>
           </div>
 
-          {knowledgeDocs.length > 0 && (
-            <div className="space-y-3">
-              {knowledgeDocs.map(doc => (
-                <div key={doc.id} className="rounded-xl border border-border bg-muted/20 overflow-hidden">
-                  <div className="flex items-center gap-3 px-3 py-3">
-                    <div className="shrink-0">
-                      {doc.document_type?.includes('pdf') ? <FileText className="h-4 w-4 text-red-400" />
-                        : doc.document_type?.startsWith('image/') ? <ImageIcon className="h-4 w-4 text-blue-400" />
-                        : <File className="h-4 w-4 text-muted-foreground" />}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-foreground truncate">{doc.document_name}</p>
-                      <p className="text-[10px] text-muted-foreground/60">
-                        {doc.file_size ? formatBytes(doc.file_size) : ''} · {new Date(doc.created_at).toLocaleDateString('pt-BR')}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      {doc.status === 'pending' && (
-                        <>
-                          <span className="flex items-center gap-1 rounded-full bg-muted/60 px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
-                            <Clock className="h-2.5 w-2.5" /> Aguardando
-                          </span>
-                          <button onClick={() => triggerAnalysis(doc.id, doc.document_url, doc.document_name)}
-                            className="flex items-center gap-1 rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-semibold text-primary hover:bg-primary/25 transition-colors">
-                            <Sparkles className="h-2.5 w-2.5" /> Analisar
-                          </button>
-                        </>
-                      )}
-                      {doc.status === 'analyzing' && (
-                        <span className="flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-400">
-                          <Loader2 className="h-2.5 w-2.5 animate-spin" /> Analisando...
-                        </span>
-                      )}
-                      {doc.status === 'done' && (
-                        <button onClick={() => setExpandedKnowledge(expandedKnowledge === doc.id ? null : doc.id)}
-                          className="flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-400 hover:bg-emerald-500/25 transition-colors">
-                          <CheckCircle2 className="h-2.5 w-2.5" /> Extraído · {expandedKnowledge === doc.id ? 'Fechar' : 'Ver'}
-                        </button>
-                      )}
-                      {doc.status === 'error' && (
-                        <button onClick={() => triggerAnalysis(doc.id, doc.document_url, doc.document_name)}
-                          className="flex items-center gap-1 rounded-full bg-red-500/15 px-2 py-0.5 text-[10px] font-semibold text-red-400 hover:bg-red-500/25 transition-colors">
-                          <XCircle className="h-2.5 w-2.5" /> Erro · Tentar novamente
-                        </button>
-                      )}
-                      <a href={doc.document_url} target="_blank" rel="noopener noreferrer"
-                        className="rounded p-1.5 hover:bg-muted transition-colors">
-                        <Download className="h-3.5 w-3.5 text-muted-foreground" />
-                      </a>
-                      <button onClick={() => handleDeleteKnowledgeDoc(doc)}
-                        className="rounded p-1.5 hover:bg-destructive/15 transition-colors group">
-                        <Trash2 className="h-3.5 w-3.5 text-muted-foreground group-hover:text-destructive" />
-                      </button>
-                    </div>
-                  </div>
+          <div className="flex items-start gap-2 rounded-lg bg-muted/30 border border-border px-3 py-2.5">
+            <Lightbulb className="h-3.5 w-3.5 text-amber-400 shrink-0 mt-0.5" />
+            <p className="text-[11px] text-muted-foreground leading-relaxed">
+              <strong className="text-foreground">Dica:</strong> Envie PDFs do playbook de marketing, apresentações de brand book, documentos de posicionamento e guias de tom de voz. 
+              Quanto mais completa a base, mais precisa será a IA nas campanhas e criativos.
+            </p>
+          </div>
 
-                  {doc.status === 'done' && expandedKnowledge === doc.id && doc.extracted_knowledge && (
-                    <div className="border-t border-border bg-muted/10 px-4 py-4 space-y-4">
-                      {doc.extracted_knowledge.documentSummary && (
-                        <div className="rounded-lg bg-primary/5 border border-primary/15 px-3 py-2.5">
-                          <p className="text-[10px] font-bold uppercase tracking-wider text-primary/70 mb-1">📄 Resumo do Documento</p>
-                          <p className="text-xs text-foreground/85 leading-relaxed">{String(doc.extracted_knowledge.documentSummary)}</p>
-                        </div>
-                      )}
-                      {doc.extracted_knowledge.promptContext && (
-                        <div className="rounded-lg bg-muted/40 border border-border px-3 py-2.5">
-                          <p className="text-[10px] font-bold uppercase tracking-wider text-primary/70 mb-1">🎯 System Prompt da Marca</p>
-                          <p className="text-xs text-foreground/85 leading-relaxed">{String(doc.extracted_knowledge.promptContext)}</p>
-                        </div>
-                      )}
-                      <div className="grid grid-cols-2 gap-2 text-xs">
-                        {doc.extracted_knowledge.brandName && (
-                          <div className="rounded-lg border border-border/60 bg-muted/20 px-3 py-2">
-                            <p className="text-[10px] font-bold text-muted-foreground/60 mb-0.5">MARCA</p>
-                            <p className="text-foreground">{String(doc.extracted_knowledge.brandName)}</p>
-                          </div>
-                        )}
-                        {doc.extracted_knowledge.uniqueValueProp && (
-                          <div className="rounded-lg border border-border/60 bg-muted/20 px-3 py-2">
-                            <p className="text-[10px] font-bold text-muted-foreground/60 mb-0.5">PROPOSTA DE VALOR</p>
-                            <p className="text-foreground">{String(doc.extracted_knowledge.uniqueValueProp)}</p>
-                          </div>
-                        )}
-                        {doc.extracted_knowledge.positioning && (
-                          <div className="col-span-2 rounded-lg border border-border/60 bg-muted/20 px-3 py-2">
-                            <p className="text-[10px] font-bold text-muted-foreground/60 mb-0.5">POSICIONAMENTO</p>
-                            <p className="text-foreground">{String(doc.extracted_knowledge.positioning)}</p>
-                          </div>
-                        )}
-                      </div>
-                      {Array.isArray(doc.extracted_knowledge.keyInsights) && doc.extracted_knowledge.keyInsights.length > 0 && (
-                        <div>
-                          <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60 mb-2">Insights Estratégicos</p>
-                          <div className="space-y-1">
-                            {(doc.extracted_knowledge.keyInsights as string[]).map((insight, i) => (
-                              <div key={i} className="flex items-start gap-2">
-                                <span className="text-primary text-xs mt-0.5">→</span>
-                                <p className="text-xs text-foreground/80">{insight}</p>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                      {Array.isArray(doc.extracted_knowledge.contentAngles) && doc.extracted_knowledge.contentAngles.length > 0 && (
-                        <div>
-                          <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60 mb-2">Ângulos de Conteúdo</p>
-                          <div className="flex flex-wrap gap-1.5">
-                            {(doc.extracted_knowledge.contentAngles as string[]).map((angle, i) => (
-                              <span key={i} className="rounded-full border border-border/50 bg-muted/30 px-2.5 py-1 text-[11px] text-foreground/80">{angle}</span>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                      {typeof doc.extracted_knowledge.completenessScore === 'number' && (
-                        <div className="flex items-center gap-2">
-                          <span className="text-[11px] text-muted-foreground">Completude do documento:</span>
-                          <span className={cn('text-sm font-bold font-mono',
-                            (doc.extracted_knowledge.completenessScore as number) >= 80 ? 'text-emerald-400'
-                              : (doc.extracted_knowledge.completenessScore as number) >= 50 ? 'text-amber-400' : 'text-red-400'
-                          )}>{String(doc.extracted_knowledge.completenessScore)}%</span>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                  {doc.status === 'error' && doc.error_message && (
-                    <div className="border-t border-border bg-red-500/5 px-4 py-2">
-                      <p className="text-[11px] text-red-400">{doc.error_message}</p>
-                    </div>
-                  )}
+          <input ref={brandBookInputRef} type="file" multiple
+            accept=".pdf,.doc,.docx,.ppt,.pptx,.png,.jpg,.jpeg,.webp" className="hidden"
+            onChange={e => handleBrandBookUpload(e.target.files)} />
+          <button
+            onClick={() => brandBookInputRef.current?.click()}
+            disabled={brandBookUploading || !userId}
+            className="w-full flex items-center justify-center gap-2 rounded-xl border-2 border-dashed border-primary/40 hover:border-primary/70 hover:bg-primary/10 transition-all py-6 text-sm font-semibold text-muted-foreground hover:text-primary disabled:opacity-40"
+          >
+            {brandBookUploading
+              ? <><Loader2 className="h-4 w-4 animate-spin" /> Enviando e analisando...</>
+              : <><PlusCircle className="h-5 w-5 text-primary/60" /> Enviar documentos estratégicos <span className="text-[11px] text-muted-foreground/50">· PDF, PPT, DOC, imagem · máx 20MB</span></>
+            }
+          </button>
+
+          {knowledgeDocs.length > 0 && (
+            <div className="space-y-2">
+              {knowledgeDocs.map(doc => (
+                <div key={doc.id} className="flex items-center gap-3 rounded-lg border border-border bg-card px-3 py-2.5">
+                  <div className="shrink-0">
+                    {doc.document_type?.includes('pdf') ? <FileText className="h-4 w-4 text-red-400" />
+                      : doc.document_type?.startsWith('image/') ? <ImageIcon className="h-4 w-4 text-blue-400" />
+                      : <File className="h-4 w-4 text-muted-foreground" />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-foreground truncate">{doc.document_name}</p>
+                    <p className="text-[10px] text-muted-foreground/60">
+                      {doc.file_size ? formatBytes(doc.file_size) : ''} · {new Date(doc.created_at).toLocaleDateString('pt-BR')}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {doc.status === 'done' && <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-400 flex items-center gap-1"><CheckCircle2 className="h-2.5 w-2.5" /> Extraído</span>}
+                    {doc.status === 'analyzing' && <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-400 flex items-center gap-1"><Loader2 className="h-2.5 w-2.5 animate-spin" /> Analisando</span>}
+                    {doc.status === 'pending' && <button onClick={() => triggerAnalysis(doc.id, doc.document_url, doc.document_name)} className="rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-semibold text-primary hover:bg-primary/25"><Sparkles className="h-2.5 w-2.5 inline mr-0.5" />Analisar</button>}
+                    {doc.status === 'error' && <button onClick={() => triggerAnalysis(doc.id, doc.document_url, doc.document_name)} className="rounded-full bg-red-500/15 px-2 py-0.5 text-[10px] font-semibold text-red-400 hover:bg-red-500/25"><XCircle className="h-2.5 w-2.5 inline mr-0.5" />Tentar</button>}
+                    <button onClick={() => handleDeleteKnowledgeDoc(doc)} className="rounded p-1 hover:bg-destructive/15 transition-colors group"><Trash2 className="h-3.5 w-3.5 text-muted-foreground group-hover:text-destructive" /></button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -1066,28 +969,27 @@ export default function Estrategia() {
               className="w-full flex items-center justify-center gap-2 rounded-xl border border-primary/40 bg-primary/8 hover:bg-primary/15 hover:border-primary/60 transition-all py-3 text-sm font-semibold text-primary disabled:opacity-40"
             >
               {fillingFromKnowledge
-                ? <><Loader2 className="h-4 w-4 animate-spin" /> Lendo knowledge base e preenchendo...</>
-                : <><Sparkles className="h-4 w-4" /> Preencher playbook com knowledge base</>
+                ? <><Loader2 className="h-4 w-4 animate-spin" /> Preenchendo playbook com KB...</>
+                : <><Sparkles className="h-4 w-4" /> Preencher playbook automaticamente com Knowledge Base</>
               }
             </button>
           )}
-          <input ref={brandBookInputRef} type="file" multiple
-            accept=".pdf,.doc,.docx,.ppt,.pptx,.png,.jpg,.jpeg,.webp" className="hidden"
-            onChange={e => handleBrandBookUpload(e.target.files)} />
-          <button
-            onClick={() => brandBookInputRef.current?.click()}
-            disabled={brandBookUploading || !userId}
-            className="w-full flex items-center justify-center gap-2 rounded-xl border-2 border-dashed border-primary/30 hover:border-primary/60 hover:bg-primary/5 transition-all py-5 text-sm font-medium text-muted-foreground hover:text-primary disabled:opacity-40"
-          >
-            {brandBookUploading
-              ? <><Loader2 className="h-4 w-4 animate-spin" /> Enviando e analisando...</>
-              : <><BookMarked className="h-4 w-4 text-primary/60" /> Fazer upload de Brand Book ou Playbook <span className="text-[11px] text-muted-foreground/50">· PDF, PPT, DOC, imagem · máx 20MB</span></>
-            }
-          </button>
-          <p className="text-center text-[11px] text-muted-foreground/40">
-            A IA extrai posicionamento, persona, tom de voz, mensagens-chave e mais — salvo no backend para todas as gerações
-          </p>
         </div>
+
+        {/* ── Sections ── */}
+        <div className="space-y-3">
+          {SECTIONS.map(section => (
+            <SectionCard
+              key={section.key}
+              section={section}
+              value={data[section.key as SectionKey] as string}
+              onChange={v => update(section.key as SectionKey, v)}
+            />
+          ))}
+        </div>
+
+
+
 
         {/* ── Arquivos de Referência Avulsos ── */}
         <div className="rounded-xl border border-border bg-card p-5 space-y-4">
