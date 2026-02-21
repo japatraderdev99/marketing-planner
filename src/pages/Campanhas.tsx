@@ -619,6 +619,9 @@ export default function Campanhas() {
   const [extraInstructions, setExtraInstructions] = useState('');
   const [showAiPanel, setShowAiPanel] = useState(false);
   const [cmoDirectives, setCmoDirectives] = useState({ emotionalAngle: '', toneGuidance: '', targetPain: '', keyMessage: '', avoid: '', freeNotes: '' });
+  const [refinementNote, setRefinementNote] = useState('');
+  const [showRefinement, setShowRefinement] = useState(false);
+  const [knowledgeDocs, setKnowledgeDocs] = useState<Array<{ document_name: string; status: string }>>([]);
 
   const [metafields, setMetafields] = useState<MetaFields | null>(null);
   useEffect(() => {
@@ -626,6 +629,16 @@ export default function Campanhas() {
       const raw = localStorage.getItem('dqef_strategy_metafields_v1');
       if (raw) setMetafields(JSON.parse(raw));
     } catch { /* noop */ }
+    // Load knowledge docs count
+    (async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const { data } = await supabase.from('strategy_knowledge').select('document_name, status').eq('user_id', user.id);
+          if (data) setKnowledgeDocs(data);
+        }
+      } catch { /* noop */ }
+    })();
   }, []);
 
   useEffect(() => {
@@ -742,6 +755,8 @@ export default function Campanhas() {
       if (result?.error) throw new Error(result.error);
       setAiPlan(result.plan as AiPlan);
       setShowAiPanel(true);
+      setShowRefinement(false);
+      setRefinementNote('');
       toast({ title: 'Plano de campanha gerado ✅' });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Erro desconhecido';
@@ -749,6 +764,25 @@ export default function Campanhas() {
     } finally {
       setGenerating(false);
     }
+  };
+
+  const handleRefinePlan = async () => {
+    if (!refinementNote.trim()) {
+      toast({ title: 'Escreva o ajuste desejado', variant: 'destructive' });
+      return;
+    }
+    const originalExtra = extraInstructions;
+    setExtraInstructions(prev => [prev, `AJUSTE SOLICITADO PELO CMO: ${refinementNote}`].filter(Boolean).join('\n'));
+    await handleGenerateAI();
+    setExtraInstructions(originalExtra);
+  };
+
+  const handleRegenerateWithKB = async () => {
+    const kbExtra = 'INSTRUÇÃO ESPECIAL: Consulte OBRIGATORIAMENTE o knowledge base completo (playbook de marketing, brand book, documentos de estratégia) antes de gerar o plano. Alinhe todas as sugestões com as diretrizes estratégicas registradas.';
+    const originalExtra = extraInstructions;
+    setExtraInstructions(prev => [kbExtra, prev].filter(Boolean).join('\n'));
+    await handleGenerateAI();
+    setExtraInstructions(originalExtra);
   };
 
   const handleApplyPlan = () => {
@@ -1087,7 +1121,40 @@ export default function Campanhas() {
                 </div>
               </div>
 
-              {/* ── CMO Directives Panel ── */}
+              {/* Knowledge Base Status */}
+              <div className="rounded-xl border border-border bg-muted/10 p-3">
+                <div className="flex items-center gap-2 mb-2">
+                  <Info className="h-3.5 w-3.5 text-muted-foreground" />
+                  <p className="text-xs font-bold text-foreground">📚 Knowledge Base & Documentos Estratégicos</p>
+                </div>
+                {knowledgeDocs.length > 0 ? (
+                  <div className="space-y-1.5">
+                    <div className="flex flex-wrap gap-1.5">
+                      {knowledgeDocs.map((doc, i) => (
+                        <span key={i} className={cn(
+                          'rounded-full border px-2 py-0.5 text-[10px] font-medium',
+                          doc.status === 'done' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                        )}>
+                          {doc.status === 'done' ? '✅' : '⏳'} {doc.document_name}
+                        </span>
+                      ))}
+                    </div>
+                    <p className="text-[10px] text-muted-foreground">
+                      {knowledgeDocs.filter(d => d.status === 'done').length} doc(s) analisado(s) — a IA usará esses dados ao gerar o plano
+                    </p>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between">
+                    <p className="text-[11px] text-muted-foreground">
+                      Nenhum documento estratégico enviado. Para enviar playbook de marketing, brand book e outros documentos-chave:
+                    </p>
+                    <a href="/estrategia" className="text-[10px] font-bold text-primary hover:underline whitespace-nowrap ml-2 flex items-center gap-1">
+                      <ArrowRight className="h-3 w-3" /> Ir para Estratégia
+                    </a>
+                  </div>
+                )}
+              </div>
+
               <div className="rounded-xl border border-border bg-muted/10 p-4 space-y-3">
                 <div className="flex items-center gap-2 mb-1">
                   <div className="rounded-lg bg-accent/15 p-1.5 border border-accent/20">
@@ -1262,6 +1329,64 @@ export default function Campanhas() {
                   <Button onClick={handleApplyPlan} className="w-full bg-emerald-600 hover:bg-emerald-600/90 text-white font-bold gap-2">
                     <Zap className="h-4 w-4" /> Aplicar plano → Kanban + Calendário
                   </Button>
+
+                  {/* Adjustment & KB buttons */}
+                  <div className="border-t border-emerald-500/15 pt-3 space-y-2">
+                    <p className="text-[10px] font-bold text-muted-foreground/60 uppercase tracking-wider">Ajustar ou refazer</p>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setShowRefinement(v => !v)}
+                        className="flex-1 border-border text-xs gap-1.5"
+                        disabled={generating}
+                      >
+                        <PenLine className="h-3.5 w-3.5" /> Ajustar plano
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleRegenerateWithKB}
+                        className="flex-1 border-primary/30 text-primary text-xs gap-1.5 hover:bg-primary/10"
+                        disabled={generating}
+                      >
+                        {generating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Brain className="h-3.5 w-3.5" />}
+                        Refazer com Knowledge Base
+                      </Button>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleGenerateAI}
+                      className="w-full border-border text-xs gap-1.5 text-muted-foreground"
+                      disabled={generating}
+                    >
+                      {generating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                      Regenerar do zero
+                    </Button>
+
+                    {showRefinement && (
+                      <div className="rounded-lg border border-border bg-muted/20 p-3 space-y-2">
+                        <p className="text-[10px] font-bold text-muted-foreground/60 uppercase tracking-wider">✏️ Escreva o ajuste desejado</p>
+                        <Textarea
+                          placeholder="Ex: Troque o ângulo para urgência, reduza para 5 tarefas, foque mais em Stories do que Carrossel..."
+                          value={refinementNote}
+                          onChange={e => setRefinementNote(e.target.value)}
+                          rows={2}
+                          className="bg-muted/20 border-border/60 resize-none text-xs"
+                        />
+                        <Button
+                          onClick={handleRefinePlan}
+                          disabled={generating || !refinementNote.trim()}
+                          size="sm"
+                          className="w-full bg-primary text-primary-foreground hover:bg-primary/90 gap-1.5 text-xs font-bold"
+                        >
+                          {generating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+                          Aplicar ajuste e regenerar
+                        </Button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
