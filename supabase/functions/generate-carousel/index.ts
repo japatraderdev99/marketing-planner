@@ -1,6 +1,10 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
-const LOVABLE_AI_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
 
 const DQEF_CONTEXT = `
 Você é um estrategista de conteúdo sênior da Deixa Que Eu Faço (DQEF), um marketplace de serviços locais com lançamento em Florianópolis.
@@ -50,26 +54,12 @@ interface GenerateRequest {
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, {
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "POST, OPTIONS",
-        "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-      },
-    });
+    return new Response(null, { headers: corsHeaders });
   }
 
   try {
     const body: GenerateRequest = await req.json();
     const { persona, angle, channel, format, objective, personaData, platformData, additionalContext } = body;
-
-    const apiKey = Deno.env.get("LOVABLE_API_KEY");
-    if (!apiKey) {
-      return new Response(JSON.stringify({ error: "AI service not configured" }), {
-        status: 500,
-        headers: { "Access-Control-Allow-Origin": "*", "Content-Type": "application/json" },
-      });
-    }
 
     const platformContext = platformData ? `
 DADOS DA PLATAFORMA (contexto atual):
@@ -125,26 +115,28 @@ REGRAS:
 - Retorne APENAS o JSON, sem markdown ou texto extra
 `;
 
-    const response = await fetch(LOVABLE_AI_URL, {
+    // Route through ai-router (Claude Sonnet 4 for copy)
+    const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+    const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
+
+    const response = await fetch(`${SUPABASE_URL}/functions/v1/ai-router`, {
       method: "POST",
-      headers: {
-        "Authorization": `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${SUPABASE_ANON_KEY}` },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
+        task_type: "copy",
         messages: [
           { role: "system", content: DQEF_CONTEXT },
           { role: "user", content: userPrompt },
         ],
-        temperature: 0.8,
+        options: { temperature: 0.8 },
+        function_name: "generate-carousel",
       }),
     });
 
     if (!response.ok) {
-      const err = await response.text();
-      return new Response(JSON.stringify({ error: "AI request failed", details: err }), {
-        status: 500,
+      const errData = await response.json().catch(() => ({ error: "AI request failed" }));
+      return new Response(JSON.stringify(errData), {
+        status: response.status,
         headers: { "Access-Control-Allow-Origin": "*", "Content-Type": "application/json" },
       });
     }
@@ -154,7 +146,6 @@ REGRAS:
 
     let parsed;
     try {
-      // Clean markdown code blocks if present
       const cleaned = content.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
       parsed = JSON.parse(cleaned);
     } catch {

@@ -11,3 +11,6 @@ verify_jwt = false
 
 [functions.ai-router]
 verify_jwt = false
+
+[functions.weekly-strategy-review]
+verify_jwt = false

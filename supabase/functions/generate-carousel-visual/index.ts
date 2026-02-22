@@ -6,8 +6,6 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
-const LOVABLE_AI_URL = 'https://ai.gateway.lovable.dev/v1/chat/completions';
-
 function extractJSON(raw: string): Record<string, unknown> {
   let cleaned = raw.trim();
   cleaned = cleaned.replace(/```json\s*/gi, '').replace(/```\s*/gi, '');
@@ -147,24 +145,31 @@ RETORNE EXATAMENTE ESTE JSON (sem texto antes ou depois):
   ]
 }`;
 
+async function getUserId(req: Request): Promise<string | null> {
+  try {
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) return null;
+    const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+    const userClient = createClient(SUPABASE_URL, Deno.env.get("SUPABASE_ANON_KEY")!, {
+      global: { headers: { Authorization: authHeader } },
+    });
+    const { data: { user } } = await userClient.auth.getUser();
+    return user?.id ?? null;
+  } catch { return null; }
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-    if (!LOVABLE_API_KEY) {
-      return new Response(JSON.stringify({ error: 'LOVABLE_API_KEY not configured' }), {
-        status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
     const body = await req.json();
     const { context = '', angle = '', persona = '', channel = '', tone = '', strategyContext = '' } = body;
 
-    // Get dynamic brand strategy context (knowledge base + meta-fields from frontend)
+    // Get dynamic brand strategy context
     const brandContext = await getStrategyContext(req, strategyContext);
+    const userId = await getUserId(req);
 
     const systemPrompt = `Você é o estrategista criativo especialista em carrosséis virais para Instagram com profundo conhecimento do prestador de serviço autônomo brasileiro.
 ${brandContext}
@@ -183,28 +188,31 @@ ${tone ? `TOM: ${tone}` : ''}
 
 Siga todas as regras de copy, design e mídia. EXATAMENTE 5 slides. bgStyle sempre 'dark'. As copies devem estar 100% alinhadas com a estratégia e tom de voz da marca. Retorne o JSON completo.`;
 
-    const response = await fetch(LOVABLE_AI_URL, {
+    // Route through ai-router (Claude Sonnet 4 for copy)
+    const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+    const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
+
+    const response = await fetch(`${SUPABASE_URL}/functions/v1/ai-router`, {
       method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${SUPABASE_ANON_KEY}` },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-pro',
+        task_type: "copy",
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt },
         ],
-        temperature: 0.85,
+        options: { temperature: 0.85 },
+        user_id: userId,
+        function_name: "generate-carousel-visual",
       }),
     });
 
     if (!response.ok) {
-      if (response.status === 429) return new Response(JSON.stringify({ error: 'Rate limit atingido. Aguarde alguns segundos e tente novamente.' }), { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-      if (response.status === 402) return new Response(JSON.stringify({ error: 'Créditos insuficientes. Adicione créditos na sua conta Lovable.' }), { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-      const errText = await response.text();
-      console.error('AI gateway error:', response.status, errText);
-      return new Response(JSON.stringify({ error: 'Erro na API de IA. Tente novamente.' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      const errData = await response.json().catch(() => ({ error: "Erro na API de IA" }));
+      return new Response(JSON.stringify(errData), {
+        status: response.status,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
     const aiResponse = await response.json();

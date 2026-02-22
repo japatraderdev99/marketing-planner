@@ -12,9 +12,6 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY não configurada");
-
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
@@ -97,59 +94,51 @@ Extraia e retorne o seguinte JSON:
     "suggestedCTA": "CTA adaptado ao tom da marca"
   },
   "formatInsights": {
-    "formatName": "nome do formato identificado (ex: carrossel, reels, stories)",
+    "formatName": "nome do formato identificado",
     "bestPractices": ["prática 1", "prática 2"],
     "dimensionsUsed": "dimensões aproximadas",
     "colorPalette": "cores predominantes",
     "typography": "estilo tipográfico"
   },
-  "actionItems": [
-    "ação concreta 1 para implementar",
-    "ação concreta 2",
-    "ação concreta 3"
-  ],
+  "actionItems": ["ação concreta 1", "ação concreta 2", "ação concreta 3"],
   "overallScore": 75,
   "summary": "resumo executivo em 2-3 frases"
 }
 
 Para overallScore: 0-100 baseado na qualidade e relevância do material para benchmarking.`;
 
-    const aiPayload: Record<string, unknown> = {
-      model: "google/gemini-2.5-flash",
-      messages: [
-        { role: "system", content: systemPrompt },
-        {
-          role: "user",
-          content: [
-            { type: "text", text: userPrompt },
-            { type: "image_url", image_url: { url: `data:${mimeType};base64,${base64}` } },
-          ],
-        },
-      ],
-      temperature: 0.3,
-      response_format: { type: "json_object" },
-    };
+    // Route through ai-router (analyze -> Claude Sonnet 4, supports vision)
+    const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 
-    const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const aiRes = await fetch(`${SUPABASE_URL}/functions/v1/ai-router`, {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(aiPayload),
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${SUPABASE_ANON_KEY}` },
+      body: JSON.stringify({
+        task_type: "analyze",
+        messages: [
+          { role: "system", content: systemPrompt },
+          {
+            role: "user",
+            content: [
+              { type: "text", text: userPrompt },
+              { type: "image_url", image_url: { url: `data:${mimeType};base64,${base64}` } },
+            ],
+          },
+        ],
+        options: { temperature: 0.3, response_format: { type: "json_object" } },
+        user_id: user.id,
+        function_name: "analyze-benchmark",
+      }),
     });
 
     if (!aiRes.ok) {
-      const errText = await aiRes.text();
-      if (aiRes.status === 429) {
+      const errData = await aiRes.json().catch(() => ({ error: "AI error" }));
+      if (aiRes.status === 429 || aiRes.status === 402) {
         await supabase.from("competitor_benchmarks").update({ status: "error" }).eq("id", benchmarkId);
-        return new Response(JSON.stringify({ error: "Rate limit atingido. Tente novamente." }), { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
-      if (aiRes.status === 402) {
-        await supabase.from("competitor_benchmarks").update({ status: "error" }).eq("id", benchmarkId);
-        return new Response(JSON.stringify({ error: "Créditos de IA esgotados." }), { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-      }
-      throw new Error(`AI gateway error ${aiRes.status}: ${errText}`);
+      return new Response(JSON.stringify(errData), {
+        status: aiRes.status, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     const aiData = await aiRes.json();
