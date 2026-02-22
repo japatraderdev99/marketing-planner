@@ -1,353 +1,112 @@
 
-# Arquitetura Completa: DQEF Hub como Sistema Operacional de Marketing Digital
+# Plano Final: Migração Completa de 9 Edge Functions + Weekly Strategy Review com Opus 4.6
 
-## Visao Geral
+## Resumo
 
-Redesenhar a arquitetura da plataforma DQEF como um sistema operacional completo para gestao de marketing digital, pilotado por um C-Level, com tres camadas de inteligencia:
-
-1. **Camada Estrategica** -- Knowledge Base, Playbook, Meta-Fields, Orcamento
-2. **Camada Operacional** -- Campanhas, Kanban, Calendario, Forum, Criativos
-3. **Camada de Inteligencia** -- Motor de IA multi-modelo, DAM inteligente, Analytics preditivo
-
-A integracao com Google Drive funciona como DAM externo sincronizado, e o OpenRouter serve como hub multi-LLM com roteamento inteligente por tarefa.
+Execução de 10 steps para migrar todas as edge functions para a arquitetura multi-LLM otimizada, adicionar análise estratégica semanal com Claude Opus 4.6, e resetar o Knowledge Base para reprocessamento.
 
 ---
 
-## 1. Google Drive como DAM Externo
+## Step 1: Atualizar ai-router
 
-### Viabilidade Confirmada
+Adicionar dois novos task_types ao TASK_CONFIG:
+- `frame` -> `google/gemini-2.5-flash-image` (Lovable AI) para frames I2V
+- `weekly_strategy` -> `anthropic/claude-opus-4` (OpenRouter) para análise semanal completa da operação
 
-A Google Drive API v3 suporta:
-- `files.list` com query `q` para buscar por `mimeType`, pasta pai, nome, labels
-- `files.get` com `alt=media` para download direto de arquivos
-- Thumbnails via `thumbnailLink` no metadata de cada arquivo
-- Service Account com domain-wide delegation para acesso sem OAuth do usuario
+Sem outras alterações nos modelos existentes — os slugs `anthropic/claude-sonnet-4` e `anthropic/claude-opus-4` estão corretos para o OpenRouter.
 
-### Estrutura de Pastas Recomendada no Drive da DQF
+## Step 2: Migrar generate-carousel-visual para ai-router (Claude Sonnet 4)
 
+Trocar a chamada direta ao Lovable AI (`google/gemini-2.5-pro`, $10/1M output) por uma chamada interna ao ai-router com `task_type: "copy"` que roteia para Claude Sonnet 4 via OpenRouter.
+
+A função `getStrategyContext()` continua intacta. O ai-router recebe os messages e retorna a resposta.
+
+Padrão de migração:
 ```text
-DQF-DAM/
-  |-- 01-BRAND/
-  |     |-- logos/
-  |     |-- cores/
-  |     |-- fontes/
-  |     |-- guidelines/
-  |
-  |-- 02-FOTOS/
-  |     |-- pessoas/
-  |     |-- ambientes/
-  |     |-- produtos/
-  |     |-- acoes/
-  |     |-- equipamentos/
-  |
-  |-- 03-VIDEOS/
-  |     |-- reels/
-  |     |-- stories/
-  |     |-- brutos/
-  |
-  |-- 04-TEMPLATES/
-  |     |-- carrosseis/
-  |     |-- posts/
-  |     |-- stories/
-  |
-  |-- 05-REFERENCIAS/
-  |     |-- benchmarks/
-  |     |-- moodboards/
-  |
-  |-- 06-APROVADOS/
-        |-- para-publicar/
-        |-- publicados/
+ANTES: fetch(LOVABLE_AI_URL, { model: "google/gemini-2.5-pro" })
+DEPOIS: fetch(`${SUPABASE_URL}/functions/v1/ai-router`, { task_type: "copy", messages, user_id })
 ```
 
-### Implementacao Tecnica
+## Step 3: Migrar generate-carousel para ai-router (Claude Sonnet 4)
 
-**Secret necessario:** `GOOGLE_SERVICE_ACCOUNT_JSON` -- JSON completo da Service Account com acesso ao Drive da DQF.
+Mesmo padrão do Step 2. Trocar `google/gemini-2.5-flash` por ai-router `task_type: "copy"`.
 
-**Nova Edge Function: `drive-dam/index.ts`**
+## Step 4: Migrar categorize-media para ai-router
 
-Operacoes:
-- `list`: Lista arquivos de uma pasta especifica, retorna thumbnails + metadata
-- `search`: Busca por nome, mimeType, ou texto no conteudo
-- `download`: Retorna URL temporaria ou base64 de um arquivo
-- `sync`: Sincroniza catalogo do Drive com tabela `dam_assets` no banco
+**NOTA IMPORTANTE**: `categorize-media` envia `image_url` inline no content (multimodal). DeepSeek V3 não suporta visão. A chamada será roteada via ai-router com `task_type: "classify"`, mas o ai-router tentará DeepSeek primeiro e, ao falhar por não suportar visão, fará fallback automático para Gemini 2.5 Flash Lite (Lovable AI). O tracking de custos fica centralizado de qualquer forma.
 
-O fluxo usa autenticacao Service Account via JWT assinado manualmente (sem SDK do Google -- apenas fetch + crypto para assinar o JWT no Deno).
+Alternativa: Manter Lovable AI direto para esta função específica, mas perder o tracking centralizado. Decisão: usar ai-router para centralizar o tracking, aceitando que o fallback será ativado para tarefas multimodais.
 
-### Nova Tabela: `dam_assets`
+## Step 5: Migrar suggest-media para ai-router (DeepSeek)
 
-Cache local dos metadados do Drive para buscas rapidas sem chamar a API toda vez:
+Tarefa text-only (não envia imagem, apenas metadados). DeepSeek V3 funciona perfeitamente. Trocar Gemini Flash Lite por ai-router `task_type: "suggest"`.
 
-| Coluna | Tipo | Descricao |
-|--------|------|-----------|
-| id | uuid (PK) | |
-| user_id | uuid | |
-| drive_file_id | text | ID do arquivo no Google Drive |
-| filename | text | Nome do arquivo |
-| mime_type | text | image/jpeg, video/mp4, etc |
-| thumbnail_url | text | Link do thumbnail do Drive |
-| download_url | text | URL publica ou assinada |
-| folder_path | text | Ex: 02-FOTOS/pessoas |
-| category | text | pessoa, ambiente, produto, etc |
-| tags | text[] | Tags extraidas por IA |
-| description | text | Descricao gerada por IA |
-| file_size | integer | |
-| synced_at | timestamptz | Ultima sincronizacao |
-| created_at | timestamptz | |
+## Step 6: Migrar analyze-benchmark para ai-router (Claude Sonnet 4)
 
-RLS: Filtrado por `user_id` para multi-tenant.
+Envia imagem base64. Claude Sonnet 4 suporta visão via OpenRouter. Análise de benchmark melhora significativamente com Claude. `task_type: "analyze"`.
+
+## Step 7: Migrar analyze-brand-document para ai-router (Claude Sonnet 4)
+
+Envia documento PDF como base64. Claude Sonnet 4 extrai metafields com maior precisão. `task_type: "analyze"`.
+
+## Step 8: Otimizar fill-metafields-from-knowledge (Pro -> Flash)
+
+Trocar modelo de `google/gemini-2.5-pro` ($10/1M output) para `google/gemini-2.5-flash` ($0.6/1M output). Chamada continua via Lovable AI direto (sem ai-router). Economia de 94%.
+
+## Step 9: Migrar forum-ai e generate-campaign-plan para ai-router (Auto Router)
+
+Ambas usam Gemini Flash direto. Migrar para ai-router `task_type: "auto"`, que roteia para `openrouter/auto` (NotDiamond seleciona o modelo ideal automaticamente).
+
+## Step 10: Criar weekly-strategy-review + resetar Knowledge Base
+
+**Nova Edge Function**: `weekly-strategy-review/index.ts`
+
+Função que utiliza Claude Opus 4.6 via ai-router (`task_type: "weekly_strategy"`) para gerar uma análise estratégica completa da operação. Ela:
+1. Carrega todo o Knowledge Base do usuário
+2. Carrega metafields atuais
+3. Carrega dados de campanhas, criativos, e uso de IA (ai_usage_log)
+4. Gera insights acionáveis: o que está funcionando, o que ajustar, oportunidades, riscos
+5. Retorna um JSON estruturado com recomendações priorizadas
+
+**Reset do Knowledge Base**: Deletar os 4 registros da tabela `strategy_knowledge` para que os documentos sejam re-analisados pelo novo modelo (Claude Sonnet 4 ao invés de Gemini Flash).
+
+**Registrar** a nova função no `supabase/config.toml`.
 
 ---
 
-## 2. Motor de IA Multi-Modelo via OpenRouter
+## Secao Tecnica
 
-### Secrets Necessarios
+### Arquivos a editar (10):
+| Arquivo | Mudanca |
+|---------|---------|
+| `supabase/functions/ai-router/index.ts` | +frame, +weekly_strategy task_types |
+| `supabase/functions/generate-carousel-visual/index.ts` | Lovable AI -> ai-router (copy) |
+| `supabase/functions/generate-carousel/index.ts` | Lovable AI -> ai-router (copy) |
+| `supabase/functions/categorize-media/index.ts` | Lovable AI -> ai-router (classify) |
+| `supabase/functions/suggest-media/index.ts` | Lovable AI -> ai-router (suggest) |
+| `supabase/functions/analyze-benchmark/index.ts` | Lovable AI -> ai-router (analyze) |
+| `supabase/functions/analyze-brand-document/index.ts` | Lovable AI -> ai-router (analyze) |
+| `supabase/functions/fill-metafields-from-knowledge/index.ts` | gemini-2.5-pro -> gemini-2.5-flash |
+| `supabase/functions/forum-ai/index.ts` | Lovable AI -> ai-router (auto) |
+| `supabase/functions/generate-campaign-plan/index.ts` | Lovable AI -> ai-router (auto) |
 
-- `OPENROUTER_API_KEY` -- ja fornecida pelo usuario (sera armazenada como secret seguro)
+### Arquivo a criar (1):
+| Arquivo | Descricao |
+|---------|-----------|
+| `supabase/functions/weekly-strategy-review/index.ts` | Analise semanal Opus 4.6 |
 
-### Matriz Final de Modelos (Atualizada para Sonnet 4.6 / Opus 4.6)
+### Config a editar (1):
+| Arquivo | Mudanca |
+|---------|---------|
+| `supabase/config.toml` | +weekly-strategy-review |
 
-```text
-+------------------------------------+-------------------------------+-------------+-------------------+
-| Tarefa                             | Modelo                        | Custo/call  | Razao             |
-+------------------------------------+-------------------------------+-------------+-------------------+
-| COPY (carrossel, caption, CTA)     | anthropic/claude-sonnet-4.6   | ~$0.015     | Melhor copy PT-BR |
-| ANALISE ESTRATEGICA (playbook, KB) | anthropic/claude-opus-4.6     | ~$0.08      | Raciocinio max    |
-| GERACAO DE IMAGEM (slide)          | black-forest-labs/flux.2-pro  | ~$0.04/img  | Qualidade+custo   |
-| GERACAO IMAGEM HQ                  | google/gemini-3-pro-image     | ~$0.15/img  | Via Lovable AI    |
-| CATEGORIZACAO (tags, classe)       | deepseek/deepseek-v3.2        | ~$0.0003    | Ultra-barato      |
-| SUGESTAO DE MIDIA (ranking)        | deepseek/deepseek-v3.2        | ~$0.0003    | Ultra-barato      |
-| BUSCA NO DAM (semantica)           | deepseek/deepseek-v3.2        | ~$0.0005    | Busca+ranking     |
-| FORUM AI                           | openrouter/auto               | ~$0.003     | Auto-otimizado    |
-| PLANO DE CAMPANHA                  | openrouter/auto               | ~$0.008     | Auto-otimizado    |
-| PROMPTS DE VIDEO                   | google/gemini-2.5-flash       | ~$0.004     | Via Lovable AI    |
-| ANALISE DE BENCHMARK               | anthropic/claude-sonnet-4.6   | ~$0.02      | Visao+copy        |
-| REMIX DE CRIATIVO                  | black-forest-labs/flux.2-pro  | ~$0.04      | Image-to-image    |
-| COMPOSICAO FINAL (arte)            | google/gemini-3-pro-image     | ~$0.15/img  | Composicao visual |
-+------------------------------------+-------------------------------+-------------+-------------------+
+### Dados a deletar:
+```sql
+DELETE FROM strategy_knowledge;
 ```
 
-### Nova Edge Function Central: `ai-router/index.ts`
-
-Roteador inteligente que:
-1. Recebe `task_type` + `messages` + `options`
-2. Seleciona modelo e provider (OpenRouter vs Lovable AI)
-3. Tenta provider principal, faz fallback automatico
-4. Registra uso em `ai_usage_log`
-5. Retorna resposta padronizada
-
-```text
-task_type -> provider:
-  "copy"        -> OpenRouter (Claude Sonnet 4.6)
-  "strategy"    -> OpenRouter (Claude Opus 4.6)
-  "classify"    -> OpenRouter (DeepSeek V3.2)
-  "image"       -> OpenRouter (FLUX.2 Pro)
-  "image_hq"    -> Lovable AI (Gemini 3 Pro Image)
-  "image_edit"  -> Lovable AI (Gemini 2.5 Flash Image)
-  "video"       -> Lovable AI (Gemini 2.5 Flash)
-  "auto"        -> OpenRouter (Auto Router)
-  fallback      -> Lovable AI (Gemini 3 Flash Preview)
-```
-
----
-
-## 3. Workflow do Diretor Criativo Automatizado
-
-O fluxo completo que substitui uma equipe criativa tradicional:
-
-```text
-ETAPA 1: BRIEFING
-  Input do C-Level (contexto, angulo, canal)
-       |
-       v
-ETAPA 2: ESTRATEGIA
-  ai-router (task: "strategy", Claude Opus 4.6)
-  -> Analisa Knowledge Base + Playbook + Meta-Fields
-  -> Gera roteiro estruturado (5 slides)
-  -> Define direcao visual por slide
-       |
-       v
-ETAPA 3: BUSCA DE ATIVOS (antes de gerar)
-  Para CADA slide que precisa de imagem:
-    3a. Busca na media_library local (DeepSeek -- $0.0003)
-    3b. Busca no DAM do Google Drive (DeepSeek -- $0.0005)
-    3c. Rankeia resultados por relevancia semantica
-    3d. Se score >= 8: sugere ao usuario
-    3e. Se score < 8: marca para geracao
-       |
-       v
-ETAPA 4: GERACAO DE ATIVOS (so se necessario)
-  4a. Imagens sem match: FLUX.2 Pro ($0.04/img)
-  4b. Imagens com referencia para remix: FLUX.2 Pro ($0.04)
-  4c. Composicao final com texto: Gemini 3 Pro Image ($0.15)
-       |
-       v
-ETAPA 5: COPY FINAL
-  ai-router (task: "copy", Claude Sonnet 4.6)
-  -> Refina headlines, subtext, CTA
-  -> Gera caption completa com hashtags
-  -> Valida contra tom de voz e topicos proibidos
-       |
-       v
-ETAPA 6: REVISAO E EXPORTACAO
-  -> Preview no formato correto (4:5, 16:9, etc)
-  -> Ajustes manuais (slider de texto, troca de imagem)
-  -> Exportacao PNG em alta resolucao
-  -> Salva como rascunho no banco
-```
-
----
-
-## 4. Nova Tabela: `ai_usage_log`
-
-Para controle de custos e analytics de uso:
-
-| Coluna | Tipo | Descricao |
-|--------|------|-----------|
-| id | uuid (PK) | |
-| user_id | uuid | |
-| function_name | text | Edge function que chamou |
-| task_type | text | copy, strategy, classify, image, etc |
-| model_used | text | anthropic/claude-sonnet-4.6, etc |
-| provider | text | openrouter, lovable |
-| tokens_input | integer | |
-| tokens_output | integer | |
-| cost_estimate | numeric | Custo estimado em USD |
-| latency_ms | integer | |
-| success | boolean | |
-| created_at | timestamptz | |
-
-RLS: Cada usuario ve apenas seu proprio uso.
-
----
-
-## 5. Estimativa de Custos Mensal (Revisada)
-
-### Cenario "Time Enxuto" (3-5 pessoas, producao diaria)
-
-```text
-+-------------------------------+--------+--------------+---------------+
-| Acao                          | Qtd/mes| Custo unit.  | Total/mes     |
-+-------------------------------+--------+--------------+---------------+
-| Roteiro carrossel (Sonnet)    | 80     | $0.015       | $1.20         |
-| Analise estrategica (Opus)    | 10     | $0.080       | $0.80         |
-| Busca DAM + biblioteca (DS)   | 300    | $0.0004      | $0.12         |
-| Categorizacao media (DS)      | 150    | $0.0003      | $0.05         |
-| Imagens FLUX.2 Pro            | 200    | $0.040       | $8.00         |
-| Imagens HQ composicao final   | 30     | $0.150       | $4.50         |
-| Analise benchmark (Sonnet)    | 15     | $0.020       | $0.30         |
-| Analise docs KB (Opus)        | 8      | $0.080       | $0.64         |
-| Plano campanha (Auto Router)  | 15     | $0.008       | $0.12         |
-| Prompts video (Flash)         | 20     | $0.004       | $0.08         |
-| Forum AI (Auto Router)        | 60     | $0.003       | $0.18         |
-| Copy refinamento (Sonnet)     | 40     | $0.015       | $0.60         |
-| Remix criativos (FLUX.2)      | 20     | $0.040       | $0.80         |
-+-------------------------------+--------+--------------+---------------+
-| TOTAL IA (OpenRouter + Lovable)|       |              | ~$17.39/mes   |
-+-------------------------------+--------+--------------+---------------+
-| Storage (Small instance)      |        |              | ~$0-25/mes    |
-| Lovable Pro                   |        |              | $25/mes       |
-+-------------------------------+--------+--------------+---------------+
-| TOTAL PLATAFORMA              |        |              | ~$42-67/mes   |
-+-------------------------------+--------+--------------+---------------+
-```
-
-Economia vs contratar equipe criativa: Uma equipe de designer + copywriter + estrategista custaria R$15.000-25.000/mes. A plataforma entrega resultado comparavel por ~R$350/mes.
-
----
-
-## 6. Mapa Completo de Modulos e Integracao
-
-```text
-+------------------+     +------------------+     +------------------+
-|   ESTRATEGIA     |     |   CAMPANHAS      |     |   ANALYTICS      |
-|  - Playbook      |---->|  - Plano IA      |---->|  - KPIs          |
-|  - Knowledge Base|     |  - Orcamento     |     |  - Funis         |
-|  - Meta-Fields   |     |  - Tasks         |     |  - Deep Dive     |
-|  - Benchmarks    |     |  - Calendario    |     |  - Alocacao $    |
-+--------+---------+     +--------+---------+     +--------+---------+
-         |                        |                        |
-         v                        v                        v
-+------------------+     +------------------+     +------------------+
-|   AI ROUTER      |<----|   CRIATIVO       |     |   DAM            |
-|  - OpenRouter    |     |  - Carrosseis    |---->|  - Media Library  |
-|  - Lovable AI    |     |  - Video IA      |     |  - Google Drive  |
-|  - Usage Log     |     |  - Criativos     |     |  - Categorizacao |
-|  - Fallback      |     |  - Grid IG       |     |  - Sugestao IA   |
-+------------------+     +--------+---------+     +------------------+
-                                  |
-                                  v
-                         +------------------+
-                         |   BRAND KIT      |
-                         |  - Cores         |
-                         |  - Fontes        |
-                         |  - Assets        |
-                         |  - Guidelines    |
-                         +------------------+
-```
-
----
-
-## 7. Implementacao: Ordem e Arquivos
-
-### Fase 1 -- Infraestrutura (esta implementacao)
-
-| # | Acao | Arquivo |
-|---|------|---------|
-| 1 | Armazenar `OPENROUTER_API_KEY` como secret | Secret Manager |
-| 2 | Criar tabela `ai_usage_log` | Migration SQL |
-| 3 | Criar tabela `dam_assets` | Migration SQL |
-| 4 | Criar edge function `ai-router` | `supabase/functions/ai-router/index.ts` |
-| 5 | Atualizar `supabase/config.toml` | Registrar ai-router |
-
-### Fase 2 -- Otimizacao de Edge Functions Existentes
-
-| # | Acao | Arquivo |
-|---|------|---------|
-| 6 | `generate-carousel-visual` usar ai-router (Sonnet para copy) | Editar index.ts |
-| 7 | `categorize-media` usar ai-router (DeepSeek) | Editar index.ts |
-| 8 | `suggest-media` usar ai-router (DeepSeek) | Editar index.ts |
-| 9 | `analyze-benchmark` usar ai-router (Sonnet) | Editar index.ts |
-| 10 | `analyze-brand-document` usar ai-router (Sonnet) | Editar index.ts |
-| 11 | `fill-metafields-from-knowledge` trocar Pro por Flash | Editar index.ts |
-| 12 | `forum-ai` usar ai-router (Auto) | Editar index.ts |
-
-### Fase 3 -- Google Drive DAM
-
-| # | Acao | Arquivo |
-|---|------|---------|
-| 13 | Solicitar `GOOGLE_SERVICE_ACCOUNT_JSON` | Secret Manager |
-| 14 | Criar edge function `drive-dam` | `supabase/functions/drive-dam/index.ts` |
-| 15 | Integrar busca DAM no `AiCarrosseis.tsx` | Editar pagina |
-
-### Fase 4 -- Workflow Criativo Completo
-
-| # | Acao | Arquivo |
-|---|------|---------|
-| 16 | Logica "buscar antes de gerar" no SlideCard | Editar `AiCarrosseis.tsx` |
-| 17 | Painel de sugestoes unificado (biblioteca + DAM) | Editar `AiCarrosseis.tsx` |
-| 18 | Badge de modelo usado em cada geracao | Editar `AiCarrosseis.tsx` |
-
----
-
-## 8. O que NAO implementar agora
-
-| Item | Razao |
-|------|-------|
-| Figma API | Read-only, nao cria designs |
-| Google Calendar | Pode ser fase 5, nao e critico para o workflow criativo |
-| Claude Code | E uma ferramenta de desenvolvimento, nao uma API de producao |
-| Midjourney API | Nao tem API publica oficial |
-
----
-
-## 9. Resumo Executivo
-
-A arquitetura proposta transforma a DQEF de uma ferramenta de criacao de conteudo em um **sistema operacional de marketing digital** que:
-
-- **Reduz custo operacional** de R$15-25k/mes (equipe) para ~R$350/mes (plataforma)
-- **Usa o modelo certo para cada tarefa** -- Opus para estrategia, Sonnet para copy, DeepSeek para classificacao, FLUX para imagens
-- **Economiza storage e tokens** buscando ativos existentes (Drive + biblioteca) antes de gerar novos
-- **Mantem controle total de custos** via `ai_usage_log` com dashboard de analytics
-- **Escala sem fricao** -- adicionar mais usuarios ou volume nao muda a arquitetura
-
-A implementacao comeca pela Fase 1 (infraestrutura: ai-router + tabelas) e pode ser feita incrementalmente sem quebrar nada que ja existe.
+### Arquivos que NAO mudam (ja otimos):
+- `generate-slide-image/index.ts` — usa modalities exclusivas Lovable AI
+- `generate-video-assets/index.ts` — ja excelente com prompts por modelo
+- `fill-playbook-from-knowledge/index.ts` — ja otimo com Flash
+- `extract-strategy-metafields/index.ts` — ja otimo com Flash
