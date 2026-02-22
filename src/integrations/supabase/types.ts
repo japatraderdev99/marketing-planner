@@ -86,6 +86,51 @@ export type Database = {
         }
         Relationships: []
       }
+      ai_usage_log: {
+        Row: {
+          cost_estimate: number | null
+          created_at: string
+          function_name: string
+          id: string
+          latency_ms: number | null
+          model_used: string
+          provider: string
+          success: boolean | null
+          task_type: string
+          tokens_input: number | null
+          tokens_output: number | null
+          user_id: string
+        }
+        Insert: {
+          cost_estimate?: number | null
+          created_at?: string
+          function_name: string
+          id?: string
+          latency_ms?: number | null
+          model_used: string
+          provider?: string
+          success?: boolean | null
+          task_type: string
+          tokens_input?: number | null
+          tokens_output?: number | null
+          user_id: string
+        }
+        Update: {
+          cost_estimate?: number | null
+          created_at?: string
+          function_name?: string
+          id?: string
+          latency_ms?: number | null
+          model_used?: string
+          provider?: string
+          success?: boolean | null
+          task_type?: string
+          tokens_input?: number | null
+          tokens_output?: number | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       brand_assets: {
         Row: {
           asset_type: string
@@ -326,6 +371,57 @@ export type Database = {
           updated_at?: string
           user_id?: string
           workflow_stage?: string | null
+        }
+        Relationships: []
+      }
+      dam_assets: {
+        Row: {
+          category: string | null
+          created_at: string
+          description: string | null
+          download_url: string | null
+          drive_file_id: string
+          file_size: number | null
+          filename: string
+          folder_path: string | null
+          id: string
+          mime_type: string | null
+          synced_at: string | null
+          tags: string[] | null
+          thumbnail_url: string | null
+          user_id: string
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string
+          description?: string | null
+          download_url?: string | null
+          drive_file_id: string
+          file_size?: number | null
+          filename: string
+          folder_path?: string | null
+          id?: string
+          mime_type?: string | null
+          synced_at?: string | null
+          tags?: string[] | null
+          thumbnail_url?: string | null
+          user_id: string
+        }
+        Update: {
+          category?: string | null
+          created_at?: string
+          description?: string | null
+          download_url?: string | null
+          drive_file_id?: string
+          file_size?: number | null
+          filename?: string
+          folder_path?: string | null
+          id?: string
+          mime_type?: string | null
+          synced_at?: string | null
+          tags?: string[] | null
+          thumbnail_url?: string | null
+          user_id?: string
         }
         Relationships: []
       }
