@@ -6,14 +6,13 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-// Map slide type to preferred categories for pre-filtering
 const SLIDE_TYPE_CATEGORIES: Record<string, string[]> = {
   hook: ["pessoa", "ação"],
   setup: ["ambiente", "indoor", "outdoor"],
   data: ["abstrato", "produto"],
   contrast: ["pessoa", "ação"],
   validation: ["equipe", "pessoa"],
-  cta: [], // no filter — show all
+  cta: [],
 };
 
 serve(async (req) => {
@@ -28,16 +27,12 @@ serve(async (req) => {
       });
     }
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
-
     // Fetch user's media from DB
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
-    // Build query — optionally pre-filter by category
     const preferredCategories = SLIDE_TYPE_CATEGORIES[slideType ?? ""] ?? [];
     let query = supabaseAdmin
       .from("media_library")
@@ -54,7 +49,6 @@ serve(async (req) => {
     const { data: mediaItems, error: dbError } = await query;
     if (dbError) throw dbError;
 
-    // If filtered result is too small, fall back to all user media (up to 20)
     let items = mediaItems ?? [];
     if (items.length < 2 && preferredCategories.length > 0) {
       const { data: allItems } = await supabaseAdmin
@@ -72,7 +66,7 @@ serve(async (req) => {
       });
     }
 
-    // Build prompt for AI ranking (text-only, fast + cheap)
+    // Build prompt for AI ranking (text-only)
     const slideContext = [
       slideHeadline && `HEADLINE: "${slideHeadline}"`,
       slideSubtext && `SUBTEXTO: "${slideSubtext}"`,
@@ -97,25 +91,26 @@ Retorne APENAS um JSON válido com este formato:
 
 Inclua apenas as top 4 imagens com maior score. Sem explicações adicionais.`;
 
-    const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    // Route through ai-router (suggest -> DeepSeek, text-only)
+    const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+    const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
+
+    const aiResponse = await fetch(`${SUPABASE_URL}/functions/v1/ai-router`, {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${SUPABASE_ANON_KEY}` },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash-lite",
+        task_type: "suggest",
         messages: [{ role: "user", content: prompt }],
+        user_id: userId,
+        function_name: "suggest-media",
       }),
     });
 
     if (!aiResponse.ok) {
-      if (aiResponse.status === 429) {
-        return new Response(JSON.stringify({ error: "Rate limit atingido." }), {
-          status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      throw new Error(`AI error: ${aiResponse.status}`);
+      const errData = await aiResponse.json().catch(() => ({ error: "AI error" }));
+      return new Response(JSON.stringify(errData), {
+        status: aiResponse.status, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     const aiData = await aiResponse.json();
@@ -127,11 +122,9 @@ Inclua apenas as top 4 imagens com maior score. Sem explicações adicionais.`;
       const parsed = JSON.parse(jsonMatch ? jsonMatch[0] : rawText);
       rankings = parsed.rankings ?? [];
     } catch {
-      // If parsing fails, return top 4 by insertion order
       rankings = items.slice(0, 4).map((img, i) => ({ id: img.id, score: 8 - i, reason: "Sugestão automática" }));
     }
 
-    // Sort by score descending and attach full item data
     const sorted = rankings
       .sort((a, b) => b.score - a.score)
       .slice(0, 4)

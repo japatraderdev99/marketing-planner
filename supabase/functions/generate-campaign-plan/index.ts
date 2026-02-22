@@ -12,24 +12,24 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY não configurada");
-
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 
     const { campaignForm, strategyMetafields, extraInstructions } = await req.json();
 
     // Load knowledge base if auth header present
     let knowledgeContext = "";
+    let userId: string | null = null;
     try {
       const authHeader = req.headers.get("Authorization");
       if (authHeader) {
-        const userClient = createClient(SUPABASE_URL, Deno.env.get("SUPABASE_ANON_KEY")!, {
+        const userClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
           global: { headers: { Authorization: authHeader } },
         });
         const { data: { user } } = await userClient.auth.getUser();
         if (user) {
+          userId = user.id;
           const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
           const { data: docs } = await supabase
             .from("strategy_knowledge")
@@ -91,71 +91,49 @@ ${extraInstructions ? `\nINSTRUÇÕES ADICIONAIS DO CMO:\n${extraInstructions}` 
 
 Gere um plano COMPLETO e ACIONÁVEL. Retorne APENAS este JSON:
 {
-  "campaignSummary": "resumo executivo da campanha em 2-3 frases",
-  "angle": "ângulo emocional principal (Orgulho|Dinheiro|Urgência|Raiva|Alívio)",
-  "hooks": ["hook 1 pronto para usar", "hook 2", "hook 3"],
-  "keyMessage": "mensagem central da campanha em 1 frase",
+  "campaignSummary": "resumo executivo em 2-3 frases",
+  "angle": "ângulo emocional principal",
+  "hooks": ["hook 1", "hook 2", "hook 3"],
+  "keyMessage": "mensagem central em 1 frase",
   "ctaMain": "CTA principal",
-  "viralLogic": "por que esse conteúdo vai ser salvo/compartilhado",
+  "viralLogic": "por que vai ser salvo/compartilhado",
   "kanbanTasks": [
-    {
-      "title": "nome da tarefa",
-      "description": "descrição clara do que fazer",
-      "format": "Post|Reels|Stories|Carrossel|Ads|Shorts",
-      "channel": "Instagram|TikTok|Meta Ads|LinkedIn|YouTube|Orgânico",
-      "priority": "Alta|Média|Baixa",
-      "status": "ideia",
-      "daysFromStart": 0
-    }
+    { "title": "tarefa", "description": "descrição", "format": "Post|Reels|Stories|Carrossel|Ads|Shorts", "channel": "Instagram|TikTok|Meta Ads|LinkedIn|YouTube|Orgânico", "priority": "Alta|Média|Baixa", "status": "ideia", "daysFromStart": 0 }
   ],
   "calendarEntries": [
-    {
-      "title": "título do conteúdo",
-      "format": "Post|Reels|Stories|Carrossel|Ads|Shorts",
-      "channel": "Instagram|TikTok|Meta Ads|LinkedIn|YouTube|Orgânico",
-      "daysFromStart": 0,
-      "copy": "copy pronta para usar neste conteúdo",
-      "responsible": "Time Marketing"
-    }
+    { "title": "título", "format": "Post|Reels|Stories|Carrossel|Ads|Shorts", "channel": "Instagram|TikTok|Meta Ads|LinkedIn|YouTube|Orgânico", "daysFromStart": 0, "copy": "copy pronta", "responsible": "Time Marketing" }
   ],
-  "estimatedResults": {
-    "reach": "alcance estimado",
-    "engagement": "engajamento estimado",
-    "conversions": "conversões estimadas"
-  },
-  "warnings": ["alerta estratégico 1 se houver", "alerta 2"]
+  "estimatedResults": { "reach": "alcance", "engagement": "engajamento", "conversions": "conversões" },
+  "warnings": ["alerta 1"]
 }
 
 REGRAS:
-- Gere entre 5 e 8 kanbanTasks cobrindo briefing, criação, revisão, publicação e análise
-- Gere entre 6 e 12 calendarEntries distribuídos ao longo da duração da campanha
-- daysFromStart deve ser um número inteiro (dias após o início da campanha)
-- Todas as copies devem refletir o tom de voz da marca
-- NUNCA mencione cidades, estados ou regiões específicas
-- Se a duração for 30 dias, distribua bem os conteúdos
-- warnings: apenas se houver lacunas críticas no briefing`;
+- 5-8 kanbanTasks cobrindo briefing, criação, revisão, publicação e análise
+- 6-12 calendarEntries distribuídos pela duração
+- Copies devem refletir o tom de voz da marca
+- NUNCA mencione cidades ou regiões específicas`;
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    // Route through ai-router (auto -> OpenRouter Auto Router)
+    const response = await fetch(`${SUPABASE_URL}/functions/v1/ai-router`, {
       method: "POST",
-      headers: {
-        "Authorization": `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${SUPABASE_ANON_KEY}` },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
+        task_type: "auto",
         messages: [
           { role: "system", content: "Você é um CMO e estrategista de marketing sênior. Retorne apenas JSON puro e válido, sem markdown." },
           { role: "user", content: prompt },
         ],
-        temperature: 0.6,
-        response_format: { type: "json_object" },
+        options: { temperature: 0.6, response_format: { type: "json_object" } },
+        user_id: userId,
+        function_name: "generate-campaign-plan",
       }),
     });
 
     if (!response.ok) {
-      if (response.status === 429) return new Response(JSON.stringify({ error: "Rate limit atingido. Tente novamente." }), { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-      if (response.status === 402) return new Response(JSON.stringify({ error: "Créditos de IA esgotados." }), { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-      throw new Error(`AI gateway error: ${await response.text()}`);
+      const errData = await response.json().catch(() => ({ error: "AI error" }));
+      return new Response(JSON.stringify(errData), {
+        status: response.status, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     const aiResponse = await response.json();

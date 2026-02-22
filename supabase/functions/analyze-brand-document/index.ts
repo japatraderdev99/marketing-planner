@@ -12,13 +12,9 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY não configurada");
-
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-    // Auth: validate user JWT
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) throw new Error("Authorization header ausente");
 
@@ -46,8 +42,6 @@ Deno.serve(async (req) => {
     const mimeType = fileRes.headers.get("content-type") || "application/pdf";
     const buffer = await fileRes.arrayBuffer();
     const uint8 = new Uint8Array(buffer);
-
-    // Convert to base64
     let binary = "";
     const chunkSize = 8192;
     for (let i = 0; i < uint8.length; i += chunkSize) {
@@ -71,7 +65,7 @@ Seja preciso, use dados concretos quando disponíveis. Retorne apenas JSON váli
   "positioning": "posicionamento de mercado detalhado",
   "targetAudience": {
     "primaryPersona": "perfil da persona principal",
-    "demographics": "dados demográficos (idade, renda, localização)",
+    "demographics": "dados demográficos",
     "psychographics": "comportamentos e motivações",
     "biggestPain": "maior dor/frustração",
     "dream": "o que deseja conquistar",
@@ -82,66 +76,62 @@ Seja preciso, use dados concretos quando disponíveis. Retorne apenas JSON váli
     "use": ["como deve comunicar 1", "como deve comunicar 2"],
     "avoid": ["o que evitar 1", "o que evitar 2"]
   },
-  "keyMessages": ["mensagem central 1", "mensagem central 2", "mensagem central 3"],
-  "differentials": ["diferencial 1 com dado", "diferencial 2 com dado"],
+  "keyMessages": ["mensagem central 1", "mensagem central 2"],
+  "differentials": ["diferencial 1", "diferencial 2"],
   "competitors": ["concorrente 1", "concorrente 2"],
-  "competitiveEdge": ["vantagem vs concorrente 1", "vantagem vs concorrente 2"],
+  "competitiveEdge": ["vantagem 1", "vantagem 2"],
   "forbiddenTopics": ["proibido 1", "proibido 2"],
   "visualIdentity": {
-    "colors": "paleta de cores mencionada",
-    "typography": "tipografia mencionada",
+    "colors": "paleta de cores",
+    "typography": "tipografia",
     "style": "estilo visual"
   },
-  "contentAngles": ["ângulo de conteúdo 1", "ângulo de conteúdo 2", "ângulo de conteúdo 3"],
+  "contentAngles": ["ângulo 1", "ângulo 2"],
   "ctaStyle": "estilo de CTA recomendado",
-  "promptContext": "parágrafo completo de contexto de marca para usar como system prompt em qualquer geração de IA",
-  "documentSummary": "resumo executivo do documento em 3-4 frases",
-  "keyInsights": ["insight estratégico 1", "insight estratégico 2", "insight estratégico 3"],
+  "promptContext": "parágrafo completo de contexto para system prompt",
+  "documentSummary": "resumo executivo em 3-4 frases",
+  "keyInsights": ["insight 1", "insight 2"],
   "completenessScore": 0
 }
 
-Para completenessScore: calcule 0-100 baseado na riqueza e completude das informações encontradas.
-Se um campo não for encontrado no documento, use null ou array vazio.`;
+Para completenessScore: 0-100 baseado na riqueza das informações.
+Se um campo não for encontrado, use null ou array vazio.`;
 
-    const aiPayload: Record<string, unknown> = {
-      model: "google/gemini-2.5-flash",
-      messages: [
-        { role: "system", content: systemPrompt },
-        {
-          role: "user",
-          content: [
-            { type: "text", text: userPrompt },
-            {
-              type: "image_url",
-              image_url: { url: `data:${mimeType};base64,${base64}` },
-            },
-          ],
-        },
-      ],
-      temperature: 0.2,
-      response_format: { type: "json_object" },
-    };
+    // Route through ai-router (analyze -> Claude Sonnet 4, supports vision/documents)
+    const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 
-    const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const aiRes = await fetch(`${SUPABASE_URL}/functions/v1/ai-router`, {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(aiPayload),
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${SUPABASE_ANON_KEY}` },
+      body: JSON.stringify({
+        task_type: "analyze",
+        messages: [
+          { role: "system", content: systemPrompt },
+          {
+            role: "user",
+            content: [
+              { type: "text", text: userPrompt },
+              { type: "image_url", image_url: { url: `data:${mimeType};base64,${base64}` } },
+            ],
+          },
+        ],
+        options: { temperature: 0.2, response_format: { type: "json_object" } },
+        user_id: user.id,
+        function_name: "analyze-brand-document",
+      }),
     });
 
     if (!aiRes.ok) {
-      const errText = await aiRes.text();
-      if (aiRes.status === 429) {
-        await supabase.from("strategy_knowledge").update({ status: "error", error_message: "Rate limit da IA atingido. Tente novamente em instantes." }).eq("id", knowledgeId);
-        return new Response(JSON.stringify({ error: "Rate limit atingido. Tente novamente." }), { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      const errData = await aiRes.json().catch(() => ({ error: "AI error" }));
+      if (aiRes.status === 429 || aiRes.status === 402) {
+        await supabase.from("strategy_knowledge").update({
+          status: "error",
+          error_message: aiRes.status === 429 ? "Rate limit atingido." : "Créditos esgotados.",
+        }).eq("id", knowledgeId);
       }
-      if (aiRes.status === 402) {
-        await supabase.from("strategy_knowledge").update({ status: "error", error_message: "Créditos de IA esgotados." }).eq("id", knowledgeId);
-        return new Response(JSON.stringify({ error: "Créditos de IA esgotados." }), { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-      }
-      throw new Error(`AI gateway error ${aiRes.status}: ${errText}`);
+      return new Response(JSON.stringify(errData), {
+        status: aiRes.status, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     const aiData = await aiRes.json();
@@ -155,7 +145,6 @@ Se um campo não for encontrado no documento, use null ou array vazio.`;
       throw new Error("IA retornou JSON inválido");
     }
 
-    // Save to DB
     const { error: updateError } = await supabase
       .from("strategy_knowledge")
       .update({

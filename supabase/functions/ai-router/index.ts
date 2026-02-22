@@ -61,6 +61,15 @@ const TASK_CONFIG: Record<
     provider: "openrouter",
     fallbackModel: "google/gemini-2.5-flash",
   },
+  frame: {
+    model: "google/gemini-2.5-flash-image",
+    provider: "lovable",
+  },
+  weekly_strategy: {
+    model: "anthropic/claude-opus-4",
+    provider: "openrouter",
+    fallbackModel: "google/gemini-2.5-pro",
+  },
 };
 
 // Cost estimates per 1M tokens (input/output) for logging

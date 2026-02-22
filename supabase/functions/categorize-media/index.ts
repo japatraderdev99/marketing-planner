@@ -18,9 +18,6 @@ serve(async (req) => {
       });
     }
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
-
     const systemPrompt = `You are an image categorization assistant for a Brazilian marketing platform.
 Analyze the image and return ONLY a valid JSON object with these fields:
 - category: one of: pessoa, ambiente, ferramenta, ação, produto, outdoor, indoor, abstrato, equipe
@@ -29,14 +26,15 @@ Analyze the image and return ONLY a valid JSON object with these fields:
 
 Respond ONLY with valid JSON, no markdown, no explanation.`;
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    // Route through ai-router (classify -> DeepSeek fallback to Flash Lite for vision)
+    const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+    const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
+
+    const response = await fetch(`${SUPABASE_URL}/functions/v1/ai-router`, {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${SUPABASE_ANON_KEY}` },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
+        task_type: "classify",
         messages: [
           { role: "system", content: systemPrompt },
           {
@@ -47,18 +45,15 @@ Respond ONLY with valid JSON, no markdown, no explanation.`;
             ],
           },
         ],
+        function_name: "categorize-media",
       }),
     });
 
     if (!response.ok) {
-      const errText = await response.text();
-      console.error("AI error:", response.status, errText);
-      if (response.status === 429) {
-        return new Response(JSON.stringify({ error: "Rate limit atingido. Tente novamente em instantes." }), {
-          status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      throw new Error(`AI gateway error: ${response.status}`);
+      const errData = await response.json().catch(() => ({ error: "AI error" }));
+      return new Response(JSON.stringify(errData), {
+        status: response.status, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     const aiData = await response.json();
@@ -73,7 +68,7 @@ Respond ONLY with valid JSON, no markdown, no explanation.`;
       throw new Error("Failed to parse AI response as JSON");
     }
 
-    // Update media_library record with categorization data using service role
+    // Update media_library record
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
