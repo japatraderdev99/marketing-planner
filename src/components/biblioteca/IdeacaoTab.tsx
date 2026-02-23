@@ -1,16 +1,17 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import {
-  Sparkles, Loader2, Check, X, Send, Image, Film, Type, Layout,
-  ThumbsUp, ThumbsDown, ArrowRight, RefreshCw, Trash2
+  Sparkles, Loader2, Send, Image, Film, Type, Layout,
+  ThumbsUp, ThumbsDown, RefreshCw, Trash2,
+  Upload, FileText, Globe, X, Paperclip
 } from 'lucide-react';
 
 interface CreativeSuggestion {
@@ -29,6 +30,16 @@ interface CreativeSuggestion {
   created_at: string;
 }
 
+interface AttachedFile {
+  name: string;
+  type: 'image' | 'pdf' | 'html' | 'text';
+  mime: string;
+  data: string; // base64 or text content
+  size: number;
+  extracted_text?: string;
+  page_images?: string[];
+}
+
 const TYPE_CONFIG: Record<string, { icon: typeof Image; label: string; color: string }> = {
   post: { icon: Image, label: 'Post Estático', color: 'bg-blue-500/15 text-blue-400 border-blue-500/30' },
   carousel: { icon: Layout, label: 'Carrossel', color: 'bg-purple-500/15 text-purple-400 border-purple-500/30' },
@@ -44,12 +55,15 @@ const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
   sent_to_production: { label: 'Em Produção', color: 'bg-primary/20 text-primary' },
 };
 
+const FILE_ICON_MAP: Record<string, typeof FileText> = {
+  image: Image,
+  pdf: FileText,
+  html: Globe,
+  text: Type,
+};
+
 function SuggestionCard({
-  item,
-  onApprove,
-  onReject,
-  onSendToProduction,
-  onDelete,
+  item, onApprove, onReject, onSendToProduction, onDelete,
 }: {
   item: CreativeSuggestion;
   onApprove: (id: string) => void;
@@ -66,7 +80,6 @@ function SuggestionCard({
   return (
     <Card className="border-border bg-card hover:border-primary/30 transition-all duration-200 group">
       <CardContent className="p-4">
-        {/* Header */}
         <div className="flex items-start justify-between gap-2 mb-2">
           <div className="flex items-center gap-2 min-w-0">
             <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
@@ -82,29 +95,20 @@ function SuggestionCard({
           </div>
         </div>
 
-        {/* Type + Channel badges */}
         <div className="flex flex-wrap gap-1 mb-2">
           <span className={cn('rounded-full border px-2 py-0.5 text-[10px] font-medium', typeConfig.color)}>
             {typeConfig.label}
           </span>
           {item.channel && (
-            <span className="rounded-full border border-border px-2 py-0.5 text-[10px] text-muted-foreground">
-              {item.channel}
-            </span>
+            <span className="rounded-full border border-border px-2 py-0.5 text-[10px] text-muted-foreground">{item.channel}</span>
           )}
           {item.format && (
-            <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
-              {item.format}
-            </span>
+            <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">{item.format}</span>
           )}
         </div>
 
-        {/* Description */}
-        {item.description && (
-          <p className="text-xs text-muted-foreground mb-2 line-clamp-3">{item.description}</p>
-        )}
+        {item.description && <p className="text-xs text-muted-foreground mb-2 line-clamp-3">{item.description}</p>}
 
-        {/* Copy text */}
         {item.copy_text && (
           <div className="rounded-lg bg-muted/30 p-2 mb-2">
             <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">Copy</p>
@@ -112,7 +116,6 @@ function SuggestionCard({
           </div>
         )}
 
-        {/* Visual direction */}
         {item.visual_direction && (
           <div className="rounded-lg border border-primary/20 bg-primary/5 p-2 mb-2">
             <p className="text-[10px] font-bold text-primary mb-1">Direção Visual</p>
@@ -120,12 +123,10 @@ function SuggestionCard({
           </div>
         )}
 
-        {/* AI reasoning */}
         {item.ai_reasoning && (
           <p className="text-[10px] text-muted-foreground italic mb-3">💡 {item.ai_reasoning}</p>
         )}
 
-        {/* Action buttons */}
         <div className="flex items-center gap-1.5 mt-2">
           {item.status === 'pending' && (
             <>
@@ -157,16 +158,46 @@ function SuggestionCard({
   );
 }
 
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function fileToText(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsText(file);
+  });
+}
+
+function getFileCategory(file: File): 'image' | 'pdf' | 'html' | 'text' {
+  if (file.type.startsWith('image/')) return 'image';
+  if (file.type === 'application/pdf') return 'pdf';
+  if (file.type === 'text/html' || file.name.endsWith('.html') || file.name.endsWith('.htm')) return 'html';
+  return 'text';
+}
+
+const ACCEPTED_TYPES = 'image/*,.pdf,.html,.htm,.txt,.md,.csv,.json';
+
 export default function IdeacaoTab() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [inputText, setInputText] = useState('');
   const [inputType, setInputType] = useState('mixed');
   const [loading, setLoading] = useState(false);
   const [suggestions, setSuggestions] = useState<CreativeSuggestion[]>([]);
   const [filterStatus, setFilterStatus] = useState<string>('all');
+  const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
+  const [urlInput, setUrlInput] = useState('');
+  const [urls, setUrls] = useState<string[]>([]);
 
-  // Load existing suggestions
   useEffect(() => {
     if (!user) return;
     loadSuggestions();
@@ -181,32 +212,98 @@ export default function IdeacaoTab() {
     if (error) console.error('Error loading suggestions:', error);
   };
 
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+
+    const maxSize = 10 * 1024 * 1024; // 10MB
+    const newFiles: AttachedFile[] = [];
+
+    for (const file of Array.from(files)) {
+      if (file.size > maxSize) {
+        toast({ title: 'Arquivo muito grande', description: `${file.name} excede 10MB`, variant: 'destructive' });
+        continue;
+      }
+
+      const category = getFileCategory(file);
+
+      if (category === 'image') {
+        const base64 = await fileToBase64(file);
+        newFiles.push({ name: file.name, type: 'image', mime: file.type, data: base64, size: file.size });
+      } else if (category === 'pdf') {
+        const base64 = await fileToBase64(file);
+        newFiles.push({ name: file.name, type: 'pdf', mime: file.type, data: base64, size: file.size });
+      } else {
+        const text = await fileToText(file);
+        newFiles.push({ name: file.name, type: category, mime: file.type, data: text, size: file.size });
+      }
+    }
+
+    setAttachedFiles(prev => [...prev, ...newFiles]);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const removeFile = (index: number) => {
+    setAttachedFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const addUrl = () => {
+    const trimmed = urlInput.trim();
+    if (!trimmed) return;
+    try {
+      new URL(trimmed);
+      setUrls(prev => [...prev, trimmed]);
+      setUrlInput('');
+    } catch {
+      toast({ title: 'URL inválida', description: 'Insira uma URL válida (ex: https://...)', variant: 'destructive' });
+    }
+  };
+
+  const removeUrl = (index: number) => {
+    setUrls(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const hasContent = inputText.trim() || attachedFiles.length > 0 || urls.length > 0;
+
   const handleAnalyze = async () => {
-    if (!inputText.trim() || !user) return;
+    if (!hasContent || !user) return;
     setLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke('analyze-creative-input', {
-        body: { input_text: inputText, input_type: inputType, user_id: user.id },
-      });
+      const payload: any = {
+        input_text: inputText,
+        input_type: inputType,
+        user_id: user.id,
+        files: attachedFiles.map(f => ({
+          name: f.name,
+          type: f.type,
+          mime: f.mime,
+          data: f.data,
+          extracted_text: f.extracted_text,
+          page_images: f.page_images,
+        })),
+        urls,
+      };
+
+      const { data, error } = await supabase.functions.invoke('analyze-creative-input', { body: payload });
       if (error) throw error;
       if (data?.suggestions) {
         setSuggestions(prev => [...data.suggestions, ...prev]);
         setInputText('');
+        setAttachedFiles([]);
+        setUrls([]);
         toast({ title: `${data.suggestions.length} sugestões geradas!`, description: 'Revise e aprove as que mais interessam.' });
       }
     } catch (err: any) {
       console.error(err);
-      toast({ title: 'Erro na análise', description: err.message || 'Tente novamente.', variant: 'destructive' });
+      const msg = err.message || 'Tente novamente.';
+      toast({ title: 'Erro na análise', description: msg.includes('429') ? 'Rate limit. Aguarde.' : msg, variant: 'destructive' });
     } finally {
       setLoading(false);
     }
   };
 
   const handleUpdateStatus = async (id: string, status: string) => {
-    const { error } = await supabase
-      .from('creative_suggestions')
-      .update({ status })
-      .eq('id', id);
+    const { error } = await supabase.from('creative_suggestions').update({ status }).eq('id', id);
     if (error) {
       toast({ title: 'Erro', description: error.message, variant: 'destructive' });
       return;
@@ -220,25 +317,16 @@ export default function IdeacaoTab() {
   };
 
   const handleSendToProduction = (item: CreativeSuggestion) => {
-    // Update status to sent_to_production
     handleUpdateStatus(item.id, 'sent_to_production');
-
-    // Navigate based on type
-    const targetPath = item.suggestion_type === 'carousel' ? '/ai-carrosseis' : '/criativo';
     toast({
       title: 'Enviado para produção!',
       description: `Acesse a aba de ${item.suggestion_type === 'carousel' ? 'Carrosséis' : 'Criativos'} para produzir.`,
     });
-
-    // Copy context to clipboard for easy paste
     const context = [item.title, item.description, item.copy_text, item.visual_direction].filter(Boolean).join('\n\n');
     navigator.clipboard.writeText(context);
   };
 
-  const filtered = suggestions.filter(s =>
-    filterStatus === 'all' || s.status === filterStatus
-  );
-
+  const filtered = suggestions.filter(s => filterStatus === 'all' || s.status === filterStatus);
   const counts = {
     all: suggestions.length,
     pending: suggestions.filter(s => s.status === 'pending').length,
@@ -254,19 +342,80 @@ export default function IdeacaoTab() {
           <div className="flex items-center gap-2 mb-1">
             <Sparkles className="h-4 w-4 text-primary" />
             <h3 className="text-sm font-bold text-foreground">Input Criativo</h3>
+            <span className="text-[10px] rounded-full bg-primary/10 text-primary px-2 py-0.5 font-medium">Claude Sonnet 4</span>
           </div>
           <p className="text-xs text-muted-foreground">
-            Cole referências, ideias, prompts de vídeo, copies ou qualquer material criativo. A IA vai analisar e gerar sugestões acionáveis.
+            Cole textos, anexe imagens/PDFs/HTMLs ou adicione URLs. A IA analisa tudo e gera sugestões acionáveis.
           </p>
+
+          {/* Text input */}
           <Textarea
-            placeholder="Cole aqui suas referências, ideias, prompts, copies, conceitos visuais...&#10;&#10;Exemplo: 'Quero um carrossel mostrando os 5 maiores erros de eletricistas ao precificar, com tom provocativo e dados reais'"
+            placeholder="Cole referências, ideias, prompts, copies, conceitos visuais...&#10;&#10;Exemplo: 'Quero um carrossel mostrando os 5 maiores erros de eletricistas ao precificar'"
             value={inputText}
             onChange={e => setInputText(e.target.value)}
-            className="min-h-[120px] bg-background border-border text-sm"
+            className="min-h-[100px] bg-background border-border text-sm"
           />
-          <div className="flex items-center gap-3">
+
+          {/* File attachments display */}
+          {attachedFiles.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {attachedFiles.map((file, i) => {
+                const FileIcon = FILE_ICON_MAP[file.type] || FileText;
+                return (
+                  <div key={i} className="flex items-center gap-1.5 rounded-lg border border-border bg-muted/30 px-2.5 py-1.5 text-xs">
+                    <FileIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                    <span className="text-foreground truncate max-w-[150px]">{file.name}</span>
+                    <span className="text-muted-foreground text-[10px]">({(file.size / 1024).toFixed(0)}KB)</span>
+                    <button onClick={() => removeFile(i)} className="ml-0.5 text-muted-foreground hover:text-foreground">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* URL list */}
+          {urls.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {urls.map((url, i) => (
+                <div key={i} className="flex items-center gap-1.5 rounded-lg border border-border bg-muted/30 px-2.5 py-1.5 text-xs">
+                  <Globe className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                  <span className="text-foreground truncate max-w-[200px]">{url}</span>
+                  <button onClick={() => removeUrl(i)} className="ml-0.5 text-muted-foreground hover:text-foreground">
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* URL input */}
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <Globe className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Adicionar URL de referência..."
+                value={urlInput}
+                onChange={e => setUrlInput(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addUrl())}
+                className="h-8 pl-8 text-xs bg-background border-border"
+              />
+            </div>
+            <Button variant="outline" size="sm" onClick={addUrl} disabled={!urlInput.trim()} className="h-8 px-3 text-xs">
+              Adicionar
+            </Button>
+          </div>
+
+          {/* Bottom actions bar */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <input ref={fileInputRef} type="file" multiple accept={ACCEPTED_TYPES} onChange={handleFileSelect} className="hidden" />
+            <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} className="h-8 px-3 text-xs border-border">
+              <Paperclip className="h-3 w-3 mr-1.5" /> Anexar Arquivo
+            </Button>
+
             <Select value={inputType} onValueChange={setInputType}>
-              <SelectTrigger className="w-[180px] h-8 text-xs bg-background border-border">
+              <SelectTrigger className="w-[160px] h-8 text-xs bg-background border-border">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -277,7 +426,8 @@ export default function IdeacaoTab() {
                 <SelectItem value="prompt">Prompts de IA</SelectItem>
               </SelectContent>
             </Select>
-            <Button onClick={handleAnalyze} disabled={loading || !inputText.trim()} className="h-8 px-4 text-xs">
+
+            <Button onClick={handleAnalyze} disabled={loading || !hasContent} className="h-8 px-4 text-xs ml-auto">
               {loading ? (
                 <><Loader2 className="h-3 w-3 mr-1.5 animate-spin" /> Analisando...</>
               ) : (
@@ -331,6 +481,7 @@ export default function IdeacaoTab() {
         <div className="text-center py-12">
           <Sparkles className="h-8 w-8 text-muted-foreground/50 mx-auto mb-3" />
           <p className="text-sm text-muted-foreground">Insira materiais criativos acima para gerar sugestões com IA.</p>
+          <p className="text-[10px] text-muted-foreground mt-1">Suporta texto, imagens, PDFs, HTML e URLs</p>
         </div>
       )}
     </div>
