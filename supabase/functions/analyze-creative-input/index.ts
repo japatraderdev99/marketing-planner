@@ -7,27 +7,17 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+const SYSTEM_PROMPT = `Você é um diretor criativo sênior de marketing digital. O usuário vai enviar materiais de referência que podem incluir:
+- Texto livre (ideias, copies, prompts, conceitos)
+- Imagens (screenshots, referências visuais, posts de concorrentes)
+- PDFs (documentos estratégicos, briefings, apresentações)
+- HTML/URLs (páginas web, landing pages, anúncios)
 
-  try {
-    const { input_text, input_type = "mixed", user_id } = await req.json();
+Sua tarefa é analisar TODO o input (texto + arquivos visuais/documentos) e gerar de 3 a 6 sugestões criativas CONCRETAS e ACIONÁVEIS. Cada sugestão deve ser de um tipo diferente quando possível.
 
-    if (!input_text || !user_id) {
-      return new Response(
-        JSON.stringify({ error: "input_text and user_id are required" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-
-    const systemPrompt = `Você é um diretor criativo sênior de marketing digital. O usuário vai enviar materiais de referência (ideias, textos, prompts, copies, conceitos visuais, referências de vídeo).
-
-Sua tarefa é analisar o input e gerar de 3 a 6 sugestões criativas CONCRETAS e ACIONÁVEIS. Cada sugestão deve ser de um tipo diferente quando possível.
+Ao analisar IMAGENS: extraia cores, composição, estilo, tom, copy visível, formato e use como referência criativa.
+Ao analisar PDFs/DOCUMENTOS: extraia dados-chave, insights, métricas e argumentos para fundamentar as sugestões.
+Ao analisar URLs/HTML: analise a estrutura, copy, CTAs, design patterns e tom de comunicação.
 
 TIPOS de sugestão permitidos:
 - "carousel" — Carrossel para Instagram/LinkedIn
@@ -51,7 +41,97 @@ Responda APENAS com um JSON válido no formato:
 
 Não inclua markdown, apenas JSON puro.`;
 
-    // Call ai-router
+serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  try {
+    const { input_text, input_type = "mixed", user_id, files = [], urls = [] } = await req.json();
+
+    if (!user_id) {
+      return new Response(
+        JSON.stringify({ error: "user_id is required" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (!input_text && files.length === 0 && urls.length === 0) {
+      return new Response(
+        JSON.stringify({ error: "Provide input_text, files, or urls" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
+    // Build multimodal message content array for Claude Sonnet 4 (vision-capable)
+    const userContent: any[] = [];
+
+    // Add text context
+    const textParts: string[] = [];
+    if (input_text) textParts.push(input_text);
+    if (urls.length > 0) textParts.push(`\n\nURLs de referência:\n${urls.join("\n")}`);
+    
+    if (textParts.length > 0) {
+      userContent.push({
+        type: "text",
+        text: `TIPO DE INPUT: ${input_type}\n\nMATERIAL:\n${textParts.join("\n")}`,
+      });
+    }
+
+    // Add file attachments as base64 images or text
+    for (const file of files) {
+      if (file.type === "image") {
+        // Image: send as base64 for vision analysis
+        userContent.push({
+          type: "image_url",
+          image_url: {
+            url: file.data.startsWith("data:") ? file.data : `data:${file.mime};base64,${file.data}`,
+          },
+        });
+        userContent.push({
+          type: "text",
+          text: `[Arquivo de imagem: ${file.name}]`,
+        });
+      } else if (file.type === "pdf") {
+        // PDF: send extracted text or as base64 image of pages
+        if (file.extracted_text) {
+          userContent.push({
+            type: "text",
+            text: `[Documento PDF: ${file.name}]\n\nConteúdo extraído:\n${file.extracted_text}`,
+          });
+        }
+        // Also include page images if available
+        if (file.page_images && file.page_images.length > 0) {
+          for (const pageImg of file.page_images.slice(0, 5)) {
+            userContent.push({
+              type: "image_url",
+              image_url: { url: pageImg },
+            });
+          }
+        }
+      } else if (file.type === "html") {
+        userContent.push({
+          type: "text",
+          text: `[Conteúdo HTML: ${file.name}]\n\n${file.data}`,
+        });
+      } else {
+        // Generic text-based file
+        userContent.push({
+          type: "text",
+          text: `[Arquivo: ${file.name}]\n\n${file.data}`,
+        });
+      }
+    }
+
+    // If no content parts were added, add a fallback
+    if (userContent.length === 0) {
+      userContent.push({ type: "text", text: "Analise o material fornecido e gere sugestões criativas." });
+    }
+
+    // Use "analyze" task_type which routes to Claude Sonnet 4 (vision-capable via OpenRouter)
     const aiResponse = await fetch(`${SUPABASE_URL}/functions/v1/ai-router`, {
       method: "POST",
       headers: {
@@ -59,10 +139,10 @@ Não inclua markdown, apenas JSON puro.`;
         Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
       },
       body: JSON.stringify({
-        task_type: "copy",
+        task_type: "analyze",
         messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: `TIPO DE INPUT: ${input_type}\n\nMATERIAL:\n${input_text}` },
+          { role: "system", content: SYSTEM_PROMPT },
+          { role: "user", content: userContent },
         ],
         user_id,
         function_name: "analyze-creative-input",
@@ -72,6 +152,20 @@ Não inclua markdown, apenas JSON puro.`;
     if (!aiResponse.ok) {
       const errText = await aiResponse.text();
       console.error("AI router error:", aiResponse.status, errText);
+
+      if (aiResponse.status === 429) {
+        return new Response(
+          JSON.stringify({ error: "Rate limit atingido. Aguarde alguns segundos." }),
+          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      if (aiResponse.status === 402) {
+        return new Response(
+          JSON.stringify({ error: "Créditos insuficientes." }),
+          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       return new Response(
         JSON.stringify({ error: `AI error: ${aiResponse.status}` }),
         { status: aiResponse.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -97,10 +191,11 @@ Não inclua markdown, apenas JSON puro.`;
 
     // Save suggestions to database
     const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+    const inputSummary = [input_text, ...urls].filter(Boolean).join(" | ").slice(0, 500);
 
     const rows = suggestions.map((s: any) => ({
       user_id,
-      input_text,
+      input_text: inputSummary || files.map((f: any) => f.name).join(", "),
       input_type,
       suggestion_type: s.suggestion_type || "post",
       title: s.title || "Sem título",
