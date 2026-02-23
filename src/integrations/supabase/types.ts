@@ -667,6 +667,51 @@ export type Database = {
         }
         Relationships: []
       }
+      video_projects: {
+        Row: {
+          briefing_data: Json | null
+          concept: string | null
+          created_at: string
+          id: string
+          pipeline_notes: Json | null
+          shot_frames: Json | null
+          shot_motions: Json | null
+          status: string
+          storyboard: Json | null
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          briefing_data?: Json | null
+          concept?: string | null
+          created_at?: string
+          id?: string
+          pipeline_notes?: Json | null
+          shot_frames?: Json | null
+          shot_motions?: Json | null
+          status?: string
+          storyboard?: Json | null
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          briefing_data?: Json | null
+          concept?: string | null
+          created_at?: string
+          id?: string
+          pipeline_notes?: Json | null
+          shot_frames?: Json | null
+          shot_motions?: Json | null
+          status?: string
+          storyboard?: Json | null
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
