@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -6,6 +7,52 @@ const corsHeaders = {
 };
 
 const LOVABLE_AI_URL = 'https://ai.gateway.lovable.dev/v1/chat/completions';
+
+// Load generative playbook knowledge from database
+async function loadImagePlaybook(): Promise<string> {
+  try {
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    );
+    const { data } = await supabase
+      .from("generative_playbooks")
+      .select("knowledge_json")
+      .eq("playbook_type", "image")
+      .limit(1)
+      .single();
+
+    if (!data?.knowledge_json) return "";
+
+    const k = data.knowledge_json as Record<string, unknown>;
+    const brand = k.dqef_brand_visual as Record<string, string> || {};
+    const formula = k.universal_formula || "";
+    const elements = k.formula_elements as Record<string, Record<string, string>> || {};
+    const rules = k.photorealism_rules as Record<string, string[]> || {};
+
+    return `
+PLAYBOOK DE IMAGEM GENERATIVA (conhecimento extraído de pesquisa profunda):
+
+FÓRMULA UNIVERSAL DE PROMPT: ${formula}
+
+ELEMENTOS OBRIGATÓRIOS DO PROMPT:
+- CÂMERA: ${elements.camera?.vocabulary || ""}
+- SUJEITO DQEF: ${brand.target_audience || ""}. Cor da marca: ${brand.brand_color || ""}. ${brand.must_have || ""}
+- AMBIENTE: ${elements.environment?.dqef_contexts ? JSON.stringify((elements.environment as Record<string, unknown>).dqef_contexts) : ""}
+- ILUMINAÇÃO: ${elements.lighting?.dqef_default || ""}
+- ESTILO: ${elements.style?.dqef_default || ""}
+
+REGRAS DE FOTORREALISMO:
+DO: ${(rules.do || []).join(" | ")}
+DON'T: ${(rules.dont || []).join(" | ")}
+
+PROIBIDO: ${brand.forbidden || ""}
+OBRIGATÓRIO: ${brand.must_have || ""}`;
+  } catch (e) {
+    console.error("Failed to load image playbook:", e);
+    return "";
+  }
+}
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -38,8 +85,25 @@ serve(async (req) => {
     console.log(`Generating image with model: ${model}`);
     console.log(`Prompt: ${imagePrompt.slice(0, 100)}...`);
 
-    // Inject brand visual guidelines into every image prompt
-    const brandGuidelines = `CRITICAL VISUAL RULES: The subject MUST be a Brazilian autonomous service provider (prestador de serviço), aged 35-50, with real worker appearance — calloused hands, work clothes or uniform, visible tools, real job site environment. Documentary photography style, natural lighting, raw authenticity. NEVER use young models, corporate people, or studio environments. The image must connect emotionally with blue-collar service workers (eletricistas, encanadores, pedreiros, pintores, jardineiros).`;
+    // Load playbook knowledge from database
+    const playbookKnowledge = await loadImagePlaybook();
+    
+    const brandGuidelines = `CRITICAL VISUAL RULES — FROM GENERATIVE PLAYBOOK RESEARCH:
+The subject MUST be a Brazilian autonomous service provider (prestador de serviço), aged 35-50, with real worker appearance — calloused hands, work clothes or uniform (turquoise #00A7B5 polo/t-shirt), visible tools, real job site environment. 
+
+PROMPT FORMULA: [Camera/Composition] + [Subject] + [Action/Pose] + [Environment] + [Lighting] + [Technical Style]
+
+PHOTOREALISM REQUIREMENTS:
+- Use camera language: "shot on 85mm lens, f/2.8, eye-level medium shot"
+- Add imperfections for authenticity: "visible skin pores, slight sweat, dust particles in light"
+- Environment must be Brazilian middle-class: ceramic tile floor, white walls, aluminum doors, tropical plants
+- Lighting: Natural, warm (5500-6000K), golden hour or diffused window light. NEVER studio cold light.
+- Style: "Photorealistic digital photography, 4K resolution. Cinematic with subtle orange-teal color grade. Minimal film grain for authenticity."
+
+FORBIDDEN: young models, corporate environments, formal clothes, studio settings, American/European aesthetics, mansions
+MANDATORY: weathered hands, work uniform, real tools, Brazilian residential architecture (60-90m² apartments), ethnic diversity
+
+${playbookKnowledge}`;
     
     const enhancedPrompt = `${brandGuidelines}\n\n${imagePrompt}`;
 

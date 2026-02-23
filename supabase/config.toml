@@ -14,3 +14,15 @@ verify_jwt = false
 
 [functions.weekly-strategy-review]
 verify_jwt = false
+
+[functions.generate-slide-image]
+verify_jwt = false
+
+[functions.generate-carousel-visual]
+verify_jwt = false
+
+[functions.generate-video-assets]
+verify_jwt = false
+
+[functions.extract-strategy-metafields]
+verify_jwt = false
