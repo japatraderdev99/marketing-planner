@@ -1,125 +1,214 @@
 
-# Redesign Completo da Aba Video IA -- Workflow Cinematografico com Integracao Estrategica
+# Workflow de Campanha para Tarefas Criativas -- Pipeline CMO-para-Diretor-Criativo
 
-## Problema Atual
+## Problema
 
-A aba Video IA funciona de forma isolada: aceita apenas texto livre ou cenas pre-definidas como input. Nao tem acesso a estrategia do playbook, campanhas ativas, biblioteca de ideias aprovadas, nem dados de performance dos criativos. O resultado e que os videos gerados podem nao estar alinhados com a estrategia vigente ou com os formatos que mais performam.
+Hoje, quando Gabriel (CMO) cria uma campanha, as tarefas geradas pela IA sao genericas: nao tem formato em pixels, nao linkam para a ferramenta criativa correta, nao carregam o contexto da campanha, e nao tem gate de aprovacao formal entre Gabriel e Guilherme. O Kanban e o Calendario tambem usam o mesmo modelo `Campaign` para tudo, dificultando a distincao entre campanha-mae e tarefa criativa.
 
 ## Visao da Solucao
 
-Transformar a aba em um hub de producao de video que puxa contexto automaticamente de todas as fontes estrategicas do sistema, apresentando-as como opcoes de input alem do texto livre.
+Quando Gabriel aprovar uma campanha (ou aplicar um plano de IA), o sistema gera **tarefas criativas estruturadas** no banco de dados, cada uma com:
+- Vinculo a campanha-mae (campaign_id)
+- Formato exato em pixels (ex: 1080x1350 para Vertical Feed Instagram)
+- Tipo criativo que determina qual ferramenta usar (Carrossel -> /criativo, Video -> /video-ia, Post -> /criativo)
+- Responsavel (Guilherme por padrao) e aprovador (Gabriel por padrao)
+- Deadline que aparece automaticamente no Calendario
+- Status de aprovacao (pendente / aprovado / rejeitado com nota)
 
-## Arquitetura de Inputs Estrategicos
+## Mudancas no Banco de Dados
 
-O briefing do video podera ser alimentado por 5 fontes de contexto:
+### Nova tabela: `campaign_tasks`
 
-```text
-+-------------------+    +-------------------+    +-------------------+    +-------------------+    +-------------------+
-|  TEXTO LIVRE      |    |  ESTRATEGIA       |    |  CAMPANHAS        |    |  BIBLIOTECA       |    |  PERFORMANCE      |
-|  (atual)          |    |  Playbook +        |    |  Campanhas ativas |    |  Ideias aprovadas |    |  Top criativos    |
-|  Cole/upload      |    |  Meta-fields +     |    |  com briefing,    |    |  status           |    |  por canal,       |
-|  qualquer texto   |    |  Knowledge Base    |    |  objetivo, CTA    |    |  "para producao"  |    |  formato, copy    |
-+-------------------+    +-------------------+    +-------------------+    +-------------------+    +-------------------+
+```sql
+CREATE TABLE campaign_tasks (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL,
+  campaign_id TEXT NOT NULL,          -- ID da campanha (localStorage)
+  campaign_name TEXT NOT NULL,        -- Nome da campanha para exibicao
+  
+  -- Tarefa
+  title TEXT NOT NULL,
+  description TEXT,
+  creative_type TEXT NOT NULL,        -- 'carrossel' | 'reels' | 'stories' | 'post' | 'video' | 'ads'
+  channel TEXT NOT NULL,              -- 'Instagram' | 'TikTok' etc.
+  format_width INTEGER,              -- ex: 1080
+  format_height INTEGER,             -- ex: 1350
+  format_ratio TEXT,                 -- ex: '4:5'
+  format_name TEXT,                  -- ex: 'Vertical Feed (Portrait)'
+  
+  -- Workflow
+  status TEXT NOT NULL DEFAULT 'pending',  -- 'pending' | 'in_progress' | 'in_review' | 'approved' | 'rejected' | 'published'
+  priority TEXT NOT NULL DEFAULT 'Media',
+  assigned_to TEXT NOT NULL DEFAULT 'Guilherme',
+  approved_by TEXT,
+  approval_note TEXT,
+  
+  -- Datas
+  deadline DATE,
+  started_at TIMESTAMPTZ,
+  completed_at TIMESTAMPTZ,
+  
+  -- Contexto criativo (da campanha)
+  campaign_context JSONB DEFAULT '{}',  -- objetivo, CTA, hook, angulo, publico, meta-fields
+  creative_output JSONB DEFAULT '{}',   -- resultado do criativo gerado (slides, prompts etc.)
+  
+  -- Meta
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 ```
 
-## Mudancas Planejadas
+RLS: usuario pode CRUD nos proprios registros. Politicas padrao `auth.uid() = user_id`.
 
-### 1. Novo Layout da Pagina VideoIA.tsx
+### Motivacao para banco de dados (nao localStorage)
 
-Substituir o layout atual (Express + Stepper separados) por um design com 3 abas:
+- Tarefas precisam ser compartilhadas entre Gabriel e Guilherme (mesma organizacao)
+- Historico de aprovacao persistente
+- Possibilita futuramente notificacoes e dashboards de accountability
+- Evita perda de dados criticos de producao
 
-**Aba "Express"** -- Manter o modo rapido atual, mas adicionar um painel colapsavel "Carregar Contexto Estrategico" que injeta automaticamente:
-- Playbook salvo (localStorage `dqef-strategy-*`)
-- Meta-fields do banco (`strategy_knowledge`)
-- Append no campo de texto como contexto enriquecido
+## Mudancas na UI
 
-**Aba "Projeto de Video"** -- Workflow de 5 passos (conforme plano anterior aprovado):
-- Passo 1 (Briefing): Reformulado com selecao de fonte de contexto
-- Passos 2-5: Storyboard, Frames, Motion, Pipeline
+### 1. Campanhas.tsx -- Geracao automatica de tarefas
 
-**Aba "Meus Projetos"** -- Lista de projetos salvos (tabela `video_projects`)
+Quando o CMO clica "Aplicar Plano" (handleApplyPlan) ou cria uma campanha manualmente:
 
-### 2. Painel de Contexto Estrategico no Briefing (Passo 1)
+- O sistema analisa os canais e formatos selecionados
+- Para cada combinacao canal+formato, cria uma `campaign_task` no banco
+- Cada tarefa recebe automaticamente:
+  - O formato em pixels correto (consultando o mapa de formatos do Formatos.tsx)
+  - O `creative_type` que determina a rota da ferramenta (`/criativo` para Carrossel/Post, `/video-ia` para Reels/Shorts/Video)
+  - O contexto da campanha (objetivo, CTA, hook, angulo emocional, publico-alvo)
+  - Deadline calculada a partir da data de inicio da campanha
+  - Guilherme como responsavel e Gabriel como aprovador
 
-Nova secao com cards clicaveis que carregam dados do sistema:
+Apos a criacao, mostra um toast com link para o Kanban: "X tarefas criadas para Guilherme"
 
-**Card "Estrategia"** (toggle):
-- Busca playbook salvo em localStorage (`dqef-strategy-positioning`, `dqef-strategy-targetAudience`, etc.)
-- Busca meta-fields do banco via `strategy_knowledge`
-- Injeta posicionamento, publico-alvo, tom de voz e diferenciais como contexto
+### 2. Kanban.tsx -- Leitura hibrida (localStorage + banco)
 
-**Card "Campanhas"** (selector):
-- Busca campanhas ativas do localStorage
-- Lista campanhas com nome, objetivo, CTA, hook e angulo
-- Ao selecionar uma campanha, injeta seu briefing como contexto do video
+O Kanban passa a exibir dois tipos de cards:
+- **Cards de campanha** (localStorage, como hoje) -- mantidos para compatibilidade
+- **Cards de tarefa criativa** (banco `campaign_tasks`) -- novos, com visual diferenciado
 
-**Card "Biblioteca de Ideias"** (selector):
-- Busca sugestoes com status `approved` ou `sent_to_production` do banco (`creative_suggestions`)
-- Lista titulo, copy e direcao visual
-- Ao selecionar, injeta como contexto
+Os cards de tarefa criativa exibem:
+- Badge com nome da campanha-mae
+- Canal + formato em pixels (ex: "Instagram -- 1080x1350 -- 4:5")
+- Botao "Abrir Ferramenta" que navega para a rota correta com query params do contexto
+- Status de aprovacao com avatar do aprovador
+- Responsavel (Guilherme) e deadline
 
-**Card "Performance" (futuro -- placeholder com badge "Em breve")**:
-- Mostra que futuramente puxara dados de `active_creatives` (top CTR, top engajamento)
-- Analisara formatos e copys que mais performam por canal
-- Por enquanto, exibe badge "Em breve" e nao carrega dados
+Mapeamento de colunas:
+- `pending` -> coluna "Ideias"
+- `in_progress` -> coluna "Em Producao"
+- `in_review` -> coluna "Revisao"
+- `approved` -> coluna "Aprovado"
+- `published` -> coluna "Publicado"
 
-### 3. Integracao no Backend (generate-video-assets)
+### 3. Calendario.tsx -- Exibicao de deadlines de tarefas
 
-Atualizar a edge function para aceitar um campo `strategyContext` opcional no body:
-- Se presente, injeta no system prompt antes da geracao
-- Combina com o playbook ja carregado do banco (`generative_playbooks`)
-- Garante que frame prompts e motion prompts reflitam o objetivo estrategico
+O Calendario passa a tambem mostrar as tarefas criativas do banco, alem dos ContentItems do localStorage. As tarefas aparecem com icone diferenciado (ex: paleta para criativo, camera para video) e badge da campanha.
 
-Adicionar operacoes para o workflow de projeto:
-- `storyboard`: gera estrutura multi-shot a partir do briefing enriquecido
-- `shot_frame_prompt`: gera frame prompt por shot individual
-- `shot_motion_prompt`: gera motion prompt por shot individual
+### 4. Deep-linking para ferramentas criativas
 
-### 4. Tabela video_projects (migracao)
+Quando Guilherme clica "Abrir Ferramenta" no card da tarefa:
+- O sistema navega para `/criativo?taskId=UUID` ou `/video-ia?taskId=UUID`
+- A pagina de destino carrega o contexto da tarefa via query param
+- Pre-preenche: canal, formato, dimensoes, objetivo, angulo, CTA, publico
+- Guilherme trabalha no criativo com todo o direcionamento da campanha
 
-Criar tabela para persistir projetos de video com RLS por usuario:
-- `id`, `user_id`, `title`, `concept`, `briefing_data` (JSONB com todas as fontes de contexto selecionadas)
-- `storyboard` (JSONB array de shots), `shot_frames`, `shot_motions` (JSONB)
-- `status` (draft/in_production/done), `created_at`, `updated_at`
+### 5. Aprovacao no Kanban
+
+Quando a tarefa chega na coluna "Revisao":
+- O card mostra botoes "Aprovar" e "Rejeitar" (visiveis para Gabriel)
+- Aprovar move para "Aprovado" e registra `approved_by` + timestamp
+- Rejeitar pede uma nota de feedback e volta para "Em Producao"
+
+## Mapa de Formatos Automatico
+
+O sistema usa um mapa interno para determinar dimensoes a partir de canal+formato:
+
+```text
+Instagram + Carrossel -> 1080x1080 (1:1) ou 1080x1350 (4:5)
+Instagram + Reels     -> 1080x1920 (9:16)
+Instagram + Stories   -> 1080x1920 (9:16)
+Instagram + Post      -> 1080x1350 (4:5)
+TikTok + Video        -> 1080x1920 (9:16)
+YouTube + Shorts      -> 1080x1920 (9:16)
+LinkedIn + Post       -> 1200x627 (1.91:1)
+Meta Ads + Ads        -> 1080x1080 (1:1)
+```
+
+Este mapa e extraido dos dados ja existentes em Formatos.tsx e embutido como constante compartilhada.
+
+## Arquivos a Modificar/Criar
+
+1. **Nova migracao SQL** -- Tabela `campaign_tasks` com RLS e trigger de `updated_at`
+2. **`src/data/formatSpecs.ts`** (novo) -- Mapa de canal+formato -> dimensoes em pixels (extraido de Formatos.tsx)
+3. **`src/pages/Campanhas.tsx`** -- Adicionar geracao de tarefas no `handleApplyPlan` e `handleSave`, inserindo no banco via Supabase
+4. **`src/pages/Kanban.tsx`** -- Adicionar leitura de `campaign_tasks` do banco, cards de tarefa criativa com botao de ferramenta e aprovacao
+5. **`src/pages/Calendario.tsx`** -- Adicionar leitura de `campaign_tasks` para exibir deadlines
+6. **`src/pages/Criativo.tsx`** -- Aceitar `?taskId=` query param para pre-carregar contexto da tarefa
+7. **`src/pages/VideoIA.tsx`** -- Aceitar `?taskId=` query param para pre-carregar contexto da tarefa no briefing
+
+## Fluxo Completo
+
+```text
+Gabriel (CMO)                          Guilherme (Dir. Criativo)
+     |                                        |
+     |-- Cria campanha em /campanhas           |
+     |-- Preenche: canal, formato,             |
+     |   objetivo, CTA, publico                |
+     |-- Gera plano com IA (opcional)          |
+     |-- Clica "Aplicar Plano"                 |
+     |                                         |
+     |-- Sistema cria N tarefas criativas ---->|
+     |   no banco com formato em pixels,       |
+     |   contexto da campanha e deadline       |
+     |                                         |
+     |                                         |-- Ve tarefas no Kanban
+     |                                         |-- Clica "Abrir Ferramenta"
+     |                                         |-- Cria o criativo com contexto
+     |                                         |   pre-carregado da campanha
+     |                                         |-- Move para "Revisao"
+     |                                         |
+     |<-- Card aparece em "Revisao" -----------|
+     |-- Revisa o criativo                     |
+     |-- Aprova ou rejeita com nota            |
+     |                                         |
+     |                                         |-- Se rejeitado: ajusta e reenvia
+     |                                         |-- Se aprovado: move para publicacao
+```
 
 ## Detalhes Tecnicos
 
-### Fontes de dados e como acessar cada uma:
+### Queries Supabase no frontend
 
-| Fonte | Armazenamento | Acesso |
-|-------|--------------|--------|
-| Playbook | localStorage `dqef-strategy-*` | `useLocalStorage` hook |
-| Meta-fields | `strategy_knowledge` table | `supabase.from('strategy_knowledge')` |
-| Campanhas | localStorage `dqef-campaigns` | `useLocalStorage` hook |
-| Ideias aprovadas | `creative_suggestions` table | `supabase.from('creative_suggestions').eq('status', 'approved')` |
-| Performance (futuro) | `active_creatives` table | Query com aggregacao por canal |
+- `Kanban.tsx`: `supabase.from('campaign_tasks').select('*').eq('user_id', user.id).order('created_at')`
+- `Calendario.tsx`: `supabase.from('campaign_tasks').select('id, title, channel, creative_type, deadline, status, campaign_name').eq('user_id', user.id)`
+- `Campanhas.tsx` (insert): `supabase.from('campaign_tasks').insert([...tasks])`
+- Aprovacao: `supabase.from('campaign_tasks').update({ status, approved_by, approval_note }).eq('id', taskId)`
 
-### Componentes novos a criar:
+### Pre-carregamento de contexto nas ferramentas
 
-- `StrategyContextPanel` -- painel com toggles/selectors para cada fonte
-- `VideoProjectWorkflow` -- stepper de 5 passos
-- `ShotCard` -- card visual por shot no storyboard
-- `VideoProjectsList` -- lista de projetos salvos
+O `campaign_context` JSONB armazena:
+```json
+{
+  "objective": "Gerar awareness sobre servicos de eletricista",
+  "cta": "Baixe o app DQEF",
+  "hook": "Voce sabe quanto um eletricista perde por mes?",
+  "emotionalAngle": "Dinheiro",
+  "targetAudience": "Prestadores de servico 30-50 anos",
+  "keyMessage": "A DQEF valoriza seu trabalho",
+  "funnel": "Topo",
+  "metafields": { ... }
+}
+```
 
-### Arquivos a modificar:
+### Prioridade de implementacao
 
-1. **`src/pages/VideoIA.tsx`** -- Reescrever com 3 abas e painel de contexto estrategico
-2. **`supabase/functions/generate-video-assets/index.ts`** -- Adicionar operacoes `storyboard`, `shot_frame_prompt`, `shot_motion_prompt` + aceitar `strategyContext`
-3. **Nova migracao SQL** -- Tabela `video_projects` com RLS
-
-### Fluxo principal (Projeto de Video):
-
-1. Usuario abre aba "Projeto de Video"
-2. No Passo 1 (Briefing), ativa toggles de contexto: Estrategia ON, seleciona Campanha X, seleciona Ideia Y
-3. O sistema monta um briefing enriquecido combinando todas as fontes
-4. Clica "Gerar Storyboard" -- IA recebe todo o contexto e gera 3-5 shots
-5. Para cada shot: gera frame prompt (com playbook de imagem injetado) e motion prompt (com playbook de video injetado)
-6. Gate de aprovacao por shot antes de avancar
-7. Pipeline final com checklist de exportacao para Higgsfield
-
-## Prioridade de Implementacao
-
-1. Criar tabela `video_projects` (migracao)
-2. Reescrever `VideoIA.tsx` com 3 abas + painel de contexto estrategico no briefing
-3. Atualizar `generate-video-assets` com novas operacoes e `strategyContext`
-4. Card de Performance como placeholder "Em breve"
+1. Criar tabela `campaign_tasks` (migracao)
+2. Criar `src/data/formatSpecs.ts` com mapa de dimensoes
+3. Atualizar `Campanhas.tsx` para gerar tarefas no banco
+4. Atualizar `Kanban.tsx` para exibir tarefas do banco com cards diferenciados
+5. Atualizar `Calendario.tsx` para exibir deadlines
+6. Adicionar deep-linking em `Criativo.tsx` e `VideoIA.tsx`
