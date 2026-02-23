@@ -280,12 +280,18 @@ export default function VideoIA() {
       if (data) {
         const ctx = data.campaign_context || {};
         const briefingParts = [
-          ctx.objective && `Objetivo: ${ctx.objective}`,
-          ctx.hook && `Hook: ${ctx.hook}`,
-          ctx.cta && `CTA: ${ctx.cta}`,
-          ctx.targetAudience && `Público: ${ctx.targetAudience}`,
-          ctx.keyMessage && `Mensagem: ${ctx.keyMessage}`,
-          ctx.emotionalAngle && `Ângulo: ${ctx.emotionalAngle}`,
+          ctx.objective && `📋 OBJETIVO: ${ctx.objective}`,
+          ctx.campaignSummary && `📝 RESUMO: ${ctx.campaignSummary}`,
+          ctx.keyMessage && `💡 MENSAGEM CENTRAL: ${ctx.keyMessage}`,
+          ctx.emotionalAngle && `🎯 ÂNGULO: ${ctx.emotionalAngle}`,
+          ctx.targetAudience && `👥 PÚBLICO: ${ctx.targetAudience}`,
+          ctx.cta && `🔗 CTA: ${ctx.cta}`,
+          ctx.hooks?.length > 0 && `🪝 HOOKS: ${ctx.hooks.join(' | ')}`,
+          ctx.viralLogic && `🚀 LÓGICA VIRAL: ${ctx.viralLogic}`,
+          ctx.toneGuidance && `🗣️ TOM: ${ctx.toneGuidance}`,
+          ctx.avoid && `🚫 EVITAR: ${ctx.avoid}`,
+          ctx.funnel && `🔄 FUNIL: ${ctx.funnel}`,
+          ctx.channelBudget && `💰 VERBA DO CANAL: R$ ${Number(ctx.channelBudget).toLocaleString('pt-BR')}`,
         ].filter(Boolean).join('\n');
         
         setActiveTab('express');
@@ -296,7 +302,7 @@ export default function VideoIA() {
           const ratio = data.format_ratio.replace(':', ':');
           if (ASPECT_RATIOS.includes(ratio)) setExpressAspect(ratio);
         }
-        toast({ title: '📋 Contexto da campanha carregado', description: `Tarefa: ${data.title}` });
+        toast({ title: '📋 Briefing da campanha carregado', description: `Tarefa: ${data.title} · ${data.channel}` });
       }
     })();
   // eslint-disable-next-line react-hooks/exhaustive-deps

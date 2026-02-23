@@ -118,7 +118,7 @@ REGRAS:
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${SUPABASE_ANON_KEY}` },
       body: JSON.stringify({
-        task_type: "auto",
+        task_type: "copy",
         messages: [
           { role: "system", content: "Você é um CMO e estrategista de marketing sênior. Retorne apenas JSON puro e válido, sem markdown." },
           { role: "user", content: prompt },
