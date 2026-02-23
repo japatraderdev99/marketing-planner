@@ -538,6 +538,33 @@ export type Database = {
           },
         ]
       }
+      generative_playbooks: {
+        Row: {
+          created_at: string
+          id: string
+          knowledge_json: Json
+          playbook_type: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          knowledge_json: Json
+          playbook_type: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          knowledge_json?: Json
+          playbook_type?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       media_library: {
         Row: {
           category: string | null
