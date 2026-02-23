@@ -137,7 +137,9 @@ REGRAS:
     }
 
     const aiResponse = await response.json();
-    const content = aiResponse.choices[0].message.content;
+    let content = aiResponse.choices[0].message.content;
+    // Strip markdown fences if present (e.g. ```json ... ```)
+    content = content.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '').trim();
     const plan = JSON.parse(content);
 
     return new Response(JSON.stringify({ plan }), {

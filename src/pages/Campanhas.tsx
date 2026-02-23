@@ -915,15 +915,18 @@ export default function Campanhas() {
           assigned_to: 'Guilherme',
           deadline: new Date(startMs + (3 + i * 2) * 86400000).toISOString().split('T')[0],
           campaign_context: {
-            objective: form.objective || aiPlan?.keyMessage || '',
-            cta: aiPlan?.ctaMain || '',
-            hook: aiPlan?.hooks?.[0] || '',
-            emotionalAngle: aiPlan?.angle || cmoDirectives.emotionalAngle || '',
-            targetAudience: form.targetAudience || '',
-            keyMessage: aiPlan?.keyMessage || '',
-            funnel: form.funnel || 'Topo',
-            viralLogic: aiPlan?.viralLogic || '',
-          },
+                objective: form.objective || aiPlan?.keyMessage || '',
+                campaignSummary: aiPlan?.campaignSummary || '',
+                cta: aiPlan?.ctaMain || '',
+                hooks: aiPlan?.hooks || [],
+                emotionalAngle: aiPlan?.angle || cmoDirectives.emotionalAngle || '',
+                targetAudience: form.targetAudience || '',
+                keyMessage: aiPlan?.keyMessage || '',
+                funnel: form.funnel || 'Topo',
+                viralLogic: aiPlan?.viralLogic || '',
+                toneGuidance: cmoDirectives.toneGuidance || '',
+                avoid: cmoDirectives.avoid || '',
+              },
         });
       });
     }
@@ -1539,9 +1542,19 @@ export default function Campanhas() {
                         }
                         const totalBudget = Number(form.budget) || 0;
                         const perChannel = form.channels.length > 0 ? Math.round(totalBudget / form.channels.length) : 0;
+                        // If AI plan has kanbanTasks, use them to compute per-channel creative counts
+                        const aiTasksByChannel: Record<string, number> = {};
+                        if (aiPlan?.kanbanTasks && aiPlan.kanbanTasks.length > 0) {
+                          for (const t of aiPlan.kanbanTasks) {
+                            const ch = t.channel as Channel;
+                            if (form.channels.includes(ch)) {
+                              aiTasksByChannel[ch] = (aiTasksByChannel[ch] || 0) + 1;
+                            }
+                          }
+                        }
                         setChannelAllocations(form.channels.map(ch => ({
                           channel: ch,
-                          creativeCount: 2,
+                          creativeCount: aiTasksByChannel[ch] || 2,
                           budget: perChannel,
                           formats: getCreativeTypesForChannel(ch).map(ct => {
                             const map: Record<string, ContentFormat> = { carrossel: 'Carrossel', reels: 'Reels', stories: 'Stories', post: 'Post', video: 'Reels', ads: 'Ads', shorts: 'Shorts' };
@@ -1561,6 +1574,19 @@ export default function Campanhas() {
               {/* ═══════════ STEP 2: ALLOCATION ═══════════ */}
               {wizardStep === 'allocation' && (
                 <div className="space-y-4">
+                  {/* Objective context banner */}
+                  {form.objective && (
+                    <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3">
+                      <p className="text-[10px] font-bold text-muted-foreground/60 uppercase tracking-wider mb-1">📋 Objetivo da campanha</p>
+                      <p className="text-xs text-foreground/80 leading-relaxed">{form.objective}</p>
+                      {aiPlan?.campaignSummary && (
+                        <div className="mt-2 pt-2 border-t border-amber-500/15">
+                          <p className="text-[10px] font-bold text-muted-foreground/60 uppercase tracking-wider mb-1">🤖 Resumo da IA</p>
+                          <p className="text-xs text-foreground/70 leading-relaxed">{aiPlan.campaignSummary}</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
                   <div className="rounded-xl border border-primary/20 bg-primary/5 p-3">
                     <div className="flex items-center justify-between mb-1">
                       <p className="text-sm font-bold text-foreground">Verba Total</p>
@@ -1764,7 +1790,7 @@ export default function Campanhas() {
                               campaign_id: savedId,
                               campaign_name: form.name,
                               title: `${ct.charAt(0).toUpperCase() + ct.slice(1)} ${ci + 1} — ${alloc.channel}`,
-                              description: aiPlan?.campaignSummary || form.objective || '',
+                              description: form.objective || aiPlan?.campaignSummary || '',
                               creative_type: ct,
                               channel: alloc.channel,
                               format_width: spec.width,
@@ -1777,13 +1803,17 @@ export default function Campanhas() {
                               deadline: new Date(startMs + (3 + taskIdx * 2) * 86400000).toISOString().split('T')[0],
                               campaign_context: {
                                 objective: form.objective || '',
+                                campaignSummary: aiPlan?.campaignSummary || '',
                                 cta: aiPlan?.ctaMain || '',
-                                hook: aiPlan?.hooks?.[0] || '',
+                                hooks: aiPlan?.hooks || [],
                                 emotionalAngle: cmoDirectives.emotionalAngle || aiPlan?.angle || '',
                                 targetAudience: form.targetAudience || '',
                                 keyMessage: aiPlan?.keyMessage || cmoDirectives.keyMessage || '',
                                 funnel: form.funnel || 'Topo',
                                 channelBudget: alloc.budget,
+                                viralLogic: aiPlan?.viralLogic || '',
+                                toneGuidance: cmoDirectives.toneGuidance || '',
+                                avoid: cmoDirectives.avoid || '',
                               },
                             });
                             taskIdx++;
