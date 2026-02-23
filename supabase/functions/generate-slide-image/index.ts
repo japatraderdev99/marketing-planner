@@ -38,6 +38,11 @@ serve(async (req) => {
     console.log(`Generating image with model: ${model}`);
     console.log(`Prompt: ${imagePrompt.slice(0, 100)}...`);
 
+    // Inject brand visual guidelines into every image prompt
+    const brandGuidelines = `CRITICAL VISUAL RULES: The subject MUST be a Brazilian autonomous service provider (prestador de serviço), aged 35-50, with real worker appearance — calloused hands, work clothes or uniform, visible tools, real job site environment. Documentary photography style, natural lighting, raw authenticity. NEVER use young models, corporate people, or studio environments. The image must connect emotionally with blue-collar service workers (eletricistas, encanadores, pedreiros, pintores, jardineiros).`;
+    
+    const enhancedPrompt = `${brandGuidelines}\n\n${imagePrompt}`;
+
     const response = await fetch(LOVABLE_AI_URL, {
       method: 'POST',
       headers: {
@@ -49,7 +54,7 @@ serve(async (req) => {
         messages: [
           {
             role: 'user',
-            content: imagePrompt,
+            content: enhancedPrompt,
           },
         ],
         modalities: ['image', 'text'],

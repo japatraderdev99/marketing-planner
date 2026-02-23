@@ -99,11 +99,15 @@ REGRAS DE DESIGN POR TIPO DE SLIDE:
 - validation: Texto emocional, direto. layout: 'text-only'
 - cta: Ação clara + link na bio. layout: 'cta-clean'
 
-PROMPTS DE IMAGEM (imagePrompt):
+PROMPTS DE IMAGEM (imagePrompt) — REGRAS ABSOLUTAS:
 - Em inglês, ultra-detalhados para geração de imagem
-- Incluir: sujeito físico, textura real, iluminação, enquadramento close-up 4:5
-- Estilo: documentary truth, not stock photo, desaturated, authentic
+- PÚBLICO-ALVO OBRIGATÓRIO: O sujeito da imagem DEVE ser um prestador de serviço autônomo brasileiro (30-50 anos), com aparência real de trabalhador — mãos calejadas, uniforme/roupa de trabalho, ferramentas visíveis, ambiente de obra/serviço. NUNCA jovens modelos, executivos de escritório ou pessoas genéricas.
+- CONEXÃO COM O COPY: A imagem DEVE ilustrar diretamente o contexto do headline/subtext da lâmina. Se o headline fala de precificação, mostre alguém calculando orçamento. Se fala de ferramenta, mostre a ferramenta em uso real.
+- Incluir: sujeito físico real do público-alvo, textura real, iluminação natural, enquadramento close-up 4:5
+- Estilo: documentary truth, raw authenticity, natural light, real work environment. NOT stock photo, NOT polished, NOT corporate.
+- PROIBIDO: jovens modelos, ambientes corporativos, roupas sociais, cenários artificiais de estúdio
 - Mínimo 80 palavras
+- Sempre incluir no prompt: "Brazilian autonomous service provider, aged 35-50, weathered hands, work clothes, real job site environment"
 
 LÓGICA AUTÔNOMA (quando briefing vazio):
 1. Analise o contexto e estratégia da marca disponíveis
