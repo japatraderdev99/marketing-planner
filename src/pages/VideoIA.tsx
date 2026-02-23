@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { initialEstrategias } from '@/data/seedData';
@@ -262,12 +263,44 @@ function LensModeBadge({ lensMode }: { lensMode: 'fixed' | 'unfixed' }) {
 export default function VideoIA() {
   const { toast } = useToast();
   const { user } = useAuth();
+  const [searchParams] = useSearchParams();
+  const taskId = searchParams.get('taskId');
   const userId = user?.id || null;
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dbFrom = (table: string) => (supabase as any).from(table);
 
   // Tab state
   const [activeTab, setActiveTab] = useState('express');
+
+  // Load task context from campaign_tasks if taskId present
+  useEffect(() => {
+    if (!taskId) return;
+    (async () => {
+      const { data } = await dbFrom('campaign_tasks').select('*').eq('id', taskId).single();
+      if (data) {
+        const ctx = data.campaign_context || {};
+        const briefingParts = [
+          ctx.objective && `Objetivo: ${ctx.objective}`,
+          ctx.hook && `Hook: ${ctx.hook}`,
+          ctx.cta && `CTA: ${ctx.cta}`,
+          ctx.targetAudience && `Público: ${ctx.targetAudience}`,
+          ctx.keyMessage && `Mensagem: ${ctx.keyMessage}`,
+          ctx.emotionalAngle && `Ângulo: ${ctx.emotionalAngle}`,
+        ].filter(Boolean).join('\n');
+        
+        setActiveTab('express');
+        setExpressText(briefingParts);
+        if (ctx.emotionalAngle) setExpressAngle(ctx.emotionalAngle);
+        // Set aspect ratio from format
+        if (data.format_ratio) {
+          const ratio = data.format_ratio.replace(':', ':');
+          if (ASPECT_RATIOS.includes(ratio)) setExpressAspect(ratio);
+        }
+        toast({ title: '📋 Contexto da campanha carregado', description: `Tarefa: ${data.title}` });
+      }
+    })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [taskId]);
 
   // Express mode state
   const [expressText, setExpressText] = useState('');

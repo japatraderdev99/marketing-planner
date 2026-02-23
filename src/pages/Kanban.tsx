@@ -1,6 +1,10 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { initialCampaigns, Campaign, KanbanStatus, Channel, Priority, ContentObjective, SEED_VERSION } from '@/data/seedData';
+import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
+import { useNavigate } from 'react-router-dom';
+import { useToast } from '@/hooks/use-toast';
 import {
   DndContext, DragEndEvent, DragStartEvent,
   PointerSensor, useSensor, useSensors, DragOverlay, closestCorners
@@ -16,6 +20,7 @@ import {
   Plus, GripVertical, X, Edit2, Trash2, MessageSquare, Calendar,
   AlertCircle, CheckSquare, Square, Clock, Send, ChevronRight,
   Target, Flame, BarChart2, Filter, Users, ExternalLink, Link2, FolderOpen,
+  Palette, Video, CheckCircle2, XCircle, ArrowRight,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -877,15 +882,255 @@ function NewCardModal({ open, onClose, columnId, onSave }: {
   );
 }
 
+// ─── Campaign Task Types ──────────────────────────────────────────────────────
+
+interface CampaignTask {
+  id: string;
+  user_id: string;
+  campaign_id: string;
+  campaign_name: string;
+  title: string;
+  description: string | null;
+  creative_type: string;
+  channel: string;
+  format_width: number | null;
+  format_height: number | null;
+  format_ratio: string | null;
+  format_name: string | null;
+  status: string;
+  priority: string;
+  assigned_to: string;
+  approved_by: string | null;
+  approval_note: string | null;
+  deadline: string | null;
+  campaign_context: Record<string, any>;
+  creative_output: Record<string, any>;
+  created_at: string;
+}
+
+const TASK_STATUS_MAP: Record<string, KanbanStatus> = {
+  pending: 'ideia',
+  in_progress: 'desenvolvimento',
+  in_review: 'revisao',
+  approved: 'aprovado',
+  rejected: 'desenvolvimento',
+  published: 'publicado',
+};
+
+const TASK_STATUS_REVERSE: Record<KanbanStatus, string> = {
+  ideia: 'pending',
+  desenvolvimento: 'in_progress',
+  revisao: 'in_review',
+  aprovado: 'approved',
+  publicado: 'published',
+};
+
+const CREATIVE_TYPE_ICON: Record<string, string> = {
+  carrossel: '🎠',
+  reels: '🎬',
+  stories: '📱',
+  post: '📸',
+  video: '🎥',
+  ads: '📊',
+  shorts: '⚡',
+};
+
+const CREATIVE_TYPE_ROUTE: Record<string, string> = {
+  carrossel: '/ai-carrosseis',
+  post: '/criativo',
+  reels: '/video-ia',
+  stories: '/video-ia',
+  video: '/video-ia',
+  ads: '/criativo',
+  shorts: '/video-ia',
+};
+
+// ─── Creative Task Card ───────────────────────────────────────────────────────
+
+function CreativeTaskCard({
+  task,
+  onClick,
+  onStatusChange,
+  onApprove,
+  onReject,
+}: {
+  task: CampaignTask;
+  onClick?: () => void;
+  onStatusChange?: (taskId: string, status: string) => void;
+  onApprove?: (taskId: string) => void;
+  onReject?: (taskId: string, note: string) => void;
+}) {
+  const navigate = useNavigate();
+  const member = getTeamMember(task.assigned_to);
+  const daysLeft = getDaysLeft(task.deadline || undefined);
+  const isOverdue = daysLeft !== null && daysLeft < 0;
+  const route = CREATIVE_TYPE_ROUTE[task.creative_type] || '/criativo';
+
+  const handleOpenTool = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    navigate(`${route}?taskId=${task.id}`);
+  };
+
+  return (
+    <div
+      onClick={onClick}
+      className={cn(
+        'group relative rounded-xl border-2 border-dashed border-primary/30 bg-gradient-to-br from-primary/5 to-transparent p-3 cursor-pointer',
+        'transition-all duration-150 hover:border-primary/50 hover:shadow-md hover:shadow-primary/10',
+        isOverdue && 'border-red-500/40 from-red-500/5',
+      )}
+    >
+      {/* Campaign badge */}
+      <div className="flex items-center gap-1.5 mb-2">
+        <span className="rounded-full bg-primary/15 px-2 py-0.5 text-[9px] font-bold text-primary truncate max-w-[140px]">
+          🎯 {task.campaign_name}
+        </span>
+        <span className="text-[9px] text-muted-foreground/50">
+          {CREATIVE_TYPE_ICON[task.creative_type]} {task.creative_type}
+        </span>
+      </div>
+
+      {/* Title */}
+      <p className="text-xs font-semibold leading-snug text-foreground line-clamp-2 mb-1.5">{task.title}</p>
+
+      {/* Format specs */}
+      {task.format_width && task.format_height && (
+        <div className="flex items-center gap-1.5 mb-2">
+          <span className="rounded-md bg-muted/50 px-1.5 py-0.5 text-[9px] font-mono font-bold text-muted-foreground">
+            {task.format_width}×{task.format_height}
+          </span>
+          {task.format_ratio && (
+            <span className="text-[9px] text-muted-foreground/60">{task.format_ratio}</span>
+          )}
+          <span className="text-[9px] text-muted-foreground/40">· {task.channel}</span>
+        </div>
+      )}
+
+      {/* Badges */}
+      <div className="flex flex-wrap gap-1 mb-2">
+        <span className={cn('rounded-full border px-1.5 py-0.5 text-[9px] font-bold',
+          task.priority === 'Alta' ? 'bg-red-500/15 text-red-400 border-red-500/25' :
+          task.priority === 'Média' ? 'bg-amber-500/15 text-amber-400 border-amber-500/25' :
+          'bg-muted/50 text-muted-foreground border-border'
+        )}>
+          {task.priority}
+        </span>
+        <DeadlineBadge dateStr={task.deadline || undefined} />
+      </div>
+
+      {/* Open tool button */}
+      <button
+        onClick={handleOpenTool}
+        className="flex items-center gap-1.5 w-full rounded-lg border border-primary/30 bg-primary/10 px-2.5 py-1.5 text-[10px] font-bold text-primary hover:bg-primary/20 transition-colors mb-2"
+      >
+        {task.creative_type === 'video' || task.creative_type === 'reels' || task.creative_type === 'stories' || task.creative_type === 'shorts'
+          ? <Video className="h-3 w-3" />
+          : <Palette className="h-3 w-3" />
+        }
+        Abrir Ferramenta
+        <ArrowRight className="h-3 w-3 ml-auto" />
+      </button>
+
+      {/* Approval buttons for in_review status */}
+      {task.status === 'in_review' && (
+        <div className="flex gap-1.5">
+          <button
+            onClick={(e) => { e.stopPropagation(); onApprove?.(task.id); }}
+            className="flex-1 flex items-center justify-center gap-1 rounded-lg bg-green-500/15 border border-green-500/25 px-2 py-1.5 text-[10px] font-bold text-green-400 hover:bg-green-500/25 transition-colors"
+          >
+            <CheckCircle2 className="h-3 w-3" /> Aprovar
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              const note = prompt('Nota de feedback para Guilherme:');
+              if (note) onReject?.(task.id, note);
+            }}
+            className="flex-1 flex items-center justify-center gap-1 rounded-lg bg-red-500/15 border border-red-500/25 px-2 py-1.5 text-[10px] font-bold text-red-400 hover:bg-red-500/25 transition-colors"
+          >
+            <XCircle className="h-3 w-3" /> Rejeitar
+          </button>
+        </div>
+      )}
+
+      {/* Footer: avatar */}
+      <div className="mt-2 flex items-center justify-between">
+        <div className="flex items-center gap-1">
+          <TeamAvatar responsible={task.assigned_to} size="sm" />
+          <span className={cn('text-[9px] font-semibold', member ? member.text : 'text-muted-foreground')}>
+            {task.assigned_to}
+          </span>
+        </div>
+        {task.approved_by && (
+          <span className="text-[9px] text-green-400 flex items-center gap-0.5">
+            <CheckCircle2 className="h-2.5 w-2.5" /> {task.approved_by}
+          </span>
+        )}
+      </div>
+
+      {/* Rejection note */}
+      {task.approval_note && task.status === 'in_progress' && (
+        <div className="mt-2 rounded-lg bg-red-500/10 border border-red-500/20 px-2 py-1.5">
+          <p className="text-[9px] text-red-400 font-semibold mb-0.5">Feedback:</p>
+          <p className="text-[10px] text-foreground/70">{task.approval_note}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Main Kanban ─────────────────────────────────────────────────────────────
 
 export default function Kanban() {
   const [campaigns, setCampaigns] = useLocalStorage<Campaign[]>('dqef-campaigns', initialCampaigns);
+  const { user } = useAuth();
+  const { toast } = useToast();
   const [activeId, setActiveId] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [newCardColumn, setNewCardColumn] = useState<KanbanStatus | null>(null);
   const [filterMember, setFilterMember] = useState<string>('all');
   const [filterPriority, setFilterPriority] = useState<string>('all');
+  const [creativeTasks, setCreativeTasks] = useState<CampaignTask[]>([]);
+
+  // Load creative tasks from database
+  useEffect(() => {
+    if (!user) return;
+    const loadTasks = async () => {
+      const { data, error } = await (supabase as any).from('campaign_tasks').select('*').eq('user_id', user.id).order('created_at');
+      if (data && !error) setCreativeTasks(data);
+    };
+    loadTasks();
+  }, [user]);
+
+  const handleTaskStatusChange = async (taskId: string, newStatus: string) => {
+    const { error } = await (supabase as any).from('campaign_tasks').update({ status: newStatus }).eq('id', taskId);
+    if (!error) {
+      setCreativeTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: newStatus } : t));
+    }
+  };
+
+  const handleApproveTask = async (taskId: string) => {
+    const { error } = await (supabase as any).from('campaign_tasks').update({
+      status: 'approved',
+      approved_by: 'Gabriel',
+      completed_at: new Date().toISOString(),
+    }).eq('id', taskId);
+    if (!error) {
+      setCreativeTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: 'approved', approved_by: 'Gabriel' } : t));
+      toast({ title: '✅ Tarefa aprovada!' });
+    }
+  };
+
+  const handleRejectTask = async (taskId: string, note: string) => {
+    const { error } = await (supabase as any).from('campaign_tasks').update({
+      status: 'in_progress',
+      approval_note: note,
+    }).eq('id', taskId);
+    if (!error) {
+      setCreativeTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: 'in_progress', approval_note: note } : t));
+      toast({ title: '🔄 Tarefa devolvida com feedback' });
+    }
+  };
 
   // ── Seed version guard: reset localStorage when seed changes ─────────────
   useEffect(() => {
@@ -907,15 +1152,26 @@ export default function Kanban() {
     return true;
   }), [campaigns, filterMember, filterPriority]);
 
-  const byColumn = (col: KanbanStatus) => filtered.filter(c => c.kanbanStatus === col);
+  const filteredTasks = useMemo(() => creativeTasks.filter(t => {
+    if (filterMember !== 'all' && !t.assigned_to.toLowerCase().includes(filterMember)) return false;
+    if (filterPriority !== 'all' && t.priority !== filterPriority) return false;
+    return true;
+  }), [creativeTasks, filterMember, filterPriority]);
 
-  // Team stats
+  const byColumn = (col: KanbanStatus) => filtered.filter(c => c.kanbanStatus === col);
+  const tasksByColumn = (col: KanbanStatus) => filteredTasks.filter(t => TASK_STATUS_MAP[t.status] === col);
+
+  // Team stats — include creative tasks
   const teamStats = useMemo(() => TEAM.map(t => {
-    const tasks = campaigns.filter(c => c.responsible.toLowerCase().includes(t.id));
-    const overdue = tasks.filter(c => getDaysLeft(c.endDate) !== null && getDaysLeft(c.endDate)! < 0).length;
-    const done = tasks.filter(c => c.kanbanStatus === 'publicado').length;
-    return { ...t, total: tasks.length, overdue, done };
-  }), [campaigns]);
+    const campaignTasks = campaigns.filter(c => c.responsible.toLowerCase().includes(t.id));
+    const dbTasks = creativeTasks.filter(ct => ct.assigned_to.toLowerCase().includes(t.id));
+    const allCount = campaignTasks.length + dbTasks.length;
+    const overdue = campaignTasks.filter(c => getDaysLeft(c.endDate) !== null && getDaysLeft(c.endDate)! < 0).length
+      + dbTasks.filter(ct => getDaysLeft(ct.deadline || undefined) !== null && getDaysLeft(ct.deadline || undefined)! < 0).length;
+    const done = campaignTasks.filter(c => c.kanbanStatus === 'publicado').length
+      + dbTasks.filter(ct => ct.status === 'approved' || ct.status === 'published').length;
+    return { ...t, total: allCount, overdue, done };
+  }), [campaigns, creativeTasks]);
 
   const handleDragStart = (e: DragStartEvent) => setActiveId(e.active.id as string);
 
@@ -927,12 +1183,19 @@ export default function Kanban() {
     const colMatch = COLUMNS.find(c => c.id === overId);
     const targetColumn = colMatch ? colMatch.id : campaigns.find(c => c.id === overId)?.kanbanStatus;
     if (targetColumn) {
-      setCampaigns(prev => prev.map(c =>
-        c.id === active.id ? {
-          ...c, kanbanStatus: targetColumn,
-          history: [...(c.history || []), { date: new Date().toISOString(), action: `Movido para "${COLUMNS.find(col => col.id === targetColumn)?.label}"`, user: c.responsible }]
-        } : c
-      ));
+      // Check if it's a creative task (UUID format)
+      const isCreativeTask = creativeTasks.some(t => t.id === active.id);
+      if (isCreativeTask) {
+        const newStatus = TASK_STATUS_REVERSE[targetColumn] || 'pending';
+        handleTaskStatusChange(active.id as string, newStatus);
+      } else {
+        setCampaigns(prev => prev.map(c =>
+          c.id === active.id ? {
+            ...c, kanbanStatus: targetColumn,
+            history: [...(c.history || []), { date: new Date().toISOString(), action: `Movido para "${COLUMNS.find(col => col.id === targetColumn)?.label}"`, user: c.responsible }]
+          } : c
+        ));
+      }
     }
   };
 
@@ -1054,7 +1317,7 @@ export default function Kanban() {
           </button>
         )}
         <span className="ml-auto text-[11px] text-muted-foreground/50">
-          {filtered.length} tarefa{filtered.length !== 1 ? 's' : ''}
+          {filtered.length + filteredTasks.length} tarefa{(filtered.length + filteredTasks.length) !== 1 ? 's' : ''}
         </span>
       </div>
 
@@ -1068,7 +1331,9 @@ export default function Kanban() {
         <div className="flex gap-3 overflow-x-auto pb-4">
           {COLUMNS.map(col => {
             const cards = byColumn(col.id);
-            const overloaded = cards.length >= 5;
+            const colTasks = tasksByColumn(col.id);
+            const totalInCol = cards.length + colTasks.length;
+            const overloaded = totalInCol >= 5;
             const overdueInCol = cards.filter(c => getDaysLeft(c.endDate) !== null && getDaysLeft(c.endDate)! < 0).length;
 
             return (
@@ -1089,7 +1354,7 @@ export default function Kanban() {
                         'rounded-full px-1.5 py-0.5 text-[10px] font-bold',
                         overloaded ? 'bg-amber-500/20 text-amber-400' : 'bg-muted text-muted-foreground'
                       )}>
-                        {cards.length}
+                        {totalInCol}
                       </span>
                       <button
                         onClick={() => setNewCardColumn(col.id)}
@@ -1114,8 +1379,19 @@ export default function Kanban() {
                 </div>
 
                 {/* Drop zone */}
-                <SortableContext items={cards.map(c => c.id)} strategy={verticalListSortingStrategy}>
+                <SortableContext items={[...cards.map(c => c.id), ...colTasks.map(t => t.id)]} strategy={verticalListSortingStrategy}>
                   <div className="flex flex-col gap-2 min-h-[120px] rounded-xl border-2 border-dashed border-transparent transition-colors">
+                    {/* Creative task cards (from DB) */}
+                    {colTasks.map(task => (
+                      <CreativeTaskCard
+                        key={task.id}
+                        task={task}
+                        onStatusChange={handleTaskStatusChange}
+                        onApprove={handleApproveTask}
+                        onReject={handleRejectTask}
+                      />
+                    ))}
+                    {/* Campaign cards (from localStorage) */}
                     {cards.map(card => (
                       <KanbanCard
                         key={card.id}
@@ -1124,7 +1400,7 @@ export default function Kanban() {
                         onDelete={handleDelete}
                       />
                     ))}
-                    {cards.length === 0 && (
+                    {totalInCol === 0 && (
                       <div className="flex h-20 items-center justify-center rounded-xl border border-dashed border-border/40 text-[10px] text-muted-foreground/30">
                         Solte aqui
                       </div>
