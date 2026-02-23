@@ -1555,7 +1555,7 @@ export default function Campanhas() {
                         setChannelAllocations(form.channels.map(ch => ({
                           channel: ch,
                           creativeCount: aiTasksByChannel[ch] || 2,
-                          budget: perChannel,
+                          budget: 0,
                           formats: getCreativeTypesForChannel(ch).map(ct => {
                             const map: Record<string, ContentFormat> = { carrossel: 'Carrossel', reels: 'Reels', stories: 'Stories', post: 'Post', video: 'Reels', ads: 'Ads', shorts: 'Shorts' };
                             return map[ct] || 'Post';
@@ -1619,23 +1619,41 @@ export default function Campanhas() {
                   {channelAllocations.map((alloc, idx) => {
                     const total = Number(form.budget) || 0;
                     const pct = total > 0 ? Math.round((alloc.budget / total) * 100) : 0;
+                    // Calculate campaign duration for daily budget
+                    const startMs = form.startDate ? new Date(form.startDate + 'T12:00:00').getTime() : Date.now();
+                    const endMs = form.endDate ? new Date(form.endDate + 'T12:00:00').getTime() : startMs + 30 * 86400000;
+                    const campaignDays = Math.max(1, Math.round((endMs - startMs) / 86400000));
+                    const dailyBudget = alloc.budget > 0 ? (alloc.budget / campaignDays) : 0;
                     return (
                       <div key={alloc.channel} className="rounded-xl border border-border bg-card p-4 space-y-3">
                         <div className="flex items-center gap-2">
                           <span className="h-3 w-3 rounded-full" style={{ background: CHANNEL_COLORS[alloc.channel] || C.purple }} />
                           <p className="text-sm font-bold text-foreground">{CHANNEL_EMOJI[alloc.channel]} {alloc.channel}</p>
+                          {alloc.channel === 'Meta Ads' && (
+                            <span className="text-[9px] text-muted-foreground/60 italic">(Facebook + Instagram)</span>
+                          )}
                           <span className="ml-auto text-[10px] font-bold text-muted-foreground">{pct}% da verba</span>
                         </div>
 
                         <div>
                           <div className="flex items-center justify-between mb-1.5">
                             <label className="text-[10px] font-bold text-muted-foreground/80 uppercase tracking-wider">Nº de criativos</label>
-                            <span className="text-sm font-black text-foreground tabular-nums">{alloc.creativeCount}</span>
+                            <Input
+                              type="number"
+                              min={1}
+                              max={20}
+                              value={alloc.creativeCount}
+                              onChange={e => {
+                                const v = Math.max(1, Math.min(20, Number(e.target.value) || 1));
+                                setChannelAllocations(prev => prev.map((a, i) => i === idx ? { ...a, creativeCount: v } : a));
+                              }}
+                              className="w-16 h-7 text-xs font-bold text-center bg-muted/20 border-border/60 tabular-nums"
+                            />
                           </div>
                           <input
                             type="range"
                             min={1}
-                            max={10}
+                            max={20}
                             value={alloc.creativeCount}
                             onChange={e => {
                               const v = Number(e.target.value);
@@ -1644,14 +1662,25 @@ export default function Campanhas() {
                             className="w-full h-2 rounded-full appearance-none bg-border cursor-pointer accent-primary"
                           />
                           <div className="flex justify-between text-[9px] text-muted-foreground/50 mt-0.5">
-                            <span>1</span><span>5</span><span>10</span>
+                            <span>1</span><span>10</span><span>20</span>
                           </div>
                         </div>
 
                         <div>
                           <div className="flex items-center justify-between mb-1.5">
                             <label className="text-[10px] font-bold text-muted-foreground/80 uppercase tracking-wider">Verba do canal (R$)</label>
-                            <span className="text-sm font-black text-foreground tabular-nums">R$ {alloc.budget.toLocaleString('pt-BR')}</span>
+                            <Input
+                              type="number"
+                              min={0}
+                              step={50}
+                              value={alloc.budget || ''}
+                              placeholder="0"
+                              onChange={e => {
+                                const newVal = Math.max(0, Number(e.target.value) || 0);
+                                setChannelAllocations(prev => prev.map((a, i) => i === idx ? { ...a, budget: newVal } : a));
+                              }}
+                              className="w-28 h-7 text-xs font-bold text-right bg-muted/20 border-border/60 tabular-nums"
+                            />
                           </div>
                           <input
                             type="range"
@@ -1668,6 +1697,11 @@ export default function Campanhas() {
                           <div className="flex justify-between text-[9px] text-muted-foreground/50 mt-0.5">
                             <span>R$ 0</span><span>R$ {total.toLocaleString('pt-BR')}</span>
                           </div>
+                          {alloc.budget > 0 && (
+                            <p className="text-[10px] text-primary/70 font-semibold mt-1">
+                              ≈ R$ {dailyBudget.toFixed(2)}/dia ({campaignDays} dias)
+                            </p>
+                          )}
                         </div>
 
                         <div>

@@ -179,16 +179,33 @@ export default function Criativo() {
       if (data) {
         setTaskContext(data);
         const ctx = data.campaign_context || {};
+        // Map emotional angle
         if (ctx.emotionalAngle) {
-          const angle = ANGLES.find(a => a.id === ctx.emotionalAngle);
+          const angle = ANGLES.find(a => a.id === ctx.emotionalAngle || a.label?.toLowerCase().includes(ctx.emotionalAngle.toLowerCase()));
           if (angle) setSelectedAngle(angle.id);
         }
-        if (ctx.objective) setAdditionalContext(prev => prev ? prev : `Objetivo: ${ctx.objective}. ${ctx.hook ? `Hook: ${ctx.hook}. ` : ''}${ctx.cta ? `CTA: ${ctx.cta}. ` : ''}${ctx.targetAudience ? `Público: ${ctx.targetAudience}` : ''}`);
         // Map channel
         if (data.channel) {
           const ch = CHANNELS.find(c => c.id.startsWith(data.channel) || c.label === data.channel);
           if (ch) setSelectedChannel(ch.id);
         }
+        // Build comprehensive briefing from campaign context
+        const briefingParts = [
+          ctx.objective && `📋 OBJETIVO: ${ctx.objective}`,
+          ctx.campaignSummary && `📝 RESUMO: ${ctx.campaignSummary}`,
+          ctx.keyMessage && `💡 MENSAGEM CENTRAL: ${ctx.keyMessage}`,
+          ctx.emotionalAngle && `🎯 ÂNGULO: ${ctx.emotionalAngle}`,
+          ctx.targetAudience && `👥 PÚBLICO: ${ctx.targetAudience}`,
+          ctx.cta && `🔗 CTA: ${ctx.cta}`,
+          ctx.hooks?.length > 0 && `🪝 HOOKS: ${ctx.hooks.join(' | ')}`,
+          ctx.viralLogic && `🚀 LÓGICA VIRAL: ${ctx.viralLogic}`,
+          ctx.toneGuidance && `🗣️ TOM: ${ctx.toneGuidance}`,
+          ctx.avoid && `🚫 EVITAR: ${ctx.avoid}`,
+          ctx.funnel && `🔄 FUNIL: ${ctx.funnel}`,
+          ctx.channelBudget && `💰 VERBA DO CANAL: R$ ${Number(ctx.channelBudget).toLocaleString('pt-BR')}`,
+        ].filter(Boolean).join('\n');
+        if (briefingParts) setAdditionalContext(briefingParts);
+        toast({ title: '📋 Briefing da campanha carregado', description: `Tarefa: ${data.title} · ${data.channel}` });
       }
     })();
   }, [taskId]);

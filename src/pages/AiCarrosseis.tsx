@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Layers, Wand2, Copy, Check, Download, ChevronDown, ChevronUp, ImageIcon, Video, Zap, RefreshCw, Image, Minimize2, Shuffle, Upload, Trash2, Library, X, Star, Target, FileText, Users, Megaphone, TrendingUp, BookOpen, AlertTriangle, PlusCircle, File, Eye, Save, MessageSquare, Clock, CheckCircle, XCircle, Send, BookMarked, Inbox, ShieldCheck, Loader2 } from 'lucide-react';
 import dqfIcon from '@/assets/dqf-icon.svg';
 import { Button } from '@/components/ui/button';
@@ -2332,6 +2333,8 @@ function DraftsPanel({ userId, currentUserName, onLoadDraft, refreshTrigger }: D
 
 export default function AiCarrosseis() {
   const { toast } = useToast();
+  const [searchParams] = useSearchParams();
+  const taskId = searchParams.get('taskId');
   const [context, setContext] = useState('');
   const [angle, setAngle] = useState('');
   const [persona, setPersona] = useState('');
@@ -2358,6 +2361,47 @@ export default function AiCarrosseis() {
   const [draftsRefreshTrigger, setDraftsRefreshTrigger] = useState(0);
   const [lastSavedSigla, setLastSavedSigla] = useState<string | null>(null);
   const [strategyEnabled, setStrategyEnabled] = useState(true);
+
+  // Load task context from campaign_tasks if taskId present
+  useEffect(() => {
+    if (!taskId) return;
+    (async () => {
+      const { data } = await (supabase as any).from('campaign_tasks').select('*').eq('id', taskId).single();
+      if (data) {
+        const ctx = data.campaign_context || {};
+        const briefingParts = [
+          ctx.objective && `📋 OBJETIVO: ${ctx.objective}`,
+          ctx.campaignSummary && `📝 RESUMO: ${ctx.campaignSummary}`,
+          ctx.keyMessage && `💡 MENSAGEM CENTRAL: ${ctx.keyMessage}`,
+          ctx.emotionalAngle && `🎯 ÂNGULO: ${ctx.emotionalAngle}`,
+          ctx.targetAudience && `👥 PÚBLICO: ${ctx.targetAudience}`,
+          ctx.cta && `🔗 CTA: ${ctx.cta}`,
+          ctx.hooks?.length > 0 && `🪝 HOOKS: ${ctx.hooks.join(' | ')}`,
+          ctx.viralLogic && `🚀 LÓGICA VIRAL: ${ctx.viralLogic}`,
+          ctx.toneGuidance && `🗣️ TOM: ${ctx.toneGuidance}`,
+          ctx.avoid && `🚫 EVITAR: ${ctx.avoid}`,
+          ctx.funnel && `🔄 FUNIL: ${ctx.funnel}`,
+          ctx.channelBudget && `💰 VERBA DO CANAL: R$ ${Number(ctx.channelBudget).toLocaleString('pt-BR')}`,
+        ].filter(Boolean).join('\n');
+        if (briefingParts) setContext(briefingParts);
+        if (ctx.emotionalAngle) setAngle(ctx.emotionalAngle);
+        if (ctx.toneGuidance) setTone(ctx.toneGuidance);
+        // Map channel
+        if (data.channel) {
+          const channelMap: Record<string, string> = {
+            'Instagram': 'Instagram Feed',
+            'TikTok': 'TikTok',
+            'LinkedIn': 'LinkedIn',
+            'Meta Ads': 'Instagram Feed',
+            'YouTube': 'YouTube',
+            'Orgânico': 'Instagram Feed',
+          };
+          setChannel(channelMap[data.channel] || 'Instagram Feed');
+        }
+        toast({ title: '📋 Briefing da campanha carregado', description: `Tarefa: ${data.title} · ${data.channel}` });
+      }
+    })();
+  }, [taskId]);
 
   // Fetch current user id + profile name
   useEffect(() => {
