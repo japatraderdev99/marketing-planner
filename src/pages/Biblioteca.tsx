@@ -6,8 +6,9 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Search, Copy, Check, BookOpen, Lightbulb, Users, Film } from 'lucide-react';
+import { Search, Copy, Check, BookOpen, Lightbulb, Users, Film, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import IdeacaoTab from '@/components/biblioteca/IdeacaoTab';
 
 const OBJECTIVE_COLORS: Record<ContentObjective, string> = {
   Awareness: 'bg-purple-500/15 text-purple-400 border-purple-500/30',
@@ -135,8 +136,11 @@ export default function Biblioteca() {
         </div>
       </div>
 
-      <Tabs defaultValue="copies">
+      <Tabs defaultValue="ideacao">
         <TabsList className="bg-card border border-border">
+          <TabsTrigger value="ideacao" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary">
+            <Sparkles className="mr-1.5 h-3.5 w-3.5" /> Ideação IA
+          </TabsTrigger>
           <TabsTrigger value="copies" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary">
             <Copy className="mr-1.5 h-3.5 w-3.5" /> Copies ({filteredCopies.length})
           </TabsTrigger>
@@ -150,6 +154,10 @@ export default function Biblioteca() {
             <Users className="mr-1.5 h-3.5 w-3.5" /> Estratégia
           </TabsTrigger>
         </TabsList>
+
+        <TabsContent value="ideacao" className="mt-4">
+          <IdeacaoTab />
+        </TabsContent>
 
         <TabsContent value="copies" className="mt-4">
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
