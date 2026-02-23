@@ -2385,6 +2385,25 @@ export default function AiCarrosseis() {
     fetchLibrary();
   }, [fetchLibrary]);
 
+  // Check for incoming suggestion from Ideação tab
+  const hasTriggeredRef = useRef(false);
+  useEffect(() => {
+    if (hasTriggeredRef.current) return;
+    const raw = localStorage.getItem('ideacao_to_carousel');
+    if (!raw) return;
+    hasTriggeredRef.current = true;
+    localStorage.removeItem('ideacao_to_carousel');
+    try {
+      const payload = JSON.parse(raw);
+      if (payload.context) setContext(payload.context);
+      if (payload.channel) setChannel(payload.channel);
+      // Auto-generate after a short delay to let state settle
+      setTimeout(() => {
+        autoGenerateFromSuggestion(payload.context, payload.channel);
+      }, 500);
+    } catch { /* ignore */ }
+  }, []);
+
   // Save draft handler
   const handleSaveDraft = async () => {
     if (!userId || !result) return;
@@ -2450,6 +2469,45 @@ export default function AiCarrosseis() {
       toast({ title: `Draft "${draft.sigla}" carregado ✅`, description: draft.name });
     }
   }, [toast]);
+
+  const autoGenerateFromSuggestion = async (suggestionContext: string, suggestionChannel?: string) => {
+    setLoading(true);
+    setResult(null);
+    setSlideImages({});
+    try {
+      let strategyContext = '';
+      try {
+        const raw = localStorage.getItem('dqef_strategy_metafields_v1');
+        if (raw) {
+          const mf = JSON.parse(raw);
+          strategyContext = mf.promptContext || '';
+        }
+      } catch { /* ignore */ }
+
+      const { data, error } = await supabase.functions.invoke('generate-carousel-visual', {
+        body: {
+          context: suggestionContext,
+          angle: '',
+          persona: '',
+          channel: suggestionChannel || 'Instagram Feed',
+          tone: 'Peer-to-peer',
+          strategyContext,
+        },
+      });
+      if (error) throw error;
+      if (data?.error) {
+        toast({ title: 'Erro na geração', description: data.error, variant: 'destructive' });
+        return;
+      }
+      setResult(data);
+      toast({ title: 'Carrossel gerado da sugestão! ✅', description: `${data.carousel.slides.length} lâminas prontas.` });
+    } catch (e) {
+      console.error(e);
+      toast({ title: 'Erro', description: 'Falha ao gerar carrossel. Tente novamente.', variant: 'destructive' });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleGenerate = async () => {
     setLoading(true);

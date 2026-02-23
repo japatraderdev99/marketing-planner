@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent } from '@/components/ui/card';
@@ -188,6 +189,7 @@ const ACCEPTED_TYPES = 'image/*,.pdf,.html,.htm,.txt,.md,.csv,.json';
 export default function IdeacaoTab() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [inputText, setInputText] = useState('');
   const [inputType, setInputType] = useState('mixed');
@@ -318,12 +320,36 @@ export default function IdeacaoTab() {
 
   const handleSendToProduction = (item: CreativeSuggestion) => {
     handleUpdateStatus(item.id, 'sent_to_production');
-    toast({
-      title: 'Enviado para produção!',
-      description: `Acesse a aba de ${item.suggestion_type === 'carousel' ? 'Carrosséis' : 'Criativos'} para produzir.`,
-    });
-    const context = [item.title, item.description, item.copy_text, item.visual_direction].filter(Boolean).join('\n\n');
-    navigator.clipboard.writeText(context);
+
+    if (item.suggestion_type === 'carousel') {
+      // Store suggestion data and navigate to carousel production
+      const briefing = [
+        item.title,
+        item.description,
+        item.copy_text ? `Copy: ${item.copy_text}` : '',
+        item.visual_direction ? `Direção visual: ${item.visual_direction}` : '',
+      ].filter(Boolean).join('\n\n');
+
+      localStorage.setItem('ideacao_to_carousel', JSON.stringify({
+        context: briefing,
+        channel: item.channel || 'Instagram Feed',
+        suggestionId: item.id,
+      }));
+
+      toast({
+        title: 'Enviado para produção!',
+        description: 'Redirecionando para AI Carrosséis...',
+      });
+
+      navigate('/ai-carrosseis');
+    } else {
+      toast({
+        title: 'Enviado para produção!',
+        description: `Acesse a aba de Criativos para produzir.`,
+      });
+      const context = [item.title, item.description, item.copy_text, item.visual_direction].filter(Boolean).join('\n\n');
+      navigator.clipboard.writeText(context);
+    }
   };
 
   const filtered = suggestions.filter(s => filterStatus === 'all' || s.status === filterStatus);
