@@ -1,112 +1,125 @@
 
-# Plano Final: Migração Completa de 9 Edge Functions + Weekly Strategy Review com Opus 4.6
+# Redesign Completo da Aba Video IA -- Workflow Cinematografico com Integracao Estrategica
 
-## Resumo
+## Problema Atual
 
-Execução de 10 steps para migrar todas as edge functions para a arquitetura multi-LLM otimizada, adicionar análise estratégica semanal com Claude Opus 4.6, e resetar o Knowledge Base para reprocessamento.
+A aba Video IA funciona de forma isolada: aceita apenas texto livre ou cenas pre-definidas como input. Nao tem acesso a estrategia do playbook, campanhas ativas, biblioteca de ideias aprovadas, nem dados de performance dos criativos. O resultado e que os videos gerados podem nao estar alinhados com a estrategia vigente ou com os formatos que mais performam.
 
----
+## Visao da Solucao
 
-## Step 1: Atualizar ai-router
+Transformar a aba em um hub de producao de video que puxa contexto automaticamente de todas as fontes estrategicas do sistema, apresentando-as como opcoes de input alem do texto livre.
 
-Adicionar dois novos task_types ao TASK_CONFIG:
-- `frame` -> `google/gemini-2.5-flash-image` (Lovable AI) para frames I2V
-- `weekly_strategy` -> `anthropic/claude-opus-4` (OpenRouter) para análise semanal completa da operação
+## Arquitetura de Inputs Estrategicos
 
-Sem outras alterações nos modelos existentes — os slugs `anthropic/claude-sonnet-4` e `anthropic/claude-opus-4` estão corretos para o OpenRouter.
+O briefing do video podera ser alimentado por 5 fontes de contexto:
 
-## Step 2: Migrar generate-carousel-visual para ai-router (Claude Sonnet 4)
-
-Trocar a chamada direta ao Lovable AI (`google/gemini-2.5-pro`, $10/1M output) por uma chamada interna ao ai-router com `task_type: "copy"` que roteia para Claude Sonnet 4 via OpenRouter.
-
-A função `getStrategyContext()` continua intacta. O ai-router recebe os messages e retorna a resposta.
-
-Padrão de migração:
 ```text
-ANTES: fetch(LOVABLE_AI_URL, { model: "google/gemini-2.5-pro" })
-DEPOIS: fetch(`${SUPABASE_URL}/functions/v1/ai-router`, { task_type: "copy", messages, user_id })
++-------------------+    +-------------------+    +-------------------+    +-------------------+    +-------------------+
+|  TEXTO LIVRE      |    |  ESTRATEGIA       |    |  CAMPANHAS        |    |  BIBLIOTECA       |    |  PERFORMANCE      |
+|  (atual)          |    |  Playbook +        |    |  Campanhas ativas |    |  Ideias aprovadas |    |  Top criativos    |
+|  Cole/upload      |    |  Meta-fields +     |    |  com briefing,    |    |  status           |    |  por canal,       |
+|  qualquer texto   |    |  Knowledge Base    |    |  objetivo, CTA    |    |  "para producao"  |    |  formato, copy    |
++-------------------+    +-------------------+    +-------------------+    +-------------------+    +-------------------+
 ```
 
-## Step 3: Migrar generate-carousel para ai-router (Claude Sonnet 4)
+## Mudancas Planejadas
 
-Mesmo padrão do Step 2. Trocar `google/gemini-2.5-flash` por ai-router `task_type: "copy"`.
+### 1. Novo Layout da Pagina VideoIA.tsx
 
-## Step 4: Migrar categorize-media para ai-router
+Substituir o layout atual (Express + Stepper separados) por um design com 3 abas:
 
-**NOTA IMPORTANTE**: `categorize-media` envia `image_url` inline no content (multimodal). DeepSeek V3 não suporta visão. A chamada será roteada via ai-router com `task_type: "classify"`, mas o ai-router tentará DeepSeek primeiro e, ao falhar por não suportar visão, fará fallback automático para Gemini 2.5 Flash Lite (Lovable AI). O tracking de custos fica centralizado de qualquer forma.
+**Aba "Express"** -- Manter o modo rapido atual, mas adicionar um painel colapsavel "Carregar Contexto Estrategico" que injeta automaticamente:
+- Playbook salvo (localStorage `dqef-strategy-*`)
+- Meta-fields do banco (`strategy_knowledge`)
+- Append no campo de texto como contexto enriquecido
 
-Alternativa: Manter Lovable AI direto para esta função específica, mas perder o tracking centralizado. Decisão: usar ai-router para centralizar o tracking, aceitando que o fallback será ativado para tarefas multimodais.
+**Aba "Projeto de Video"** -- Workflow de 5 passos (conforme plano anterior aprovado):
+- Passo 1 (Briefing): Reformulado com selecao de fonte de contexto
+- Passos 2-5: Storyboard, Frames, Motion, Pipeline
 
-## Step 5: Migrar suggest-media para ai-router (DeepSeek)
+**Aba "Meus Projetos"** -- Lista de projetos salvos (tabela `video_projects`)
 
-Tarefa text-only (não envia imagem, apenas metadados). DeepSeek V3 funciona perfeitamente. Trocar Gemini Flash Lite por ai-router `task_type: "suggest"`.
+### 2. Painel de Contexto Estrategico no Briefing (Passo 1)
 
-## Step 6: Migrar analyze-benchmark para ai-router (Claude Sonnet 4)
+Nova secao com cards clicaveis que carregam dados do sistema:
 
-Envia imagem base64. Claude Sonnet 4 suporta visão via OpenRouter. Análise de benchmark melhora significativamente com Claude. `task_type: "analyze"`.
+**Card "Estrategia"** (toggle):
+- Busca playbook salvo em localStorage (`dqef-strategy-positioning`, `dqef-strategy-targetAudience`, etc.)
+- Busca meta-fields do banco via `strategy_knowledge`
+- Injeta posicionamento, publico-alvo, tom de voz e diferenciais como contexto
 
-## Step 7: Migrar analyze-brand-document para ai-router (Claude Sonnet 4)
+**Card "Campanhas"** (selector):
+- Busca campanhas ativas do localStorage
+- Lista campanhas com nome, objetivo, CTA, hook e angulo
+- Ao selecionar uma campanha, injeta seu briefing como contexto do video
 
-Envia documento PDF como base64. Claude Sonnet 4 extrai metafields com maior precisão. `task_type: "analyze"`.
+**Card "Biblioteca de Ideias"** (selector):
+- Busca sugestoes com status `approved` ou `sent_to_production` do banco (`creative_suggestions`)
+- Lista titulo, copy e direcao visual
+- Ao selecionar, injeta como contexto
 
-## Step 8: Otimizar fill-metafields-from-knowledge (Pro -> Flash)
+**Card "Performance" (futuro -- placeholder com badge "Em breve")**:
+- Mostra que futuramente puxara dados de `active_creatives` (top CTR, top engajamento)
+- Analisara formatos e copys que mais performam por canal
+- Por enquanto, exibe badge "Em breve" e nao carrega dados
 
-Trocar modelo de `google/gemini-2.5-pro` ($10/1M output) para `google/gemini-2.5-flash` ($0.6/1M output). Chamada continua via Lovable AI direto (sem ai-router). Economia de 94%.
+### 3. Integracao no Backend (generate-video-assets)
 
-## Step 9: Migrar forum-ai e generate-campaign-plan para ai-router (Auto Router)
+Atualizar a edge function para aceitar um campo `strategyContext` opcional no body:
+- Se presente, injeta no system prompt antes da geracao
+- Combina com o playbook ja carregado do banco (`generative_playbooks`)
+- Garante que frame prompts e motion prompts reflitam o objetivo estrategico
 
-Ambas usam Gemini Flash direto. Migrar para ai-router `task_type: "auto"`, que roteia para `openrouter/auto` (NotDiamond seleciona o modelo ideal automaticamente).
+Adicionar operacoes para o workflow de projeto:
+- `storyboard`: gera estrutura multi-shot a partir do briefing enriquecido
+- `shot_frame_prompt`: gera frame prompt por shot individual
+- `shot_motion_prompt`: gera motion prompt por shot individual
 
-## Step 10: Criar weekly-strategy-review + resetar Knowledge Base
+### 4. Tabela video_projects (migracao)
 
-**Nova Edge Function**: `weekly-strategy-review/index.ts`
+Criar tabela para persistir projetos de video com RLS por usuario:
+- `id`, `user_id`, `title`, `concept`, `briefing_data` (JSONB com todas as fontes de contexto selecionadas)
+- `storyboard` (JSONB array de shots), `shot_frames`, `shot_motions` (JSONB)
+- `status` (draft/in_production/done), `created_at`, `updated_at`
 
-Função que utiliza Claude Opus 4.6 via ai-router (`task_type: "weekly_strategy"`) para gerar uma análise estratégica completa da operação. Ela:
-1. Carrega todo o Knowledge Base do usuário
-2. Carrega metafields atuais
-3. Carrega dados de campanhas, criativos, e uso de IA (ai_usage_log)
-4. Gera insights acionáveis: o que está funcionando, o que ajustar, oportunidades, riscos
-5. Retorna um JSON estruturado com recomendações priorizadas
+## Detalhes Tecnicos
 
-**Reset do Knowledge Base**: Deletar os 4 registros da tabela `strategy_knowledge` para que os documentos sejam re-analisados pelo novo modelo (Claude Sonnet 4 ao invés de Gemini Flash).
+### Fontes de dados e como acessar cada uma:
 
-**Registrar** a nova função no `supabase/config.toml`.
+| Fonte | Armazenamento | Acesso |
+|-------|--------------|--------|
+| Playbook | localStorage `dqef-strategy-*` | `useLocalStorage` hook |
+| Meta-fields | `strategy_knowledge` table | `supabase.from('strategy_knowledge')` |
+| Campanhas | localStorage `dqef-campaigns` | `useLocalStorage` hook |
+| Ideias aprovadas | `creative_suggestions` table | `supabase.from('creative_suggestions').eq('status', 'approved')` |
+| Performance (futuro) | `active_creatives` table | Query com aggregacao por canal |
 
----
+### Componentes novos a criar:
 
-## Secao Tecnica
+- `StrategyContextPanel` -- painel com toggles/selectors para cada fonte
+- `VideoProjectWorkflow` -- stepper de 5 passos
+- `ShotCard` -- card visual por shot no storyboard
+- `VideoProjectsList` -- lista de projetos salvos
 
-### Arquivos a editar (10):
-| Arquivo | Mudanca |
-|---------|---------|
-| `supabase/functions/ai-router/index.ts` | +frame, +weekly_strategy task_types |
-| `supabase/functions/generate-carousel-visual/index.ts` | Lovable AI -> ai-router (copy) |
-| `supabase/functions/generate-carousel/index.ts` | Lovable AI -> ai-router (copy) |
-| `supabase/functions/categorize-media/index.ts` | Lovable AI -> ai-router (classify) |
-| `supabase/functions/suggest-media/index.ts` | Lovable AI -> ai-router (suggest) |
-| `supabase/functions/analyze-benchmark/index.ts` | Lovable AI -> ai-router (analyze) |
-| `supabase/functions/analyze-brand-document/index.ts` | Lovable AI -> ai-router (analyze) |
-| `supabase/functions/fill-metafields-from-knowledge/index.ts` | gemini-2.5-pro -> gemini-2.5-flash |
-| `supabase/functions/forum-ai/index.ts` | Lovable AI -> ai-router (auto) |
-| `supabase/functions/generate-campaign-plan/index.ts` | Lovable AI -> ai-router (auto) |
+### Arquivos a modificar:
 
-### Arquivo a criar (1):
-| Arquivo | Descricao |
-|---------|-----------|
-| `supabase/functions/weekly-strategy-review/index.ts` | Analise semanal Opus 4.6 |
+1. **`src/pages/VideoIA.tsx`** -- Reescrever com 3 abas e painel de contexto estrategico
+2. **`supabase/functions/generate-video-assets/index.ts`** -- Adicionar operacoes `storyboard`, `shot_frame_prompt`, `shot_motion_prompt` + aceitar `strategyContext`
+3. **Nova migracao SQL** -- Tabela `video_projects` com RLS
 
-### Config a editar (1):
-| Arquivo | Mudanca |
-|---------|---------|
-| `supabase/config.toml` | +weekly-strategy-review |
+### Fluxo principal (Projeto de Video):
 
-### Dados a deletar:
-```sql
-DELETE FROM strategy_knowledge;
-```
+1. Usuario abre aba "Projeto de Video"
+2. No Passo 1 (Briefing), ativa toggles de contexto: Estrategia ON, seleciona Campanha X, seleciona Ideia Y
+3. O sistema monta um briefing enriquecido combinando todas as fontes
+4. Clica "Gerar Storyboard" -- IA recebe todo o contexto e gera 3-5 shots
+5. Para cada shot: gera frame prompt (com playbook de imagem injetado) e motion prompt (com playbook de video injetado)
+6. Gate de aprovacao por shot antes de avancar
+7. Pipeline final com checklist de exportacao para Higgsfield
 
-### Arquivos que NAO mudam (ja otimos):
-- `generate-slide-image/index.ts` — usa modalities exclusivas Lovable AI
-- `generate-video-assets/index.ts` — ja excelente com prompts por modelo
-- `fill-playbook-from-knowledge/index.ts` — ja otimo com Flash
-- `extract-strategy-metafields/index.ts` — ja otimo com Flash
+## Prioridade de Implementacao
+
+1. Criar tabela `video_projects` (migracao)
+2. Reescrever `VideoIA.tsx` com 3 abas + painel de contexto estrategico no briefing
+3. Atualizar `generate-video-assets` com novas operacoes e `strategyContext`
+4. Card de Performance como placeholder "Em breve"
