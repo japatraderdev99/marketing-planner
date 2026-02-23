@@ -10,7 +10,7 @@ import { useNavigate } from 'react-router-dom';
 interface CampaignForm {
   name: string;
   objective: string;
-  channel: Channel;
+  channels: Channel[];
   format: ContentFormat;
   targetAudience: string;
   budget: string;
@@ -21,6 +21,13 @@ interface CampaignForm {
   funnel: Funnel;
   responsible: string;
   description: string;
+}
+
+interface ChannelAllocation {
+  channel: Channel;
+  creativeCount: number;
+  budget: number;
+  formats: ContentFormat[];
 }
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -134,12 +141,18 @@ const ANGLE_EMOJI: Record<string, string> = {
 };
 
 const EMPTY_FORM = (): CampaignForm => ({
-  name: '', objective: '', channel: 'Instagram',
+  name: '', objective: '', channels: [],
   format: 'Carrossel', targetAudience: '', budget: '',
   startDate: new Date().toISOString().split('T')[0], endDate: '',
   priority: 'Alta', status: 'Rascunho',
   funnel: 'Topo', responsible: '', description: '',
 });
+
+const ALL_CHANNELS: Channel[] = ['Instagram', 'TikTok', 'Meta Ads', 'LinkedIn', 'YouTube', 'Orgânico'];
+
+const CHANNEL_EMOJI: Record<string, string> = {
+  Instagram: '📸', TikTok: '🎵', 'Meta Ads': '📢', LinkedIn: '💼', YouTube: '▶️', Orgânico: '🌱',
+};
 
 // ─── Analytics helpers ────────────────────────────────────────────────────────
 
@@ -685,6 +698,8 @@ export default function Campanhas() {
   const [knowledgeDocs, setKnowledgeDocs] = useState<Array<{ document_name: string; status: string }>>([]);
   const [exporting, setExporting] = useState(false);
   const exportRef = useRef<HTMLDivElement>(null);
+  const [wizardStep, setWizardStep] = useState<'form' | 'allocation' | 'summary'>('form');
+  const [channelAllocations, setChannelAllocations] = useState<ChannelAllocation[]>([]);
 
   const [metafields, setMetafields] = useState<MetaFields | null>(null);
   useEffect(() => {
@@ -755,6 +770,8 @@ export default function Campanhas() {
     setCmoDirectives({ emotionalAngle: '', toneGuidance: '', targetPain: '', keyMessage: '', avoid: '', freeNotes: '' });
     setForm(EMPTY_FORM());
     setShowAiPanel(false);
+    setWizardStep('form');
+    setChannelAllocations([]);
     setShowModal(true);
   };
 
@@ -763,15 +780,18 @@ export default function Campanhas() {
     setAiPlan(null);
     setExtraInstructions('');
     setForm({
-      name: c.name, objective: c.objective || '', channel: c.channel?.[0] || 'Instagram',
+      name: c.name, objective: c.objective || '', channels: c.channel || [],
       format: 'Carrossel', targetAudience: c.audience || '',
       budget: String(c.budget || ''), startDate: c.startDate || '', endDate: c.endDate || '',
       priority: c.priority, status: c.status, funnel: c.funnel || 'Topo',
       responsible: c.responsible || '', description: c.description || '',
     });
     setShowAiPanel(false);
+    setWizardStep('form');
+    setChannelAllocations([]);
     setShowModal(true);
   };
+
 
   const handleDelete = (id: string) => {
     setCampaigns(prev => prev.filter(c => c.id !== id));
@@ -783,11 +803,11 @@ export default function Campanhas() {
       toast({ title: 'Nome obrigatório', variant: 'destructive' });
       return;
     }
-    const ch: Channel = form.channel;
+    const chs: Channel[] = form.channels.length > 0 ? form.channels : ['Instagram'];
     if (editingId) {
       setCampaigns(prev => prev.map(c => c.id === editingId ? {
         ...c, name: form.name, objective: form.objective,
-        channel: [ch], budget: Number(form.budget) || 0,
+        channel: chs, budget: Number(form.budget) || 0,
         startDate: form.startDate, endDate: form.endDate,
         priority: form.priority, status: form.status,
         funnel: form.funnel, responsible: form.responsible,
@@ -798,7 +818,7 @@ export default function Campanhas() {
       const newCampaign: Campaign = {
         id: `camp-${Date.now()}`,
         name: form.name, objective: form.objective,
-        channel: [ch], kanbanStatus: 'ideia',
+        channel: chs, kanbanStatus: 'ideia',
         category: 'Awareness', avatar: (form.responsible || 'TM').split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2) || 'TM',
         budget: Number(form.budget) || 0,
         startDate: form.startDate, endDate: form.endDate,
@@ -921,12 +941,12 @@ export default function Campanhas() {
   const handleApplyPlan = async () => {
     if (!aiPlan) return;
     const startMs = form.startDate ? new Date(form.startDate + 'T12:00:00').getTime() : Date.now();
-    const ch: Channel = form.channel;
+    const chs: Channel[] = form.channels.length > 0 ? form.channels : ['Instagram'];
     const savedId = editingId || `camp-${Date.now()}`;
     const campaignName = form.name;
     if (editingId) {
       setCampaigns(prev => prev.map(c => c.id === editingId ? {
-        ...c, name: form.name, objective: form.objective, channel: [ch],
+        ...c, name: form.name, objective: form.objective, channel: chs,
         budget: Number(form.budget) || 0, description: aiPlan.campaignSummary,
         audience: form.targetAudience, status: 'Aprovada' as CampaignStatus,
       } : c));
@@ -934,7 +954,7 @@ export default function Campanhas() {
       const newC: Campaign = {
         id: savedId, name: campaignName,
         objective: form.objective || aiPlan.keyMessage,
-        channel: [ch], kanbanStatus: 'ideia', category: 'Awareness',
+        channel: chs, kanbanStatus: 'ideia', category: 'Awareness',
         avatar: (form.responsible || 'TM').split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2) || 'TM',
         budget: Number(form.budget) || 0,
         startDate: form.startDate, endDate: form.endDate,
@@ -965,7 +985,7 @@ export default function Campanhas() {
     setContents(prev => [...prev, ...calItems]);
 
     // Generate structured creative tasks in the database
-    const taskCount = await generateCampaignTasks(savedId, campaignName, [ch]);
+    const taskCount = await generateCampaignTasks(savedId, campaignName, chs);
     
     const taskMsg = taskCount > 0 ? ` · ${taskCount} tarefas criativas para Guilherme` : '';
     toast({ 
@@ -1168,376 +1188,643 @@ export default function Campanhas() {
             </DialogHeader>
 
             <div className="space-y-5">
-              {hasStrategy && (
-                <div className="flex items-center justify-between rounded-lg bg-primary/8 border border-primary/20 px-3 py-2.5">
-                  <div className="flex items-center gap-2">
-                    <Sparkles className="h-3.5 w-3.5 text-primary" />
-                    <p className="text-xs text-foreground/80">Quer pré-preencher com a estratégia ativa?</p>
+            {/* ── STEP INDICATOR ── */}
+              <div className="flex items-center gap-2 mb-2">
+                {(['form', 'allocation', 'summary'] as const).map((step, i) => {
+                  const labels = ['Dados', 'Alocação', 'Resumo'];
+                  const isActive = wizardStep === step;
+                  const isDone = (['form', 'allocation', 'summary'] as const).indexOf(wizardStep) > i;
+                  return (
+                    <div key={step} className="flex items-center gap-2 flex-1">
+                      <div className={cn(
+                        'flex items-center justify-center h-6 w-6 rounded-full text-[10px] font-bold shrink-0 transition-colors',
+                        isActive ? 'bg-primary text-primary-foreground' : isDone ? 'bg-emerald-500/20 text-emerald-400' : 'bg-muted text-muted-foreground'
+                      )}>
+                        {isDone ? '✓' : i + 1}
+                      </div>
+                      <span className={cn('text-[11px] font-semibold', isActive ? 'text-foreground' : 'text-muted-foreground')}>{labels[i]}</span>
+                      {i < 2 && <div className="flex-1 h-px bg-border" />}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* ═══════════ STEP 1: FORM ═══════════ */}
+              {wizardStep === 'form' && (
+                <div className="space-y-5">
+                  {hasStrategy && (
+                    <div className="flex items-center justify-between rounded-lg bg-primary/8 border border-primary/20 px-3 py-2.5">
+                      <div className="flex items-center gap-2">
+                        <Sparkles className="h-3.5 w-3.5 text-primary" />
+                        <p className="text-xs text-foreground/80">Quer pré-preencher com a estratégia ativa?</p>
+                      </div>
+                      <button onClick={autofillFromStrategy} className="text-xs font-bold text-primary hover:underline">Preencher →</button>
+                    </div>
+                  )}
+
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">Nome da campanha *</label>
+                      <Input placeholder="Ex: Campanha Prestadores — Fevereiro 2026" value={form.name || ''} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} className="bg-muted/20 border-border/60" />
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">Objetivo</label>
+                      <Textarea placeholder="O que essa campanha precisa alcançar? Seja específico com números e prazo." value={form.objective || ''} onChange={e => setForm(f => ({ ...f, objective: e.target.value }))} rows={2} className="bg-muted/20 border-border/60 resize-none text-sm" />
+                    </div>
+
+                    {/* ── CHANNEL TOGGLE BUTTONS ── */}
+                    <div>
+                      <label className="text-xs font-semibold text-muted-foreground mb-2 block">Canais da campanha</label>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (form.channels.length === ALL_CHANNELS.length) {
+                              setForm(f => ({ ...f, channels: [] }));
+                            } else {
+                              setForm(f => ({ ...f, channels: [...ALL_CHANNELS] }));
+                            }
+                          }}
+                          className={cn(
+                            'rounded-lg border px-3 py-2 text-xs font-bold transition-all flex items-center gap-1.5',
+                            form.channels.length === ALL_CHANNELS.length
+                              ? 'bg-primary/15 border-primary/40 text-primary'
+                              : 'border-border text-muted-foreground hover:border-primary/30 hover:text-foreground'
+                          )}
+                        >
+                          <LayoutGrid className="h-3.5 w-3.5" />
+                          Todos
+                        </button>
+                        {ALL_CHANNELS.map(ch => {
+                          const selected = form.channels.includes(ch);
+                          return (
+                            <button
+                              key={ch}
+                              type="button"
+                              onClick={() => {
+                                setForm(f => ({
+                                  ...f,
+                                  channels: selected
+                                    ? f.channels.filter(c => c !== ch)
+                                    : [...f.channels, ch],
+                                }));
+                              }}
+                              className={cn(
+                                'rounded-lg border px-3 py-2 text-xs font-semibold transition-all flex items-center gap-1.5',
+                                selected
+                                  ? 'border-primary/40 text-foreground'
+                                  : 'border-border text-muted-foreground hover:border-border hover:text-foreground'
+                              )}
+                              style={selected ? { background: `${CHANNEL_COLORS[ch]}15`, borderColor: `${CHANNEL_COLORS[ch]}40` } : {}}
+                            >
+                              <span className="h-2 w-2 rounded-full" style={{ background: CHANNEL_COLORS[ch] || C.purple }} />
+                              {CHANNEL_EMOJI[ch] || ''} {ch}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {form.channels.length > 0 && (
+                        <p className="text-[10px] text-muted-foreground mt-1.5">{form.channels.length} canal(is) selecionado(s)</p>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-3">
+                      <div>
+                        <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">Prioridade</label>
+                        <Select value={form.priority || 'Alta'} onValueChange={v => setForm(f => ({ ...f, priority: v as Priority }))}>
+                          <SelectTrigger className="bg-muted/20 border-border/60"><SelectValue /></SelectTrigger>
+                          <SelectContent className="bg-card border-border">
+                            {['Alta', 'Média', 'Baixa'].map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">Funil</label>
+                        <Select value={form.funnel || 'Topo'} onValueChange={v => setForm(f => ({ ...f, funnel: v as Funnel }))}>
+                          <SelectTrigger className="bg-muted/20 border-border/60"><SelectValue /></SelectTrigger>
+                          <SelectContent className="bg-card border-border">
+                            {['Topo', 'Meio', 'Fundo'].map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">Status</label>
+                        <Select value={form.status || 'Rascunho'} onValueChange={v => setForm(f => ({ ...f, status: v as CampaignStatus }))}>
+                          <SelectTrigger className="bg-muted/20 border-border/60"><SelectValue /></SelectTrigger>
+                          <SelectContent className="bg-card border-border">
+                            {Object.keys(STATUS_CONFIG).map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">Início</label>
+                        <Input type="date" value={form.startDate || ''} onChange={e => setForm(f => ({ ...f, startDate: e.target.value }))} className="bg-muted/20 border-border/60" />
+                      </div>
+                      <div>
+                        <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">Término</label>
+                        <Input type="date" value={form.endDate || ''} onChange={e => setForm(f => ({ ...f, endDate: e.target.value }))} className="bg-muted/20 border-border/60" />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">Orçamento Total (R$)</label>
+                        <Input placeholder="Ex: 5000" value={form.budget || ''} onChange={e => setForm(f => ({ ...f, budget: e.target.value }))} className="bg-muted/20 border-border/60" />
+                      </div>
+                      <div>
+                        <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">Responsável</label>
+                        <Input placeholder="Ex: Guilherme" value={form.responsible || ''} onChange={e => setForm(f => ({ ...f, responsible: e.target.value }))} className="bg-muted/20 border-border/60" />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">Público-alvo</label>
+                      <Input placeholder={metafields?.targetPersona?.profile || 'Descreva quem é o público desta campanha'} value={form.targetAudience || ''} onChange={e => setForm(f => ({ ...f, targetAudience: e.target.value }))} className="bg-muted/20 border-border/60" />
+                    </div>
                   </div>
-                  <button onClick={autofillFromStrategy} className="text-xs font-bold text-primary hover:underline">Preencher →</button>
+
+                  {/* Knowledge Base Status */}
+                  <div className="rounded-xl border border-border bg-muted/10 p-3">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Info className="h-3.5 w-3.5 text-muted-foreground" />
+                      <p className="text-xs font-bold text-foreground">📚 Knowledge Base & Documentos Estratégicos</p>
+                    </div>
+                    {knowledgeDocs.length > 0 ? (
+                      <div className="space-y-1.5">
+                        <div className="flex flex-wrap gap-1.5">
+                          {knowledgeDocs.map((doc, i) => (
+                            <span key={i} className={cn(
+                              'rounded-full border px-2 py-0.5 text-[10px] font-medium',
+                              doc.status === 'done' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                            )}>
+                              {doc.status === 'done' ? '✅' : '⏳'} {doc.document_name}
+                            </span>
+                          ))}
+                        </div>
+                        <p className="text-[10px] text-muted-foreground">
+                          {knowledgeDocs.filter(d => d.status === 'done').length} doc(s) analisado(s) — a IA usará esses dados ao gerar o plano
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-between">
+                        <p className="text-[11px] text-muted-foreground">
+                          Nenhum documento estratégico enviado.
+                        </p>
+                        <a href="/estrategia" className="text-[10px] font-bold text-primary hover:underline whitespace-nowrap ml-2 flex items-center gap-1">
+                          <ArrowRight className="h-3 w-3" /> Ir para Estratégia
+                        </a>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* CMO Directives */}
+                  <div className="rounded-xl border border-border bg-muted/10 p-4 space-y-3">
+                    <div className="flex items-center gap-2 mb-1">
+                      <div className="rounded-lg bg-accent/15 p-1.5 border border-accent/20">
+                        <Brain className="h-4 w-4 text-accent-foreground" />
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-sm font-bold text-foreground">Diretrizes do CMO</p>
+                        <p className="text-[10px] text-muted-foreground">Preencha apenas o que desejar</p>
+                      </div>
+                      {metafields && (
+                        <button
+                          onClick={() => {
+                            setCmoDirectives(prev => ({
+                              ...prev,
+                              toneGuidance: prev.toneGuidance || (metafields.toneRules?.use || []).join(', '),
+                              emotionalAngle: prev.emotionalAngle || metafields.brandEssence || '',
+                              targetPain: prev.targetPain || metafields.targetPersona?.biggestPain || '',
+                              keyMessage: prev.keyMessage || (metafields.keyMessages?.[0] || ''),
+                            }));
+                            toast({ title: 'Diretrizes preenchidas ✅' });
+                          }}
+                          className="text-[10px] font-bold text-primary hover:underline flex items-center gap-1"
+                        >
+                          <RefreshCw className="h-3 w-3" /> Preencher da estratégia
+                        </button>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-[10px] font-bold text-muted-foreground/80 uppercase tracking-wider mb-1 block">🎯 Ângulo emocional</label>
+                        <Input placeholder="Ex: Orgulho profissional..." value={cmoDirectives.emotionalAngle} onChange={e => setCmoDirectives(d => ({ ...d, emotionalAngle: e.target.value }))} className="bg-muted/20 border-border/60 text-xs h-9" />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-bold text-muted-foreground/80 uppercase tracking-wider mb-1 block">🗣️ Tom de voz</label>
+                        <Input placeholder="Ex: Direto, motivacional..." value={cmoDirectives.toneGuidance} onChange={e => setCmoDirectives(d => ({ ...d, toneGuidance: e.target.value }))} className="bg-muted/20 border-border/60 text-xs h-9" />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-[10px] font-bold text-muted-foreground/80 uppercase tracking-wider mb-1 block">💢 Dor principal</label>
+                        <Input placeholder="Ex: Não saber divulgar..." value={cmoDirectives.targetPain} onChange={e => setCmoDirectives(d => ({ ...d, targetPain: e.target.value }))} className="bg-muted/20 border-border/60 text-xs h-9" />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-bold text-muted-foreground/80 uppercase tracking-wider mb-1 block">💡 Mensagem central</label>
+                        <Input placeholder="Ex: Você merece ser visto..." value={cmoDirectives.keyMessage} onChange={e => setCmoDirectives(d => ({ ...d, keyMessage: e.target.value }))} className="bg-muted/20 border-border/60 text-xs h-9" />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-muted-foreground/80 uppercase tracking-wider mb-1 block">🚫 O que evitar</label>
+                      <Input placeholder="Ex: Não usar humor..." value={cmoDirectives.avoid} onChange={e => setCmoDirectives(d => ({ ...d, avoid: e.target.value }))} className="bg-muted/20 border-border/60 text-xs h-9" />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-muted-foreground/80 uppercase tracking-wider mb-1 block">✏️ Ajustes pontuais</label>
+                      <Textarea placeholder="Orientação extra..." value={cmoDirectives.freeNotes} onChange={e => setCmoDirectives(d => ({ ...d, freeNotes: e.target.value }))} rows={2} className="bg-muted/20 border-border/60 resize-none text-xs" />
+                    </div>
+                  </div>
+
+                  {/* AI Generation */}
+                  <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 space-y-3">
+                    <div className="flex items-center gap-2">
+                      <div className="rounded-lg bg-primary/15 p-1.5 border border-primary/20">
+                        <Sparkles className="h-4 w-4 text-primary" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-bold text-foreground">Gerar plano com IA</p>
+                        <p className="text-[11px] text-muted-foreground">
+                          {hasStrategy ? 'Usa meta-fields + knowledge base + diretrizes CMO' : 'Preencha os campos e deixe a IA sugerir'}
+                        </p>
+                      </div>
+                    </div>
+                    {Object.values(cmoDirectives).some((v: string) => v.trim()) && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {cmoDirectives.emotionalAngle && <span className="rounded-full bg-primary/10 border border-primary/20 px-2 py-0.5 text-[9px] font-bold text-primary">🎯 {cmoDirectives.emotionalAngle}</span>}
+                        {cmoDirectives.toneGuidance && <span className="rounded-full bg-primary/10 border border-primary/20 px-2 py-0.5 text-[9px] font-bold text-primary">🗣️ {cmoDirectives.toneGuidance}</span>}
+                        {cmoDirectives.targetPain && <span className="rounded-full bg-primary/10 border border-primary/20 px-2 py-0.5 text-[9px] font-bold text-primary">💢 {cmoDirectives.targetPain}</span>}
+                        {cmoDirectives.keyMessage && <span className="rounded-full bg-primary/10 border border-primary/20 px-2 py-0.5 text-[9px] font-bold text-primary">💡 {cmoDirectives.keyMessage}</span>}
+                        {cmoDirectives.avoid && <span className="rounded-full bg-destructive/10 border border-destructive/20 px-2 py-0.5 text-[9px] font-bold text-destructive">🚫 {cmoDirectives.avoid}</span>}
+                      </div>
+                    )}
+                    <Button onClick={handleGenerateAI} disabled={generating} variant="outline" className="w-full border-primary/40 text-primary hover:bg-primary/10 hover:border-primary/60 gap-2 font-bold">
+                      {generating ? <><Loader2 className="h-4 w-4 animate-spin" /> Gerando plano com IA...</> : <><Sparkles className="h-4 w-4" /> Gerar plano com IA</>}
+                    </Button>
+                  </div>
+
+                  {/* AI Plan result */}
+                  {aiPlan && showAiPanel && (
+                    <div className="rounded-xl border border-emerald-500/25 bg-emerald-500/5 p-4 space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                          <p className="text-sm font-bold text-foreground">Plano gerado pela IA</p>
+                          {aiPlan.angle && (
+                            <span className="rounded-full bg-emerald-500/15 border border-emerald-500/25 px-2 py-0.5 text-[10px] font-bold text-emerald-400">
+                              {ANGLE_EMOJI[aiPlan.angle] || '🎯'} {aiPlan.angle}
+                            </span>
+                          )}
+                        </div>
+                        <button onClick={() => setShowAiPanel(false)} className="text-muted-foreground hover:text-foreground"><X className="h-4 w-4" /></button>
+                      </div>
+                      <p className="text-xs text-foreground/80 leading-relaxed bg-muted/30 rounded-lg px-3 py-2">{aiPlan.campaignSummary}</p>
+                      {aiPlan.keyMessage && (
+                        <div className="rounded-lg bg-muted/30 px-3 py-2">
+                          <p className="text-[10px] font-bold text-muted-foreground/60 mb-0.5 uppercase tracking-wider">Mensagem Central</p>
+                          <p className="text-xs font-semibold text-foreground">{aiPlan.keyMessage}</p>
+                        </div>
+                      )}
+                      {aiPlan.hooks && aiPlan.hooks.length > 0 && (
+                        <div>
+                          <p className="text-[10px] font-bold text-muted-foreground/60 uppercase tracking-wider mb-1.5">Hooks sugeridos</p>
+                          <div className="space-y-1">
+                            {aiPlan.hooks.map((h, i) => (
+                              <div key={i} className="flex items-start gap-2 rounded-lg bg-muted/20 px-3 py-2">
+                                <span className="text-primary text-xs font-bold mt-0.5">{i + 1}</span>
+                                <p className="text-xs text-foreground/85">{h}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {/* Adjust / Regenerate buttons */}
+                      <div className="border-t border-emerald-500/15 pt-3 space-y-2">
+                        <div className="flex gap-2">
+                          <Button variant="outline" size="sm" onClick={() => setShowRefinement(v => !v)} className="flex-1 border-border text-xs gap-1.5" disabled={generating}>
+                            <PenLine className="h-3.5 w-3.5" /> Ajustar plano
+                          </Button>
+                          <Button variant="outline" size="sm" onClick={handleRegenerateWithKB} className="flex-1 border-primary/30 text-primary text-xs gap-1.5 hover:bg-primary/10" disabled={generating}>
+                            {generating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Brain className="h-3.5 w-3.5" />}
+                            Refazer com KB
+                          </Button>
+                        </div>
+                        <Button variant="outline" size="sm" onClick={handleGenerateAI} className="w-full border-border text-xs gap-1.5 text-muted-foreground" disabled={generating}>
+                          {generating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                          Regenerar do zero
+                        </Button>
+                        {showRefinement && (
+                          <div className="rounded-lg border border-border bg-muted/20 p-3 space-y-2">
+                            <Textarea placeholder="Ex: Troque o ângulo para urgência..." value={refinementNote} onChange={e => setRefinementNote(e.target.value)} rows={2} className="bg-muted/20 border-border/60 resize-none text-xs" />
+                            <Button onClick={handleRefinePlan} disabled={generating || !refinementNote.trim()} size="sm" className="w-full bg-primary text-primary-foreground hover:bg-primary/90 gap-1.5 text-xs font-bold">
+                              {generating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+                              Aplicar ajuste
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  <DialogFooter className="gap-2">
+                    <Button variant="ghost" onClick={() => setShowModal(false)}>Cancelar</Button>
+                    <Button
+                      onClick={() => {
+                        if (!form.name?.trim()) {
+                          toast({ title: 'Nome obrigatório', variant: 'destructive' });
+                          return;
+                        }
+                        if (form.channels.length === 0) {
+                          toast({ title: 'Selecione ao menos 1 canal', variant: 'destructive' });
+                          return;
+                        }
+                        const totalBudget = Number(form.budget) || 0;
+                        const perChannel = form.channels.length > 0 ? Math.round(totalBudget / form.channels.length) : 0;
+                        setChannelAllocations(form.channels.map(ch => ({
+                          channel: ch,
+                          creativeCount: 2,
+                          budget: perChannel,
+                          formats: getCreativeTypesForChannel(ch).map(ct => {
+                            const map: Record<string, ContentFormat> = { carrossel: 'Carrossel', reels: 'Reels', stories: 'Stories', post: 'Post', video: 'Reels', ads: 'Ads', shorts: 'Shorts' };
+                            return map[ct] || 'Post';
+                          }),
+                        })));
+                        setWizardStep('allocation');
+                      }}
+                      className="bg-primary text-primary-foreground hover:bg-primary/90 gap-1.5"
+                    >
+                      Avançar <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </DialogFooter>
                 </div>
               )}
 
-              <div className="space-y-4">
-                <div>
-                  <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">Nome da campanha *</label>
-                  <Input placeholder="Ex: Campanha Prestadores — Fevereiro 2026" value={form.name || ''} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} className="bg-muted/20 border-border/60" />
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">Objetivo</label>
-                  <Textarea placeholder="O que essa campanha precisa alcançar? Seja específico com números e prazo." value={form.objective || ''} onChange={e => setForm(f => ({ ...f, objective: e.target.value }))} rows={2} className="bg-muted/20 border-border/60 resize-none text-sm" />
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">Canal principal</label>
-                    <Select value={form.channel || 'Instagram'} onValueChange={v => setForm(f => ({ ...f, channel: v as Channel }))}>
-                      <SelectTrigger className="bg-muted/20 border-border/60"><SelectValue /></SelectTrigger>
-                      <SelectContent className="bg-card border-border">
-                        {['Instagram', 'TikTok', 'Meta Ads', 'LinkedIn', 'YouTube', 'Orgânico'].map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">Formato</label>
-                    <Select value={form.format || 'Carrossel'} onValueChange={v => setForm(f => ({ ...f, format: v as ContentFormat }))}>
-                      <SelectTrigger className="bg-muted/20 border-border/60"><SelectValue /></SelectTrigger>
-                      <SelectContent className="bg-card border-border">
-                        {['Post', 'Reels', 'Stories', 'Carrossel', 'Ads', 'Shorts'].map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                <div className="grid grid-cols-3 gap-3">
-                  <div>
-                    <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">Prioridade</label>
-                    <Select value={form.priority || 'Alta'} onValueChange={v => setForm(f => ({ ...f, priority: v as Priority }))}>
-                      <SelectTrigger className="bg-muted/20 border-border/60"><SelectValue /></SelectTrigger>
-                      <SelectContent className="bg-card border-border">
-                        {['Alta', 'Média', 'Baixa'].map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">Funil</label>
-                    <Select value={form.funnel || 'Topo'} onValueChange={v => setForm(f => ({ ...f, funnel: v as Funnel }))}>
-                      <SelectTrigger className="bg-muted/20 border-border/60"><SelectValue /></SelectTrigger>
-                      <SelectContent className="bg-card border-border">
-                        {['Topo', 'Meio', 'Fundo'].map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">Status</label>
-                    <Select value={form.status || 'Rascunho'} onValueChange={v => setForm(f => ({ ...f, status: v as CampaignStatus }))}>
-                      <SelectTrigger className="bg-muted/20 border-border/60"><SelectValue /></SelectTrigger>
-                      <SelectContent className="bg-card border-border">
-                        {Object.keys(STATUS_CONFIG).map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">Início</label>
-                    <Input type="date" value={form.startDate || ''} onChange={e => setForm(f => ({ ...f, startDate: e.target.value }))} className="bg-muted/20 border-border/60" />
-                  </div>
-                  <div>
-                    <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">Término</label>
-                    <Input type="date" value={form.endDate || ''} onChange={e => setForm(f => ({ ...f, endDate: e.target.value }))} className="bg-muted/20 border-border/60" />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">Orçamento (R$)</label>
-                    <Input placeholder="Ex: 5000" value={form.budget || ''} onChange={e => setForm(f => ({ ...f, budget: e.target.value }))} className="bg-muted/20 border-border/60" />
-                  </div>
-                  <div>
-                    <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">Responsável</label>
-                    <Input placeholder="Ex: Guilherme" value={form.responsible || ''} onChange={e => setForm(f => ({ ...f, responsible: e.target.value }))} className="bg-muted/20 border-border/60" />
-                  </div>
-                </div>
-              <div>
-                  <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">Público-alvo</label>
-                  <Input placeholder={metafields?.targetPersona?.profile || 'Descreva quem é o público desta campanha'} value={form.targetAudience || ''} onChange={e => setForm(f => ({ ...f, targetAudience: e.target.value }))} className="bg-muted/20 border-border/60" />
-                </div>
-              </div>
-
-              {/* Knowledge Base Status */}
-              <div className="rounded-xl border border-border bg-muted/10 p-3">
-                <div className="flex items-center gap-2 mb-2">
-                  <Info className="h-3.5 w-3.5 text-muted-foreground" />
-                  <p className="text-xs font-bold text-foreground">📚 Knowledge Base & Documentos Estratégicos</p>
-                </div>
-                {knowledgeDocs.length > 0 ? (
-                  <div className="space-y-1.5">
-                    <div className="flex flex-wrap gap-1.5">
-                      {knowledgeDocs.map((doc, i) => (
-                        <span key={i} className={cn(
-                          'rounded-full border px-2 py-0.5 text-[10px] font-medium',
-                          doc.status === 'done' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
-                        )}>
-                          {doc.status === 'done' ? '✅' : '⏳'} {doc.document_name}
-                        </span>
-                      ))}
+              {/* ═══════════ STEP 2: ALLOCATION ═══════════ */}
+              {wizardStep === 'allocation' && (
+                <div className="space-y-4">
+                  <div className="rounded-xl border border-primary/20 bg-primary/5 p-3">
+                    <div className="flex items-center justify-between mb-1">
+                      <p className="text-sm font-bold text-foreground">Verba Total</p>
+                      <p className="text-lg font-black text-primary tabular-nums">R$ {(Number(form.budget) || 0).toLocaleString('pt-BR')}</p>
                     </div>
-                    <p className="text-[10px] text-muted-foreground">
-                      {knowledgeDocs.filter(d => d.status === 'done').length} doc(s) analisado(s) — a IA usará esses dados ao gerar o plano
-                    </p>
+                    {(() => {
+                      const allocated = channelAllocations.reduce((s, a) => s + a.budget, 0);
+                      const total = Number(form.budget) || 0;
+                      const remaining = total - allocated;
+                      const pct = total > 0 ? Math.round((allocated / total) * 100) : 0;
+                      return (
+                        <>
+                          <div className="h-2 w-full rounded-full bg-border overflow-hidden mb-1">
+                            <div className="h-full rounded-full transition-all duration-300" style={{
+                              width: `${Math.min(pct, 100)}%`,
+                              background: remaining < 0 ? C.red : `linear-gradient(90deg, ${C.orange}, ${C.teal})`,
+                            }} />
+                          </div>
+                          <div className="flex justify-between text-[10px]">
+                            <span className="text-muted-foreground">Alocado: R$ {allocated.toLocaleString('pt-BR')} ({pct}%)</span>
+                            <span className={cn('font-bold', remaining < 0 ? 'text-red-400' : remaining > 0 ? 'text-amber-400' : 'text-emerald-400')}>
+                              {remaining === 0 ? '✅ Verba totalmente distribuída' : remaining > 0 ? `R$ ${remaining.toLocaleString('pt-BR')} restante` : `R$ ${Math.abs(remaining).toLocaleString('pt-BR')} excedido`}
+                            </span>
+                          </div>
+                        </>
+                      );
+                    })()}
                   </div>
-                ) : (
-                  <div className="flex items-center justify-between">
-                    <p className="text-[11px] text-muted-foreground">
-                      Nenhum documento estratégico enviado. Para enviar playbook de marketing, brand book e outros documentos-chave:
-                    </p>
-                    <a href="/estrategia" className="text-[10px] font-bold text-primary hover:underline whitespace-nowrap ml-2 flex items-center gap-1">
-                      <ArrowRight className="h-3 w-3" /> Ir para Estratégia
-                    </a>
-                  </div>
-                )}
-              </div>
 
-              <div className="rounded-xl border border-border bg-muted/10 p-4 space-y-3">
-                <div className="flex items-center gap-2 mb-1">
-                  <div className="rounded-lg bg-accent/15 p-1.5 border border-accent/20">
-                    <Brain className="h-4 w-4 text-accent-foreground" />
+                  {channelAllocations.map((alloc, idx) => {
+                    const total = Number(form.budget) || 0;
+                    const pct = total > 0 ? Math.round((alloc.budget / total) * 100) : 0;
+                    return (
+                      <div key={alloc.channel} className="rounded-xl border border-border bg-card p-4 space-y-3">
+                        <div className="flex items-center gap-2">
+                          <span className="h-3 w-3 rounded-full" style={{ background: CHANNEL_COLORS[alloc.channel] || C.purple }} />
+                          <p className="text-sm font-bold text-foreground">{CHANNEL_EMOJI[alloc.channel]} {alloc.channel}</p>
+                          <span className="ml-auto text-[10px] font-bold text-muted-foreground">{pct}% da verba</span>
+                        </div>
+
+                        <div>
+                          <div className="flex items-center justify-between mb-1.5">
+                            <label className="text-[10px] font-bold text-muted-foreground/80 uppercase tracking-wider">Nº de criativos</label>
+                            <span className="text-sm font-black text-foreground tabular-nums">{alloc.creativeCount}</span>
+                          </div>
+                          <input
+                            type="range"
+                            min={1}
+                            max={10}
+                            value={alloc.creativeCount}
+                            onChange={e => {
+                              const v = Number(e.target.value);
+                              setChannelAllocations(prev => prev.map((a, i) => i === idx ? { ...a, creativeCount: v } : a));
+                            }}
+                            className="w-full h-2 rounded-full appearance-none bg-border cursor-pointer accent-primary"
+                          />
+                          <div className="flex justify-between text-[9px] text-muted-foreground/50 mt-0.5">
+                            <span>1</span><span>5</span><span>10</span>
+                          </div>
+                        </div>
+
+                        <div>
+                          <div className="flex items-center justify-between mb-1.5">
+                            <label className="text-[10px] font-bold text-muted-foreground/80 uppercase tracking-wider">Verba do canal (R$)</label>
+                            <span className="text-sm font-black text-foreground tabular-nums">R$ {alloc.budget.toLocaleString('pt-BR')}</span>
+                          </div>
+                          <input
+                            type="range"
+                            min={0}
+                            max={Math.max(total, 1)}
+                            step={50}
+                            value={alloc.budget}
+                            onChange={e => {
+                              const newVal = Number(e.target.value);
+                              setChannelAllocations(prev => prev.map((a, i) => i === idx ? { ...a, budget: newVal } : a));
+                            }}
+                            className="w-full h-2 rounded-full appearance-none bg-border cursor-pointer accent-primary"
+                          />
+                          <div className="flex justify-between text-[9px] text-muted-foreground/50 mt-0.5">
+                            <span>R$ 0</span><span>R$ {total.toLocaleString('pt-BR')}</span>
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="text-[10px] font-bold text-muted-foreground/80 uppercase tracking-wider mb-1 block">Formatos</label>
+                          <div className="flex flex-wrap gap-1.5">
+                            {getCreativeTypesForChannel(alloc.channel).map(ct => {
+                              const label = ct.charAt(0).toUpperCase() + ct.slice(1);
+                              const spec = getFormatSpec(alloc.channel, ct);
+                              return (
+                                <span key={ct} className="rounded-md border border-border bg-muted/20 px-2 py-1 text-[10px] text-muted-foreground">
+                                  {label} · {spec.width}×{spec.height}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  <div className="flex items-center justify-between rounded-lg bg-muted/20 border border-border px-3 py-2">
+                    <span className="text-xs text-muted-foreground">Total de criativos:</span>
+                    <span className="text-sm font-black text-foreground">{channelAllocations.reduce((s, a) => s + a.creativeCount, 0)} peças</span>
                   </div>
-                  <div className="flex-1">
-                    <p className="text-sm font-bold text-foreground">Diretrizes do CMO</p>
-                    <p className="text-[10px] text-muted-foreground">Preencha apenas o que desejar — cada campo será usado como diretriz estratégica pela IA</p>
-                  </div>
-                  {metafields && (
-                    <button
-                      onClick={() => {
-                        setCmoDirectives(prev => ({
-                          ...prev,
-                          toneGuidance: prev.toneGuidance || (metafields.toneRules?.use || []).join(', '),
-                          emotionalAngle: prev.emotionalAngle || metafields.brandEssence || '',
-                          targetPain: prev.targetPain || metafields.targetPersona?.biggestPain || '',
-                          keyMessage: prev.keyMessage || (metafields.keyMessages?.[0] || ''),
-                        }));
-                        toast({ title: 'Diretrizes preenchidas ✅', description: 'Usamos os meta-fields como ponto de partida.' });
-                      }}
-                      className="text-[10px] font-bold text-primary hover:underline flex items-center gap-1"
+
+                  <DialogFooter className="gap-2">
+                    <Button variant="ghost" onClick={() => setWizardStep('form')}>← Voltar</Button>
+                    <Button
+                      onClick={() => setWizardStep('summary')}
+                      className="bg-primary text-primary-foreground hover:bg-primary/90 gap-1.5"
                     >
-                      <RefreshCw className="h-3 w-3" /> Preencher da estratégia
-                    </button>
-                  )}
+                      Ver resumo <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </DialogFooter>
                 </div>
+              )}
 
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-[10px] font-bold text-muted-foreground/80 uppercase tracking-wider mb-1 block">🎯 Ângulo emocional</label>
-                    <Input
-                      placeholder="Ex: Orgulho profissional, Urgência..."
-                      value={cmoDirectives.emotionalAngle}
-                      onChange={e => setCmoDirectives(d => ({ ...d, emotionalAngle: e.target.value }))}
-                      className="bg-muted/20 border-border/60 text-xs h-9"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[10px] font-bold text-muted-foreground/80 uppercase tracking-wider mb-1 block">🗣️ Tom de voz</label>
-                    <Input
-                      placeholder="Ex: Direto, motivacional, sem ser forçado"
-                      value={cmoDirectives.toneGuidance}
-                      onChange={e => setCmoDirectives(d => ({ ...d, toneGuidance: e.target.value }))}
-                      className="bg-muted/20 border-border/60 text-xs h-9"
-                    />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-[10px] font-bold text-muted-foreground/80 uppercase tracking-wider mb-1 block">💢 Dor principal do público</label>
-                    <Input
-                      placeholder="Ex: Não saber divulgar seu serviço"
-                      value={cmoDirectives.targetPain}
-                      onChange={e => setCmoDirectives(d => ({ ...d, targetPain: e.target.value }))}
-                      className="bg-muted/20 border-border/60 text-xs h-9"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[10px] font-bold text-muted-foreground/80 uppercase tracking-wider mb-1 block">💡 Mensagem central</label>
-                    <Input
-                      placeholder="Ex: Você merece ser visto pelo seu trabalho"
-                      value={cmoDirectives.keyMessage}
-                      onChange={e => setCmoDirectives(d => ({ ...d, keyMessage: e.target.value }))}
-                      className="bg-muted/20 border-border/60 text-xs h-9"
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label className="text-[10px] font-bold text-muted-foreground/80 uppercase tracking-wider mb-1 block">🚫 O que evitar nesta campanha</label>
-                  <Input
-                    placeholder="Ex: Não usar humor, não mencionar concorrentes"
-                    value={cmoDirectives.avoid}
-                    onChange={e => setCmoDirectives(d => ({ ...d, avoid: e.target.value }))}
-                    className="bg-muted/20 border-border/60 text-xs h-9"
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] font-bold text-muted-foreground/80 uppercase tracking-wider mb-1 block">✏️ Ajustes pontuais do CMO</label>
-                  <Textarea
-                    placeholder="Escreva qualquer orientação extra: estilo de CTA, referência visual, restrição de formato, contexto sazonal..."
-                    value={cmoDirectives.freeNotes}
-                    onChange={e => setCmoDirectives(d => ({ ...d, freeNotes: e.target.value }))}
-                    rows={2}
-                    className="bg-muted/20 border-border/60 resize-none text-xs placeholder:text-muted-foreground/40"
-                  />
-                </div>
-              </div>
-
-              {/* AI Generation */}
-              <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 space-y-3">
-                <div className="flex items-center gap-2">
-                  <div className="rounded-lg bg-primary/15 p-1.5 border border-primary/20">
-                    <Sparkles className="h-4 w-4 text-primary" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-bold text-foreground">Gerar plano de campanha com IA</p>
-                    <p className="text-[11px] text-muted-foreground">
-                      {hasStrategy ? 'Usa os meta-fields da estratégia + knowledge base + diretrizes CMO' : 'Preencha os campos acima e deixe a IA sugerir tarefas e conteúdos'}
-                    </p>
-                  </div>
-                </div>
-                {Object.values(cmoDirectives).some((v: string) => v.trim()) && (
-                  <div className="flex flex-wrap gap-1.5">
-                    {cmoDirectives.emotionalAngle && <span className="rounded-full bg-primary/10 border border-primary/20 px-2 py-0.5 text-[9px] font-bold text-primary">🎯 {cmoDirectives.emotionalAngle}</span>}
-                    {cmoDirectives.toneGuidance && <span className="rounded-full bg-primary/10 border border-primary/20 px-2 py-0.5 text-[9px] font-bold text-primary">🗣️ {cmoDirectives.toneGuidance}</span>}
-                    {cmoDirectives.targetPain && <span className="rounded-full bg-primary/10 border border-primary/20 px-2 py-0.5 text-[9px] font-bold text-primary">💢 {cmoDirectives.targetPain}</span>}
-                    {cmoDirectives.keyMessage && <span className="rounded-full bg-primary/10 border border-primary/20 px-2 py-0.5 text-[9px] font-bold text-primary">💡 {cmoDirectives.keyMessage}</span>}
-                    {cmoDirectives.avoid && <span className="rounded-full bg-destructive/10 border border-destructive/20 px-2 py-0.5 text-[9px] font-bold text-destructive">🚫 {cmoDirectives.avoid}</span>}
-                  </div>
-                )}
-                <Button onClick={handleGenerateAI} disabled={generating} variant="outline" className="w-full border-primary/40 text-primary hover:bg-primary/10 hover:border-primary/60 gap-2 font-bold">
-                  {generating ? <><Loader2 className="h-4 w-4 animate-spin" /> Gerando plano com IA...</> : <><Sparkles className="h-4 w-4" /> Gerar plano com IA</>}
-                </Button>
-              </div>
-
-              {/* AI Plan result */}
-              {aiPlan && showAiPanel && (
-                <div className="rounded-xl border border-emerald-500/25 bg-emerald-500/5 p-4 space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
+              {/* ═══════════ STEP 3: SUMMARY ═══════════ */}
+              {wizardStep === 'summary' && (
+                <div className="space-y-4">
+                  <div className="rounded-xl border border-emerald-500/25 bg-emerald-500/5 p-4 space-y-3">
+                    <div className="flex items-center gap-2 mb-1">
                       <CheckCircle2 className="h-4 w-4 text-emerald-400" />
-                      <p className="text-sm font-bold text-foreground">Plano gerado pela IA</p>
-                      {aiPlan.angle && (
-                        <span className="rounded-full bg-emerald-500/15 border border-emerald-500/25 px-2 py-0.5 text-[10px] font-bold text-emerald-400">
-                          {ANGLE_EMOJI[aiPlan.angle] || '🎯'} {aiPlan.angle}
-                        </span>
+                      <p className="text-sm font-bold text-foreground">Resumo da Campanha</p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-xs">
+                        <span className="text-muted-foreground">Campanha</span>
+                        <span className="font-bold text-foreground">{form.name}</span>
+                      </div>
+                      {form.objective && (
+                        <div className="flex justify-between text-xs">
+                          <span className="text-muted-foreground">Objetivo</span>
+                          <span className="font-medium text-foreground max-w-[60%] text-right">{form.objective}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between text-xs">
+                        <span className="text-muted-foreground">Prioridade</span>
+                        <span className={cn('rounded-full border px-2 py-0.5 text-[10px] font-bold', PRIORITY_COLORS[form.priority])}>{form.priority}</span>
+                      </div>
+                      <div className="flex justify-between text-xs">
+                        <span className="text-muted-foreground">Funil</span>
+                        <span className="font-medium text-foreground">{form.funnel}</span>
+                      </div>
+                      <div className="flex justify-between text-xs">
+                        <span className="text-muted-foreground">Verba Total</span>
+                        <span className="font-bold text-primary">R$ {(Number(form.budget) || 0).toLocaleString('pt-BR')}</span>
+                      </div>
+                      {form.startDate && (
+                        <div className="flex justify-between text-xs">
+                          <span className="text-muted-foreground">Período</span>
+                          <span className="font-medium text-foreground">
+                            {new Date(form.startDate + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}
+                            {form.endDate && ` → ${new Date(form.endDate + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}`}
+                          </span>
+                        </div>
                       )}
                     </div>
-                    <button onClick={() => setShowAiPanel(false)} className="text-muted-foreground hover:text-foreground"><X className="h-4 w-4" /></button>
-                  </div>
-                  <p className="text-xs text-foreground/80 leading-relaxed bg-muted/30 rounded-lg px-3 py-2">{aiPlan.campaignSummary}</p>
-                  {aiPlan.keyMessage && (
-                    <div className="rounded-lg bg-muted/30 px-3 py-2">
-                      <p className="text-[10px] font-bold text-muted-foreground/60 mb-0.5 uppercase tracking-wider">Mensagem Central</p>
-                      <p className="text-xs font-semibold text-foreground">{aiPlan.keyMessage}</p>
-                    </div>
-                  )}
-                  {aiPlan.hooks && aiPlan.hooks.length > 0 && (
-                    <div>
-                      <p className="text-[10px] font-bold text-muted-foreground/60 uppercase tracking-wider mb-1.5">Hooks sugeridos</p>
-                      <div className="space-y-1">
-                        {aiPlan.hooks.map((h, i) => (
-                          <div key={i} className="flex items-start gap-2 rounded-lg bg-muted/20 px-3 py-2">
-                            <span className="text-primary text-xs font-bold mt-0.5">{i + 1}</span>
-                            <p className="text-xs text-foreground/85">{h}</p>
+
+                    <div className="border-t border-emerald-500/15 pt-3">
+                      <p className="text-[10px] font-bold text-muted-foreground/60 uppercase tracking-wider mb-2">Distribuição por Canal</p>
+                      <div className="space-y-2">
+                        {channelAllocations.map(alloc => (
+                          <div key={alloc.channel} className="flex items-center gap-3 rounded-lg bg-muted/20 px-3 py-2">
+                            <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ background: CHANNEL_COLORS[alloc.channel] || C.purple }} />
+                            <span className="text-xs font-semibold text-foreground flex-1">{alloc.channel}</span>
+                            <span className="text-[10px] text-muted-foreground">{alloc.creativeCount} criativos</span>
+                            <span className="text-xs font-bold text-foreground tabular-nums">R$ {alloc.budget.toLocaleString('pt-BR')}</span>
                           </div>
                         ))}
                       </div>
                     </div>
-                  )}
-                  <div className="grid grid-cols-2 gap-2 text-center">
-                    {aiPlan.kanbanTasks && (
-                      <div className="rounded-lg bg-blue-500/10 border border-blue-500/20 px-3 py-2">
-                        <p className="text-lg font-black text-blue-400">{aiPlan.kanbanTasks.length}</p>
-                        <p className="text-[10px] text-muted-foreground">tarefas no Kanban</p>
-                      </div>
-                    )}
-                    {aiPlan.calendarEntries && (
-                      <div className="rounded-lg bg-primary/10 border border-primary/20 px-3 py-2">
-                        <p className="text-lg font-black text-primary">{aiPlan.calendarEntries.length}</p>
-                        <p className="text-[10px] text-muted-foreground">entradas no Calendário</p>
-                      </div>
-                    )}
-                  </div>
-                  {aiPlan.warnings && aiPlan.warnings.length > 0 && (
-                    <div className="flex items-start gap-2 rounded-lg bg-amber-500/10 border border-amber-500/20 px-3 py-2">
-                      <AlertTriangle className="h-3.5 w-3.5 text-amber-400 shrink-0 mt-0.5" />
-                      <div>{aiPlan.warnings.map((w, i) => <p key={i} className="text-[11px] text-amber-400">{w}</p>)}</div>
-                    </div>
-                  )}
-                  <Button onClick={handleApplyPlan} className="w-full bg-emerald-600 hover:bg-emerald-600/90 text-white font-bold gap-2">
-                    <Zap className="h-4 w-4" /> Aplicar plano → Kanban + Calendário
-                  </Button>
 
-                  {/* Adjustment & KB buttons */}
-                  <div className="border-t border-emerald-500/15 pt-3 space-y-2">
-                    <p className="text-[10px] font-bold text-muted-foreground/60 uppercase tracking-wider">Ajustar ou refazer</p>
-                    <div className="flex gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setShowRefinement(v => !v)}
-                        className="flex-1 border-border text-xs gap-1.5"
-                        disabled={generating}
-                      >
-                        <PenLine className="h-3.5 w-3.5" /> Ajustar plano
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={handleRegenerateWithKB}
-                        className="flex-1 border-primary/30 text-primary text-xs gap-1.5 hover:bg-primary/10"
-                        disabled={generating}
-                      >
-                        {generating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Brain className="h-3.5 w-3.5" />}
-                        Refazer com Knowledge Base
-                      </Button>
+                    <div className="flex items-center justify-between rounded-lg bg-emerald-500/10 border border-emerald-500/20 px-3 py-2">
+                      <span className="text-xs text-emerald-400 font-semibold">Total de tarefas a criar</span>
+                      <span className="text-lg font-black text-emerald-400">{channelAllocations.reduce((s, a) => s + a.creativeCount, 0)}</span>
                     </div>
+                  </div>
+
+                  <DialogFooter className="gap-2">
+                    <Button variant="ghost" onClick={() => setWizardStep('allocation')}>← Voltar</Button>
                     <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleGenerateAI}
-                      className="w-full border-border text-xs gap-1.5 text-muted-foreground"
-                      disabled={generating}
+                      onClick={async () => {
+                        // Save campaign
+                        handleSave();
+                        // Generate tasks from allocations
+                        if (!user) return;
+                        const savedId = editingId || `camp-${Date.now()}`;
+                        const startMs = form.startDate ? new Date(form.startDate + 'T12:00:00').getTime() : Date.now();
+                        const tasks: any[] = [];
+                        let taskIdx = 0;
+                        for (const alloc of channelAllocations) {
+                          const creativeTypes = getCreativeTypesForChannel(alloc.channel);
+                          for (let ci = 0; ci < alloc.creativeCount; ci++) {
+                            const ct = creativeTypes[ci % creativeTypes.length];
+                            const spec = getFormatSpec(alloc.channel, ct);
+                            tasks.push({
+                              user_id: user.id,
+                              campaign_id: savedId,
+                              campaign_name: form.name,
+                              title: `${ct.charAt(0).toUpperCase() + ct.slice(1)} ${ci + 1} — ${alloc.channel}`,
+                              description: aiPlan?.campaignSummary || form.objective || '',
+                              creative_type: ct,
+                              channel: alloc.channel,
+                              format_width: spec.width,
+                              format_height: spec.height,
+                              format_ratio: spec.ratio,
+                              format_name: spec.name,
+                              status: 'pending',
+                              priority: form.priority || 'Média',
+                              assigned_to: 'Guilherme',
+                              deadline: new Date(startMs + (3 + taskIdx * 2) * 86400000).toISOString().split('T')[0],
+                              campaign_context: {
+                                objective: form.objective || '',
+                                cta: aiPlan?.ctaMain || '',
+                                hook: aiPlan?.hooks?.[0] || '',
+                                emotionalAngle: cmoDirectives.emotionalAngle || aiPlan?.angle || '',
+                                targetAudience: form.targetAudience || '',
+                                keyMessage: aiPlan?.keyMessage || cmoDirectives.keyMessage || '',
+                                funnel: form.funnel || 'Topo',
+                                channelBudget: alloc.budget,
+                              },
+                            });
+                            taskIdx++;
+                          }
+                        }
+                        if (tasks.length > 0) {
+                          const { error } = await supabase.from('campaign_tasks').insert(tasks);
+                          if (error) {
+                            toast({ title: 'Erro ao criar tarefas', description: error.message, variant: 'destructive' });
+                            return;
+                          }
+                          // Send forum notification
+                          try {
+                            const totalCreatives = tasks.length;
+                            const channelSummary = channelAllocations.map(a => `${a.channel} (${a.creativeCount})`).join(', ');
+                            await supabase.from('forum_messages').insert({
+                              user_id: user.id,
+                              author_name: 'Sistema',
+                              author_initials: '🚀',
+                              author_role: 'system',
+                              content: `📋 **Campanha "${form.name}" aprovada!**\n\n${totalCreatives} tarefas criativas criadas para Guilherme:\n${channelSummary}\n\nVerba total: R$ ${(Number(form.budget) || 0).toLocaleString('pt-BR')}\nPrioridade: ${form.priority} · Funil: ${form.funnel}`,
+                              is_ai: false,
+                              is_pinned: false,
+                              message_type: 'system',
+                            });
+                          } catch { /* noop */ }
+                          toast({
+                            title: '🚀 Campanha aprovada!',
+                            description: `${tasks.length} tarefas criadas para Guilherme · Notificação enviada ao Fórum`,
+                          });
+                        }
+                        setShowModal(false);
+                      }}
+                      className="bg-emerald-600 hover:bg-emerald-600/90 text-white font-bold gap-2"
                     >
-                      {generating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-                      Regenerar do zero
+                      <Zap className="h-4 w-4" /> Aprovar e criar tarefas
                     </Button>
-
-                    {showRefinement && (
-                      <div className="rounded-lg border border-border bg-muted/20 p-3 space-y-2">
-                        <p className="text-[10px] font-bold text-muted-foreground/60 uppercase tracking-wider">✏️ Escreva o ajuste desejado</p>
-                        <Textarea
-                          placeholder="Ex: Troque o ângulo para urgência, reduza para 5 tarefas, foque mais em Stories do que Carrossel..."
-                          value={refinementNote}
-                          onChange={e => setRefinementNote(e.target.value)}
-                          rows={2}
-                          className="bg-muted/20 border-border/60 resize-none text-xs"
-                        />
-                        <Button
-                          onClick={handleRefinePlan}
-                          disabled={generating || !refinementNote.trim()}
-                          size="sm"
-                          className="w-full bg-primary text-primary-foreground hover:bg-primary/90 gap-1.5 text-xs font-bold"
-                        >
-                          {generating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
-                          Aplicar ajuste e regenerar
-                        </Button>
-                      </div>
-                    )}
-                  </div>
+                  </DialogFooter>
                 </div>
               )}
             </div>
-
-            <DialogFooter className="gap-2">
-              <Button variant="ghost" onClick={() => setShowModal(false)}>Cancelar</Button>
-              <Button onClick={handleSave} className="bg-primary text-primary-foreground hover:bg-primary/90">
-                {editingId ? 'Salvar alterações' : 'Criar campanha'}
-              </Button>
-            </DialogFooter>
           </DialogContent>
         </Dialog>
 
