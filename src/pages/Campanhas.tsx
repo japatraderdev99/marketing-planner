@@ -3,6 +3,9 @@ import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { initialCampaigns, Campaign, CampaignStatus, Channel, ContentFormat, Priority, Funnel, KanbanStatus, ContentObjective, SEED_VERSION } from '@/data/seedData';
 import { initialContents, ContentItem } from '@/data/seedData';
 import { toPng } from 'html-to-image';
+import { useAuth } from '@/contexts/AuthContext';
+import { getFormatSpec, getCreativeTypesForChannel, contentFormatToCreativeType } from '@/data/formatSpecs';
+import { useNavigate } from 'react-router-dom';
 
 interface CampaignForm {
   name: string;
@@ -657,6 +660,8 @@ function AnalyticsPanel({ campaigns }: { campaigns: Campaign[] }) {
 
 export default function Campanhas() {
   const { toast } = useToast();
+  const { user } = useAuth();
+  const navigate = useNavigate();
   const [campaigns, setCampaigns] = useLocalStorage<Campaign[]>('dqef-campaigns', initialCampaigns);
   const [, setKanbanCampaigns] = useLocalStorage<Campaign[]>('dqef-campaigns', initialCampaigns);
   const [contents, setContents] = useLocalStorage<ContentItem[]>('dqef-contents', initialContents);
@@ -864,7 +869,56 @@ export default function Campanhas() {
     setExtraInstructions(originalExtra);
   };
 
-  const handleApplyPlan = () => {
+  const generateCampaignTasks = async (campaignId: string, campaignName: string, channels: Channel[]) => {
+    if (!user) return 0;
+    const tasks: any[] = [];
+    const startMs = form.startDate ? new Date(form.startDate + 'T12:00:00').getTime() : Date.now();
+    
+    for (const channel of channels) {
+      const creativeTypes = getCreativeTypesForChannel(channel);
+      creativeTypes.forEach((ct, i) => {
+        const spec = getFormatSpec(channel, ct);
+        tasks.push({
+          user_id: user.id,
+          campaign_id: campaignId,
+          campaign_name: campaignName,
+          title: `${ct.charAt(0).toUpperCase() + ct.slice(1)} — ${channel}`,
+          description: aiPlan?.campaignSummary || form.objective || form.description,
+          creative_type: ct,
+          channel,
+          format_width: spec.width,
+          format_height: spec.height,
+          format_ratio: spec.ratio,
+          format_name: spec.name,
+          status: 'pending',
+          priority: form.priority || 'Média',
+          assigned_to: 'Guilherme',
+          deadline: new Date(startMs + (3 + i * 2) * 86400000).toISOString().split('T')[0],
+          campaign_context: {
+            objective: form.objective || aiPlan?.keyMessage || '',
+            cta: aiPlan?.ctaMain || '',
+            hook: aiPlan?.hooks?.[0] || '',
+            emotionalAngle: aiPlan?.angle || cmoDirectives.emotionalAngle || '',
+            targetAudience: form.targetAudience || '',
+            keyMessage: aiPlan?.keyMessage || '',
+            funnel: form.funnel || 'Topo',
+            viralLogic: aiPlan?.viralLogic || '',
+          },
+        });
+      });
+    }
+
+    if (tasks.length === 0) return 0;
+    const { error } = await supabase.from('campaign_tasks').insert(tasks);
+    if (error) {
+      console.error('Error creating campaign tasks:', error);
+      toast({ title: 'Erro ao criar tarefas', description: error.message, variant: 'destructive' });
+      return 0;
+    }
+    return tasks.length;
+  };
+
+  const handleApplyPlan = async () => {
     if (!aiPlan) return;
     const startMs = form.startDate ? new Date(form.startDate + 'T12:00:00').getTime() : Date.now();
     const ch: Channel = form.channel;
@@ -909,7 +963,15 @@ export default function Campanhas() {
       responsible: e.responsible || 'Time Marketing', copy: e.copy || '',
     }));
     setContents(prev => [...prev, ...calItems]);
-    toast({ title: '🚀 Campanha aplicada!', description: `${kanbanItems.length} tarefas no Kanban · ${calItems.length} entradas no Calendário` });
+
+    // Generate structured creative tasks in the database
+    const taskCount = await generateCampaignTasks(savedId, campaignName, [ch]);
+    
+    const taskMsg = taskCount > 0 ? ` · ${taskCount} tarefas criativas para Guilherme` : '';
+    toast({ 
+      title: '🚀 Campanha aplicada!', 
+      description: `${kanbanItems.length} tarefas no Kanban · ${calItems.length} entradas no Calendário${taskMsg}`,
+    });
     setShowModal(false);
   };
 

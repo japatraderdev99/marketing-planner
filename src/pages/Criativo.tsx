@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { initialEstrategias, initialCampaigns, initialContents } from '@/data/seedData';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
 import type { Campaign, ContentItem } from '@/data/seedData';
@@ -153,6 +154,8 @@ function PlatformInsights({ campaigns, contents }: { campaigns: Campaign[]; cont
 
 export default function Criativo() {
   const { toast } = useToast();
+  const [searchParams] = useSearchParams();
+  const taskId = searchParams.get('taskId');
   const [campaigns] = useLocalStorage<Campaign[]>('dqef-campaigns', initialCampaigns);
   const [contents] = useLocalStorage<ContentItem[]>('dqef-contents', initialContents);
 
@@ -162,10 +165,33 @@ export default function Criativo() {
   const [selectedFormat, setSelectedFormat] = useState<string>('Carrossel Tipográfico');
   const [selectedObjective, setSelectedObjective] = useState<string>('Awareness');
   const [additionalContext, setAdditionalContext] = useState('');
+  const [taskContext, setTaskContext] = useState<Record<string, any> | null>(null);
 
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<GeneratedCarousel | null>(null);
   const [copiedCaption, setCopiedCaption] = useState(false);
+
+  // Load task context from DB if taskId is present
+  useEffect(() => {
+    if (!taskId) return;
+    (async () => {
+      const { data } = await (supabase as any).from('campaign_tasks').select('*').eq('id', taskId).single();
+      if (data) {
+        setTaskContext(data);
+        const ctx = data.campaign_context || {};
+        if (ctx.emotionalAngle) {
+          const angle = ANGLES.find(a => a.id === ctx.emotionalAngle);
+          if (angle) setSelectedAngle(angle.id);
+        }
+        if (ctx.objective) setAdditionalContext(prev => prev ? prev : `Objetivo: ${ctx.objective}. ${ctx.hook ? `Hook: ${ctx.hook}. ` : ''}${ctx.cta ? `CTA: ${ctx.cta}. ` : ''}${ctx.targetAudience ? `Público: ${ctx.targetAudience}` : ''}`);
+        // Map channel
+        if (data.channel) {
+          const ch = CHANNELS.find(c => c.id.startsWith(data.channel) || c.label === data.channel);
+          if (ch) setSelectedChannel(ch.id);
+        }
+      }
+    })();
+  }, [taskId]);
 
   const persona = initialEstrategias.find(e => e.id === selectedPersona)!;
   const angle = ANGLES.find(a => a.id === selectedAngle)!;

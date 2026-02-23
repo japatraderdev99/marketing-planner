@@ -257,6 +257,87 @@ export type Database = {
         }
         Relationships: []
       }
+      campaign_tasks: {
+        Row: {
+          approval_note: string | null
+          approved_by: string | null
+          assigned_to: string
+          campaign_context: Json | null
+          campaign_id: string
+          campaign_name: string
+          channel: string
+          completed_at: string | null
+          created_at: string
+          creative_output: Json | null
+          creative_type: string
+          deadline: string | null
+          description: string | null
+          format_height: number | null
+          format_name: string | null
+          format_ratio: string | null
+          format_width: number | null
+          id: string
+          priority: string
+          started_at: string | null
+          status: string
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          approval_note?: string | null
+          approved_by?: string | null
+          assigned_to?: string
+          campaign_context?: Json | null
+          campaign_id: string
+          campaign_name: string
+          channel: string
+          completed_at?: string | null
+          created_at?: string
+          creative_output?: Json | null
+          creative_type: string
+          deadline?: string | null
+          description?: string | null
+          format_height?: number | null
+          format_name?: string | null
+          format_ratio?: string | null
+          format_width?: number | null
+          id?: string
+          priority?: string
+          started_at?: string | null
+          status?: string
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          approval_note?: string | null
+          approved_by?: string | null
+          assigned_to?: string
+          campaign_context?: Json | null
+          campaign_id?: string
+          campaign_name?: string
+          channel?: string
+          completed_at?: string | null
+          created_at?: string
+          creative_output?: Json | null
+          creative_type?: string
+          deadline?: string | null
+          description?: string | null
+          format_height?: number | null
+          format_name?: string | null
+          format_ratio?: string | null
+          format_width?: number | null
+          id?: string
+          priority?: string
+          started_at?: string | null
+          status?: string
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       competitor_benchmarks: {
         Row: {
           ai_insights: Json | null
