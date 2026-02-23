@@ -20,6 +20,39 @@ function extractJSON(raw: string): Record<string, unknown> {
   }
 }
 
+// Load generative playbook knowledge from database
+async function loadImagePlaybookForCarousel(): Promise<string> {
+  try {
+    const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    const { data } = await supabase
+      .from("generative_playbooks")
+      .select("knowledge_json")
+      .eq("playbook_type", "image")
+      .limit(1)
+      .single();
+    if (!data?.knowledge_json) return "";
+    const k = data.knowledge_json as Record<string, unknown>;
+    const brand = k.dqef_brand_visual as Record<string, string> || {};
+    const formula = k.universal_formula || "";
+    const rules = k.photorealism_rules as Record<string, string[]> || {};
+    const elements = k.formula_elements as Record<string, Record<string, unknown>> || {};
+    const examples = k.example_prompts as Record<string, string> || {};
+
+    return `
+PLAYBOOK DE IMAGEM GENERATIVA (pesquisa profunda — aplicar nos imagePrompt):
+FÓRMULA: ${formula}
+SUJEITO DQEF: ${brand.target_audience || ""}. Cor: ${brand.brand_color || ""}
+OBRIGATÓRIO: ${brand.must_have || ""}
+PROIBIDO: ${brand.forbidden || ""}
+ILUMINAÇÃO: ${(elements.lighting as Record<string, string>)?.dqef_default || ""}
+ESTILO: ${(elements.style as Record<string, string>)?.dqef_default || ""}
+AMBIENTES BR: ${elements.environment?.dqef_contexts ? JSON.stringify(elements.environment.dqef_contexts) : ""}
+DO: ${(rules.do || []).join(" | ")}
+DON'T: ${(rules.dont || []).join(" | ")}
+EXEMPLO REFERÊNCIA (AC): ${examples.ac_technician_hero || ""}`;
+  } catch { return ""; }
+}
+
 // Fetch strategy context from knowledge base + meta-fields
 async function getStrategyContext(req: Request, strategyContext?: string): Promise<string> {
   const base = strategyContext ? `\nCONTEXTO ESTRATÉGICO DA MARCA (extraído do playbook):\n${strategyContext}\n` : '';
@@ -171,12 +204,16 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const { context = '', angle = '', persona = '', channel = '', tone = '', strategyContext = '' } = body;
 
-    // Get dynamic brand strategy context
-    const brandContext = await getStrategyContext(req, strategyContext);
+    // Get dynamic brand strategy context + generative playbook knowledge
+    const [brandContext, playbookKnowledge] = await Promise.all([
+      getStrategyContext(req, strategyContext),
+      loadImagePlaybookForCarousel(),
+    ]);
     const userId = await getUserId(req);
 
     const systemPrompt = `Você é o estrategista criativo especialista em carrosséis virais para Instagram com profundo conhecimento do prestador de serviço autônomo brasileiro.
 ${brandContext}
+${playbookKnowledge}
 ${VISUAL_RULES}`;
 
     const isAutonomous = !context && !angle && !persona;

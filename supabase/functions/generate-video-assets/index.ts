@@ -1,6 +1,80 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { createClient } from "jsr:@supabase/supabase-js@2";
 
 const AI_GATEWAY = "https://ai.gateway.lovable.dev/v1/chat/completions";
+
+// Load video playbook knowledge from database
+async function loadVideoPlaybook(): Promise<string> {
+  try {
+    const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    const { data } = await supabase
+      .from("generative_playbooks")
+      .select("knowledge_json")
+      .eq("playbook_type", "video")
+      .limit(1)
+      .single();
+    if (!data?.knowledge_json) return "";
+    const k = data.knowledge_json as Record<string, unknown>;
+    const laws = (k.laws as string[]) || [];
+    const goldenRules = k.golden_rules as Record<string, string> || {};
+    const cameraRules = k.camera_rules as Record<string, string[]> || {};
+    const motionStructure = (k.motion_prompt_structure as string[]) || [];
+    const antiPatterns = (k.anti_patterns as string[]) || [];
+
+    return `
+PLAYBOOK DE PRODUÇÃO GENERATIVA (pesquisa profunda — Veo 3.1, Sora 2, Seedance):
+
+PRINCÍPIO: ${k.fundamental_principle || ""}
+
+LEIS INEGOCIÁVEIS:
+${laws.map((l, i) => `${i+1}. ${l}`).join("\n")}
+
+FÓRMULA UNIVERSAL: ${k.universal_formula || ""}
+
+REGRAS DE OURO:
+- CÂMERA: ${goldenRules.camera || ""}
+- TIMING: ${goldenRules.timing || ""}
+- AÇÃO: ${goldenRules.action || ""}
+- MICRO-MOVIMENTOS: ${goldenRules.micro_movements || ""}
+- GATE: ${goldenRules.gate || ""}
+
+CÂMERA PERMITIDA: ${(cameraRules.allowed || []).join(" | ")}
+CÂMERA PROIBIDA: ${(cameraRules.forbidden || []).join(" | ")}
+
+ESTRUTURA MOTION PROMPT: ${motionStructure.join(" → ")}
+
+ANTI-PADRÕES: ${antiPatterns.join(" | ")}`;
+  } catch (e) {
+    console.error("Failed to load video playbook:", e);
+    return "";
+  }
+}
+
+// Load image playbook for frame generation
+async function loadImagePlaybookForFrames(): Promise<string> {
+  try {
+    const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    const { data } = await supabase
+      .from("generative_playbooks")
+      .select("knowledge_json")
+      .eq("playbook_type", "image")
+      .limit(1)
+      .single();
+    if (!data?.knowledge_json) return "";
+    const k = data.knowledge_json as Record<string, unknown>;
+    const brand = k.dqef_brand_visual as Record<string, string> || {};
+    const rules = k.photorealism_rules as Record<string, string[]> || {};
+
+    return `
+PLAYBOOK DE IMAGEM (para frames iniciais):
+SUJEITO DQEF: ${brand.target_audience || ""}
+COR MARCA: ${brand.brand_color || ""}
+OBRIGATÓRIO: ${brand.must_have || ""}
+PROIBIDO: ${brand.forbidden || ""}
+DO: ${(rules.do || []).join(" | ")}
+DON'T: ${(rules.dont || []).join(" | ")}`;
+  } catch { return ""; }
+}
 
 function extractJSON(raw: string): Record<string, unknown> {
   const cleaned = raw.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
@@ -493,6 +567,12 @@ Deno.serve(async (req) => {
 
     const { operation, persona, scene, contentAngle, videoModel, aspectRatio, duration, additionalContext, imagePrompt, freeText } = body;
 
+    // Load playbook knowledge from database (parallel)
+    const [videoPlaybook, imagePlaybook] = await Promise.all([
+      loadVideoPlaybook(),
+      loadImagePlaybookForFrames(),
+    ]);
+
     const callAI = async (model: string, messages: { role: string; content: string }[], temperature = 0.75) => {
       const res = await fetch(AI_GATEWAY, {
         method: "POST",
@@ -515,7 +595,7 @@ Deno.serve(async (req) => {
       const targetAspect = aspectRatio ?? "9:16";
       const targetDuration = duration ?? 10;
 
-      const systemPrompt = buildExpressSystem(targetModel, targetAspect, targetDuration);
+      const systemPrompt = buildExpressSystem(targetModel, targetAspect, targetDuration) + (videoPlaybook ? `\n\n${videoPlaybook}` : "") + (imagePlaybook ? `\n\n${imagePlaybook}` : "");
       const userContent = `INPUT FROM TEAM:
 ---
 ${freeText}
@@ -551,8 +631,9 @@ ${additionalContext ? `Additional context: ${additionalContext}` : ""}
 Generate the animatable Start Frame image prompt. ONLY JSON.`;
 
       try {
+        const enhancedSystem = IMAGE_PROMPT_SYSTEM + (imagePlaybook ? `\n\n${imagePlaybook}` : "");
         const raw = await callAI("google/gemini-2.5-flash", [
-          { role: "system", content: IMAGE_PROMPT_SYSTEM },
+          { role: "system", content: enhancedSystem },
           { role: "user", content: userMsg },
         ], 0.7);
         const parsed = extractJSON(raw);
@@ -609,8 +690,9 @@ ${imagePrompt ? `Start frame generated with: ${imagePrompt}` : ""}
 Apply the ${targetModel} native grammar. Calculate promptConfidenceScore honestly. ONLY JSON.`;
 
       try {
+        const enhancedModelSystem = modelSystem + (videoPlaybook ? `\n\n${videoPlaybook}` : "");
         const raw = await callAI("google/gemini-2.5-pro", [
-          { role: "system", content: modelSystem },
+          { role: "system", content: enhancedModelSystem },
           { role: "user", content: userMsg },
         ], 0.73);
         const parsed = extractJSON(raw);
