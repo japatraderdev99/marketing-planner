@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import {
-  Sparkles, Loader2, Send, Image, Film, Type, Layout,
+  Sparkles, Loader2, Send, Image, Film, Type, Layout, Layers,
   ThumbsUp, ThumbsDown, RefreshCw, Trash2,
   Upload, FileText, Globe, X, Paperclip
 } from 'lucide-react';
@@ -145,6 +145,12 @@ function SuggestionCard({
             <Button size="sm" className="h-7 px-3 text-xs bg-primary/20 text-primary hover:bg-primary/30 border border-primary/30"
               onClick={() => onSendToProduction(item)}>
               <Send className="h-3 w-3 mr-1" /> Enviar p/ Produção
+            </Button>
+          )}
+          {item.status === 'sent_to_production' && item.suggestion_type === 'carousel' && (
+            <Button size="sm" className="h-7 px-3 text-xs bg-green-500/20 text-green-400 hover:bg-green-500/30 border border-green-500/30"
+              onClick={() => onSendToProduction(item)}>
+              <Layers className="h-3 w-3 mr-1" /> Criar Carrossel
             </Button>
           )}
           {item.status === 'rejected' && (
@@ -319,10 +325,12 @@ export default function IdeacaoTab() {
   };
 
   const handleSendToProduction = (item: CreativeSuggestion) => {
-    handleUpdateStatus(item.id, 'sent_to_production');
+    // Only update status if not already sent
+    if (item.status !== 'sent_to_production') {
+      handleUpdateStatus(item.id, 'sent_to_production');
+    }
 
     if (item.suggestion_type === 'carousel') {
-      // Store suggestion data and navigate to carousel production
       const briefing = [
         item.title,
         item.description,
@@ -337,7 +345,7 @@ export default function IdeacaoTab() {
       }));
 
       toast({
-        title: 'Enviado para produção!',
+        title: item.status === 'sent_to_production' ? 'Criando carrossel...' : 'Enviado para produção!',
         description: 'Redirecionando para AI Carrosséis...',
       });
 
