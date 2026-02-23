@@ -374,6 +374,63 @@ export type Database = {
         }
         Relationships: []
       }
+      creative_suggestions: {
+        Row: {
+          ai_reasoning: string | null
+          channel: string | null
+          copy_text: string | null
+          created_at: string
+          description: string | null
+          format: string | null
+          id: string
+          input_text: string
+          input_type: string
+          metadata: Json | null
+          status: string
+          suggestion_type: string
+          title: string
+          updated_at: string
+          user_id: string
+          visual_direction: string | null
+        }
+        Insert: {
+          ai_reasoning?: string | null
+          channel?: string | null
+          copy_text?: string | null
+          created_at?: string
+          description?: string | null
+          format?: string | null
+          id?: string
+          input_text: string
+          input_type?: string
+          metadata?: Json | null
+          status?: string
+          suggestion_type: string
+          title: string
+          updated_at?: string
+          user_id: string
+          visual_direction?: string | null
+        }
+        Update: {
+          ai_reasoning?: string | null
+          channel?: string | null
+          copy_text?: string | null
+          created_at?: string
+          description?: string | null
+          format?: string | null
+          id?: string
+          input_text?: string
+          input_type?: string
+          metadata?: Json | null
+          status?: string
+          suggestion_type?: string
+          title?: string
+          updated_at?: string
+          user_id?: string
+          visual_direction?: string | null
+        }
+        Relationships: []
+      }
       dam_assets: {
         Row: {
           category: string | null
