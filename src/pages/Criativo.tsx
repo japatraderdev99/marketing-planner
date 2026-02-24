@@ -4,6 +4,7 @@ import { initialEstrategias, initialCampaigns, initialContents } from '@/data/se
 import { useLocalStorage } from '@/hooks/useLocalStorage';
 import type { Campaign, ContentItem } from '@/data/seedData';
 import { supabase } from '@/integrations/supabase/client';
+import CampaignKnowledgeSelector from '@/components/CampaignKnowledgeSelector';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -165,6 +166,7 @@ export default function Criativo() {
   const [selectedFormat, setSelectedFormat] = useState<string>('Carrossel Tipográfico');
   const [selectedObjective, setSelectedObjective] = useState<string>('Awareness');
   const [additionalContext, setAdditionalContext] = useState('');
+  const [campaignContext, setCampaignContext] = useState('');
   const [taskContext, setTaskContext] = useState<Record<string, any> | null>(null);
 
   const [loading, setLoading] = useState(false);
@@ -239,7 +241,7 @@ export default function Criativo() {
             avgRate: persona.avgRate,
           },
           platformData: { activeCampaigns, publishedPosts, topChannel },
-          additionalContext: additionalContext.trim() || undefined,
+          additionalContext: [campaignContext, additionalContext].filter(Boolean).join('\n\n').trim() || undefined,
         },
       });
       if (error) throw error;
@@ -279,6 +281,9 @@ export default function Criativo() {
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_1.4fr]">
         {/* LEFT — Config Panel */}
         <div className="space-y-4">
+          {/* Campaign as Knowledge Base */}
+          <CampaignKnowledgeSelector onContextChange={setCampaignContext} />
+
           {/* Platform Insights */}
           <PlatformInsights campaigns={campaigns} contents={contents} />
 

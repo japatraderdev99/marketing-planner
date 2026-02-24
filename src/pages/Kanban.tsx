@@ -945,6 +945,93 @@ const CREATIVE_TYPE_ROUTE: Record<string, string> = {
   shorts: '/video-ia',
 };
 
+// ─── Edit Task Modal ──────────────────────────────────────────────────────────
+
+function EditTaskModal({ open, onClose, task, onSave }: {
+  open: boolean; onClose: () => void; task: CampaignTask;
+  onSave: (updates: Partial<CampaignTask>) => void;
+}) {
+  const [title, setTitle] = useState(task.title);
+  const [description, setDescription] = useState(task.description || '');
+  const [assignedTo, setAssignedTo] = useState<TeamMemberId>(
+    TEAM.find(t => task.assigned_to.toLowerCase().includes(t.id))?.id || 'guilherme'
+  );
+  const [priority, setPriority] = useState(task.priority);
+  const [deadline, setDeadline] = useState(task.deadline || '');
+  const [status, setStatus] = useState(task.status);
+
+  const handleSave = () => {
+    if (!title.trim()) return;
+    const member = TEAM.find(t => t.id === assignedTo)!;
+    onSave({ title, description: description || null, assigned_to: member.name, priority, deadline: deadline || null, status });
+    onClose();
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="sm:max-w-md bg-card border-border">
+        <DialogHeader>
+          <DialogTitle className="text-sm flex items-center gap-2">
+            <Edit2 className="h-4 w-4 text-primary" />
+            Editar tarefa
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3">
+          <Input placeholder="Título *" value={title} onChange={e => setTitle(e.target.value)} className="bg-muted/20 border-border/60" autoFocus />
+          <Textarea placeholder="Descrição..." value={description} onChange={e => setDescription(e.target.value)} rows={2} className="bg-muted/20 border-border/60 text-xs resize-none" />
+
+          <div>
+            <p className="text-[10px] font-bold text-muted-foreground/60 mb-1.5">Responsável</p>
+            <div className="flex gap-1.5 flex-wrap">
+              {TEAM.map(t => (
+                <button key={t.id} onClick={() => setAssignedTo(t.id)}
+                  className={cn('flex items-center gap-1 rounded-lg border px-2 py-1.5 text-[10px] font-bold transition-all',
+                    assignedTo === t.id ? `${t.bg} ${t.border} ${t.text}` : 'border-border text-muted-foreground hover:border-primary/20'
+                  )}>
+                  <div className={cn('h-4 w-4 rounded-full flex items-center justify-center text-[8px] font-black text-white', t.color)}>{t.initials}</div>
+                  {t.name}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <p className="text-[10px] font-bold text-muted-foreground/60 mb-1.5">Prioridade</p>
+              <Select value={priority} onValueChange={setPriority}>
+                <SelectTrigger className="bg-muted/20 border-border/60 h-8 text-xs"><SelectValue /></SelectTrigger>
+                <SelectContent className="bg-card border-border">
+                  {['Alta', 'Média', 'Baixa'].map(p => <SelectItem key={p} value={p} className="text-xs">{p}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <p className="text-[10px] font-bold text-muted-foreground/60 mb-1.5">Status</p>
+              <Select value={status} onValueChange={setStatus}>
+                <SelectTrigger className="bg-muted/20 border-border/60 h-8 text-xs"><SelectValue /></SelectTrigger>
+                <SelectContent className="bg-card border-border">
+                  {Object.entries(TASK_STATUS_MAP).map(([k, v]) => (
+                    <SelectItem key={k} value={k} className="text-xs">{COLUMNS.find(c => c.id === v)?.label || k}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div>
+            <p className="text-[10px] font-bold text-muted-foreground/60 mb-1.5">Prazo</p>
+            <Input type="date" value={deadline} onChange={e => setDeadline(e.target.value)} className="bg-muted/20 border-border/60 h-8 text-xs" />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" size="sm" onClick={onClose}>Cancelar</Button>
+          <Button size="sm" onClick={handleSave} className="bg-primary text-primary-foreground border-0">Salvar</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ─── Creative Task Card ───────────────────────────────────────────────────────
 
 function CreativeTaskCard({
@@ -953,12 +1040,16 @@ function CreativeTaskCard({
   onStatusChange,
   onApprove,
   onReject,
+  onEdit,
+  onDelete,
 }: {
   task: CampaignTask;
   onClick?: () => void;
   onStatusChange?: (taskId: string, status: string) => void;
   onApprove?: (taskId: string) => void;
   onReject?: (taskId: string, note: string) => void;
+  onEdit?: (task: CampaignTask) => void;
+  onDelete?: (taskId: string) => void;
 }) {
   const navigate = useNavigate();
   const member = getTeamMember(task.assigned_to);
@@ -980,6 +1071,18 @@ function CreativeTaskCard({
         isOverdue && 'border-red-500/40 from-red-500/5',
       )}
     >
+      {/* Action buttons (edit/delete) */}
+      <div className="absolute top-2 right-2 flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+        <button onClick={e => { e.stopPropagation(); onEdit?.(task); }}
+          className="h-5 w-5 flex items-center justify-center rounded text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors">
+          <Edit2 className="h-3 w-3" />
+        </button>
+        <button onClick={e => { e.stopPropagation(); onDelete?.(task.id); }}
+          className="h-5 w-5 flex items-center justify-center rounded text-muted-foreground hover:text-red-400 hover:bg-red-500/10 transition-colors">
+          <Trash2 className="h-3 w-3" />
+        </button>
+      </div>
+
       {/* Campaign badge */}
       <div className="flex items-center gap-1.5 mb-2">
         <span className="rounded-full bg-primary/15 px-2 py-0.5 text-[9px] font-bold text-primary truncate max-w-[140px]">
@@ -1091,6 +1194,7 @@ export default function Kanban() {
   const [filterMember, setFilterMember] = useState<string>('all');
   const [filterPriority, setFilterPriority] = useState<string>('all');
   const [creativeTasks, setCreativeTasks] = useState<CampaignTask[]>([]);
+  const [editingTask, setEditingTask] = useState<CampaignTask | null>(null);
 
   // Load creative tasks from database
   useEffect(() => {
@@ -1101,6 +1205,23 @@ export default function Kanban() {
     };
     loadTasks();
   }, [user]);
+
+  const handleEditTask = async (taskId: string, updates: Partial<CampaignTask>) => {
+    const { error } = await (supabase as any).from('campaign_tasks').update(updates).eq('id', taskId);
+    if (!error) {
+      setCreativeTasks(prev => prev.map(t => t.id === taskId ? { ...t, ...updates } : t));
+      toast({ title: '✅ Tarefa atualizada' });
+    }
+  };
+
+  const handleDeleteTask = async (taskId: string) => {
+    if (!confirm('Excluir esta tarefa?')) return;
+    const { error } = await (supabase as any).from('campaign_tasks').delete().eq('id', taskId);
+    if (!error) {
+      setCreativeTasks(prev => prev.filter(t => t.id !== taskId));
+      toast({ title: '🗑️ Tarefa excluída' });
+    }
+  };
 
   const handleTaskStatusChange = async (taskId: string, newStatus: string) => {
     const { error } = await (supabase as any).from('campaign_tasks').update({ status: newStatus }).eq('id', taskId);
@@ -1319,7 +1440,18 @@ export default function Kanban() {
         <span className="ml-auto text-[11px] text-muted-foreground/50">
           {filtered.length + filteredTasks.length} tarefa{(filtered.length + filteredTasks.length) !== 1 ? 's' : ''}
         </span>
-      </div>
+
+
+      {/* ── Edit task modal ────────────────────────────────────────────────── */}
+      {editingTask && (
+        <EditTaskModal
+          open={!!editingTask}
+          onClose={() => setEditingTask(null)}
+          task={editingTask}
+          onSave={updates => handleEditTask(editingTask.id, updates)}
+        />
+      )}
+    </div>
 
       {/* ── Board ─────────────────────────────────────────────────────────── */}
       <DndContext
@@ -1389,6 +1521,8 @@ export default function Kanban() {
                         onStatusChange={handleTaskStatusChange}
                         onApprove={handleApproveTask}
                         onReject={handleRejectTask}
+                        onEdit={t => setEditingTask(t)}
+                        onDelete={handleDeleteTask}
                       />
                     ))}
                     {/* Campaign cards (from localStorage) */}
