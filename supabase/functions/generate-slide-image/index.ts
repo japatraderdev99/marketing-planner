@@ -85,28 +85,13 @@ serve(async (req) => {
     console.log(`Generating image with model: ${model}`);
     console.log(`Prompt: ${imagePrompt.slice(0, 100)}...`);
 
-    // Load playbook knowledge from database
+    // Load playbook knowledge (keep short to not overwhelm image model)
     const playbookKnowledge = await loadImagePlaybook();
     
-    const brandGuidelines = `CRITICAL VISUAL RULES — FROM GENERATIVE PLAYBOOK RESEARCH:
-The subject MUST be a Brazilian autonomous service provider (prestador de serviço), aged 35-50, with real worker appearance — calloused hands, work clothes or uniform (turquoise #00A7B5 polo/t-shirt), visible tools, real job site environment. 
+    // Keep brand context concise - long prompts cause model to reply with text instead of image
+    const brandContext = `Brazilian service worker, 35-50yo, turquoise #00A7B5 polo, real job site, natural warm lighting, photorealistic 4K. ${playbookKnowledge ? playbookKnowledge.slice(0, 400) : ''}`;
 
-PROMPT FORMULA: [Camera/Composition] + [Subject] + [Action/Pose] + [Environment] + [Lighting] + [Technical Style]
-
-PHOTOREALISM REQUIREMENTS:
-- Use camera language: "shot on 85mm lens, f/2.8, eye-level medium shot"
-- Add imperfections for authenticity: "visible skin pores, slight sweat, dust particles in light"
-- Environment must be Brazilian middle-class: ceramic tile floor, white walls, aluminum doors, tropical plants
-- Lighting: Natural, warm (5500-6000K), golden hour or diffused window light. NEVER studio cold light.
-- Style: "Photorealistic digital photography, 4K resolution. Cinematic with subtle orange-teal color grade. Minimal film grain for authenticity."
-
-FORBIDDEN: young models, corporate environments, formal clothes, studio settings, American/European aesthetics, mansions
-MANDATORY: weathered hands, work uniform, real tools, Brazilian residential architecture (60-90m² apartments), ethnic diversity
-
-${playbookKnowledge}`;
-    
-    const enhancedPrompt = `${brandGuidelines}\n\n${imagePrompt}`;
-
+    // Use system message for guidelines, user message for the actual image request
     const response = await fetch(LOVABLE_AI_URL, {
       method: 'POST',
       headers: {
@@ -118,7 +103,7 @@ ${playbookKnowledge}`;
         messages: [
           {
             role: 'user',
-            content: enhancedPrompt,
+            content: `Generate this image (DO NOT reply with text, ONLY generate the image): ${imagePrompt}\n\nStyle context: ${brandContext}`,
           },
         ],
         modalities: ['image', 'text'],
@@ -147,15 +132,29 @@ ${playbookKnowledge}`;
     }
 
     const aiResponse = await response.json();
-    console.log('AI response keys:', Object.keys(aiResponse));
+    console.log('AI response structure:', JSON.stringify({
+      hasImages: !!aiResponse.choices?.[0]?.message?.images,
+      imageCount: aiResponse.choices?.[0]?.message?.images?.length || 0,
+      contentLength: aiResponse.choices?.[0]?.message?.content?.length || 0,
+      contentPreview: aiResponse.choices?.[0]?.message?.content?.slice(0, 100),
+    }));
 
-    // Extract image URL from response
+    // Extract image URL - check multiple possible paths
     const message = aiResponse.choices?.[0]?.message;
-    const imageUrl = message?.images?.[0]?.image_url?.url;
+    let imageUrl = message?.images?.[0]?.image_url?.url;
+    
+    // Fallback: check if image is embedded in content as base64
+    if (!imageUrl && message?.content) {
+      const base64Match = message.content.match(/(data:image\/[^;]+;base64,[A-Za-z0-9+/=]+)/);
+      if (base64Match) {
+        imageUrl = base64Match[1];
+      }
+    }
 
     if (!imageUrl) {
-      console.error('No image in response:', JSON.stringify(aiResponse).slice(0, 500));
-      return new Response(JSON.stringify({ error: 'Nenhuma imagem gerada. Tente novamente.' }), {
+      console.error('No image in response. Full message keys:', Object.keys(message || {}));
+      console.error('Full response:', JSON.stringify(aiResponse).slice(0, 1000));
+      return new Response(JSON.stringify({ error: 'Nenhuma imagem gerada. O modelo retornou apenas texto. Tente um prompt mais curto e direto.' }), {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
