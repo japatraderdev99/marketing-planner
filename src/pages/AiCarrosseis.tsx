@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Layers, Wand2, Copy, Check, Download, ChevronDown, ChevronUp, ImageIcon, Video, Zap, RefreshCw, Image, Minimize2, Shuffle, Upload, Trash2, Library, X, Star, Target, FileText, Users, Megaphone, TrendingUp, BookOpen, AlertTriangle, PlusCircle, File, Eye, Save, MessageSquare, Clock, CheckCircle, XCircle, Send, BookMarked, Inbox, ShieldCheck, Loader2 } from 'lucide-react';
+import CampaignKnowledgeSelector from '@/components/CampaignKnowledgeSelector';
 import dqfIcon from '@/assets/dqf-icon.svg';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -2376,6 +2377,7 @@ export default function AiCarrosseis() {
   const [draftsRefreshTrigger, setDraftsRefreshTrigger] = useState(0);
   const [lastSavedSigla, setLastSavedSigla] = useState<string | null>(null);
   const [strategyEnabled, setStrategyEnabled] = useState(true);
+  const [campaignCtx, setCampaignCtx] = useState('');
 
   // Load task context from campaign_tasks if taskId present
   useEffect(() => {
@@ -2584,7 +2586,7 @@ export default function AiCarrosseis() {
       } catch { /* ignore */ }
 
       const { data, error } = await supabase.functions.invoke('generate-carousel-visual', {
-        body: { context, angle, persona, channel, tone, strategyContext },
+        body: { context: [campaignCtx, context].filter(Boolean).join('\n\n'), angle, persona, channel, tone, strategyContext },
       });
       if (error) throw error;
       if (data?.error) {
@@ -2707,6 +2709,9 @@ export default function AiCarrosseis() {
               {/* ── BRIEFING TAB ── */}
               <TabsContent value="briefing">
                 <div className="rounded-xl border border-border bg-card p-5 space-y-5">
+                  {/* Campaign as knowledge base */}
+                  <CampaignKnowledgeSelector onContextChange={setCampaignCtx} />
+
                   <div>
                     <p className="text-xs font-bold text-primary tracking-widest mb-3">CONTEXTO ESTRATÉGICO</p>
                     <Textarea

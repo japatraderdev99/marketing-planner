@@ -10,6 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import StrategyContextPanel from '@/components/video/StrategyContextPanel';
+import CampaignKnowledgeSelector from '@/components/CampaignKnowledgeSelector';
 import VideoProjectsList from '@/components/video/VideoProjectsList';
 import ShotCard, { type Shot } from '@/components/video/ShotCard';
 import {
@@ -317,6 +318,7 @@ export default function VideoIA() {
   const [loadingExpress, setLoadingExpress] = useState(false);
   const [expressAngle, setExpressAngle] = useState('');
   const [expressStrategyCtx, setExpressStrategyCtx] = useState<StrategyContext | null>(null);
+  const [expressCampaignCtx, setExpressCampaignCtx] = useState('');
 
   // Project mode state
   const [projectStep, setProjectStep] = useState(1);
@@ -327,6 +329,7 @@ export default function VideoIA() {
   const [projectDuration, setProjectDuration] = useState(10);
   const [projectAngle, setProjectAngle] = useState('');
   const [projectStrategyCtx, setProjectStrategyCtx] = useState<StrategyContext | null>(null);
+  const [projectCampaignCtx, setProjectCampaignCtx] = useState('');
   const [storyboard, setStoryboard] = useState<Shot[]>([]);
   const [storyboardMeta, setStoryboardMeta] = useState<{ title?: string; concept?: string; caption?: string; viralTrigger?: string } | null>(null);
   const [loadingStoryboard, setLoadingStoryboard] = useState(false);
@@ -365,7 +368,7 @@ export default function VideoIA() {
           aspectRatio: expressAspect,
           duration: expressDuration,
           contentAngle: expressAngle || undefined,
-          strategyContext: expressStrategyCtx?.combined || undefined,
+          strategyContext: [expressCampaignCtx, expressStrategyCtx?.combined].filter(Boolean).join('\n\n') || undefined,
         },
       });
       if (error) throw new Error(error.message);
@@ -391,7 +394,7 @@ export default function VideoIA() {
           aspectRatio: projectAspect,
           duration: projectDuration,
           contentAngle: projectAngle || undefined,
-          strategyContext: projectStrategyCtx?.combined || undefined,
+          strategyContext: [projectCampaignCtx, projectStrategyCtx?.combined].filter(Boolean).join('\n\n') || undefined,
         },
       });
       if (error) throw new Error(error.message);
@@ -602,6 +605,9 @@ export default function VideoIA() {
 
         {/* ═══════ EXPRESS TAB ═══════ */}
         <TabsContent value="express" className="space-y-4 mt-4">
+          {/* Campaign as knowledge base */}
+          <CampaignKnowledgeSelector onContextChange={setExpressCampaignCtx} />
+
           {/* Strategy context panel */}
           <StrategyContextPanel onContextChange={setExpressStrategyCtx} userId={userId} />
 
@@ -864,6 +870,7 @@ export default function VideoIA() {
 
               {/* Strategy context sidebar */}
               <div>
+                <CampaignKnowledgeSelector onContextChange={setProjectCampaignCtx} />
                 <StrategyContextPanel onContextChange={setProjectStrategyCtx} userId={userId} />
               </div>
             </div>
