@@ -309,21 +309,32 @@ interface SlidePreviewProps {
   textScale?: number;
 }
 
+// Approximate width of a single slide card in the UI preview (px)
+const PREVIEW_BASE_WIDTH = 340;
+
 function SlidePreview({ slide, imageUrl, slideRef, format, exportMode = false, textScale = 1 }: SlidePreviewProps) {
+  const fmt = format ?? CREATIVE_FORMATS[0];
+  // In export mode, scale all font sizes so they match the visual proportions of the preview
+  const exportScale = exportMode ? fmt.width / PREVIEW_BASE_WIDTH : 1;
+
   const ts = (size: string) => {
-    // Scale clamp() and px values
+    const scale = textScale * exportScale;
     const pxMatch = size.match(/^(\d+(?:\.\d+)?)px$/);
-    if (pxMatch) return `${parseFloat(pxMatch[1]) * textScale}px`;
+    if (pxMatch) return `${parseFloat(pxMatch[1]) * scale}px`;
     const clampMatch = size.match(/^clamp\((\d+(?:\.\d+)?)px,\s*([^,]+),\s*(\d+(?:\.\d+)?)px\)$/);
-    if (clampMatch) return `clamp(${parseFloat(clampMatch[1]) * textScale}px, ${clampMatch[2]}, ${parseFloat(clampMatch[3]) * textScale}px)`;
+    if (clampMatch) {
+      if (exportMode) {
+        // In export mode resolve clamp to max value * scale (at preview width, clamp always hits max because vw > max)
+        return `${parseFloat(clampMatch[3]) * scale}px`;
+      }
+      return `clamp(${parseFloat(clampMatch[1]) * textScale}px, ${clampMatch[2]}, ${parseFloat(clampMatch[3]) * textScale}px)`;
+    }
     return size;
   };
   const bg = BG_COLORS[slide.bgStyle] ?? SLIDE_BG;
   const isDataSlide = slide.layout === 'number-dominant';
   const isCTA = slide.layout === 'cta-clean';
 
-  // Determine aspect ratio from format or default to 4:5
-  const fmt = format ?? CREATIVE_FORMATS[0];
   const aspectRatio = `${fmt.width}/${fmt.height}`;
 
   // Safe zone: convert real-px safe zone to % for fluid display, or use px directly in export mode
@@ -492,12 +503,16 @@ function SlidePreview({ slide, imageUrl, slideRef, format, exportMode = false, t
 
       <div style={{
         position: 'absolute',
-        bottom: '10px',
-        right: '10px',
+        bottom: exportMode ? `${10 * exportScale}px` : '10px',
+        right: exportMode ? `${10 * exportScale}px` : '10px',
         zIndex: 10,
         opacity: 0.55,
       }}>
-        <img src={dqfIcon} alt="DQF" style={{ width: '18px', height: '18px', filter: 'brightness(0) invert(1)' }} />
+        <img src={dqfIcon} alt="DQF" style={{
+          width: exportMode ? `${18 * exportScale}px` : '18px',
+          height: exportMode ? `${18 * exportScale}px` : '18px',
+          filter: 'brightness(0) invert(1)',
+        }} />
       </div>
     </div>
   );
@@ -2598,7 +2613,30 @@ export default function AiCarrosseis() {
         return;
       }
       if (data?.imageUrl) {
-        setSlideImages(prev => ({ ...prev, [slideNumber]: data.imageUrl }));
+        let finalUrl = data.imageUrl;
+
+        // If base64, upload to storage for persistence
+        if (userId && finalUrl.startsWith('data:image/')) {
+          try {
+            const mimeMatch = finalUrl.match(/^data:(image\/\w+);base64,/);
+            const ext = mimeMatch ? mimeMatch[1].split('/')[1] : 'png';
+            const base64Data = finalUrl.split(',')[1];
+            const byteArray = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
+            const blob = new Blob([byteArray], { type: mimeMatch?.[1] || 'image/png' });
+            const storagePath = `${userId}/ai-slide-${Date.now()}-${slideNumber}.${ext}`;
+            const { error: upErr } = await supabase.storage
+              .from('media-library')
+              .upload(storagePath, blob, { contentType: blob.type, upsert: false });
+            if (!upErr) {
+              const { data: urlData } = supabase.storage.from('media-library').getPublicUrl(storagePath);
+              finalUrl = urlData.publicUrl;
+            }
+          } catch (uploadErr) {
+            console.warn('Failed to upload AI image to storage, using base64:', uploadErr);
+          }
+        }
+
+        setSlideImages(prev => ({ ...prev, [slideNumber]: finalUrl }));
         toast({ title: `Imagem gerada ✅`, description: `Lâmina ${slideNumber} atualizada.` });
       }
     } catch (e) {
@@ -2607,7 +2645,7 @@ export default function AiCarrosseis() {
     } finally {
       setGeneratingImage(prev => ({ ...prev, [slideNumber]: false }));
     }
-  }, [toast]);
+  }, [toast, userId]);
 
   const handleClearImage = useCallback((slideNumber: number) => {
     setSlideImages(prev => {
