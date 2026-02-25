@@ -14,7 +14,11 @@ export default function CampaignKnowledgeSelector({ onContextChange, className }
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
 
-  const activeCampaigns = campaigns.filter(c => c.status === 'Ativa' || c.status === 'Aprovada');
+  // Show all campaigns, prioritizing active/approved
+  const sortedCampaigns = [...campaigns].sort((a, b) => {
+    const order: Record<string, number> = { 'Ativa': 0, 'Aprovada': 1, 'Rascunho': 2, 'Pausada': 3, 'Finalizada': 4 };
+    return (order[a.status] ?? 5) - (order[b.status] ?? 5);
+  });
   const selected = campaigns.find(c => c.id === selectedId);
 
   useEffect(() => {
@@ -68,10 +72,10 @@ export default function CampaignKnowledgeSelector({ onContextChange, className }
 
       {open && (
         <div className="border-t border-border px-3 py-2 space-y-1 max-h-48 overflow-y-auto">
-          {activeCampaigns.length === 0 && (
-            <p className="text-[11px] text-muted-foreground/50 text-center py-3">Nenhuma campanha ativa/aprovada</p>
+          {sortedCampaigns.length === 0 && (
+            <p className="text-[11px] text-muted-foreground/50 text-center py-3">Nenhuma campanha encontrada</p>
           )}
-          {activeCampaigns.map(c => (
+          {sortedCampaigns.map(c => (
             <button
               key={c.id}
               onClick={() => { setSelectedId(c.id); setOpen(false); }}
@@ -84,7 +88,14 @@ export default function CampaignKnowledgeSelector({ onContextChange, className }
             >
               <Target className="h-3.5 w-3.5 text-primary mt-0.5 shrink-0" />
               <div className="flex-1 min-w-0">
-                <p className="text-xs font-bold text-foreground truncate">{c.name}</p>
+                <div className="flex items-center gap-1.5">
+                  <p className="text-xs font-bold text-foreground truncate">{c.name}</p>
+                  <span className={cn('text-[8px] px-1.5 py-0.5 rounded-full border shrink-0',
+                    c.status === 'Ativa' ? 'border-green-500/30 text-green-400 bg-green-500/10' :
+                    c.status === 'Aprovada' ? 'border-primary/30 text-primary bg-primary/10' :
+                    'border-muted-foreground/20 text-muted-foreground bg-muted/30'
+                  )}>{c.status}</span>
+                </div>
                 <div className="flex items-center gap-2 mt-0.5">
                   {c.channel?.slice(0, 2).map(ch => (
                     <span key={ch} className="text-[9px] text-muted-foreground">{ch}</span>

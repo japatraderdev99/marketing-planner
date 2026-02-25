@@ -22,6 +22,7 @@ import Formatos from "./pages/Formatos";
 import CriativosAtivos from "./pages/CriativosAtivos";
 import GridInstagram from "./pages/GridInstagram";
 import BrandKit from "./pages/BrandKit";
+import RelatorioPlataforma from "./pages/RelatorioPlataforma";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -56,6 +57,7 @@ const App = () => (
                       <Route path="/criativos-ativos" element={<CriativosAtivos />} />
                       <Route path="/grid-instagram" element={<GridInstagram />} />
                       <Route path="/brand-kit" element={<BrandKit />} />
+                      <Route path="/relatorio" element={<RelatorioPlataforma />} />
                       <Route path="*" element={<NotFound />} />
                     </Routes>
                   </AppLayout>

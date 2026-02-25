@@ -21,6 +21,7 @@ const pageTitles: Record<string, { title: string; subtitle: string }> = {
   '/criativos-ativos': { title: 'Criativos Ativos', subtitle: 'Galeria de peças em produção com métricas de performance' },
   '/grid-instagram': { title: 'Grid Instagram', subtitle: 'Mockup visual do feed para planejamento estético' },
   '/brand-kit': { title: 'Brand Kit', subtitle: 'Central de identidade visual — logos, cores e tipografia' },
+  '/relatorio': { title: 'Relatório da Plataforma', subtitle: 'Visão executiva para o conselho' },
 };
 
 export function AppLayout({ children }: { children: ReactNode }) {
