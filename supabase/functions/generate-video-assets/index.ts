@@ -218,44 +218,68 @@ function buildStoryboardSystem(targetModel: string, targetAspect: string, target
 
 ${DQEF_BRAND_CONTEXT}
 
-YOUR TASK: Create a multi-shot video storyboard (3-5 shots) from the briefing. Each shot should be a distinct moment in the narrative arc.
+YOUR TASK: Create a multi-shot video storyboard from the briefing.
+
+⚠️ CRITICAL PRIORITY RULE:
+The USER'S BRIEFING IS THE PRIMARY CREATIVE DIRECTION. If the user describes a specific narrative, characters, dialogue, humor, or tone — you MUST preserve them EXACTLY as described.
+DO NOT reinterpret comedy as documentary. DO NOT remove dialogue. DO NOT replace user's characters with brand archetypes.
+The brand context above is a SECONDARY guide for visual style only — it should NOT override the user's creative intent.
+If the user writes a funny video, output a funny storyboard. If they write dramatic, output dramatic.
 
 TARGET: ${targetModel} | ${targetAspect} | Total duration: ${targetDuration}s
 
+SHOT STRUCTURE RULES:
+- Analyze the user's briefing to determine the RIGHT number of shots (2-8 shots)
+- If the user describes distinct scenes/moments, create ONE shot per scene
+- Each shot duration should match the narrative pacing (2s-10s per shot)
+- Total duration of all shots should roughly equal ${targetDuration}s
+- For narratives with dialogue: allocate enough time per shot for the lines to be spoken naturally
+- For comedy: preserve timing — the pause before the punchline IS the comedy
+
 SHOT TYPES:
 - setup: establishing the scene/problem
-- conflict: the tension/challenge moment
+- conflict: the tension/challenge moment  
+- disaster: something goes wrong (comedy/drama)
 - resolution: the solution in action
-- hero: the peak DQEF brand moment (PIX, satisfaction)
+- hero: the peak brand moment
 - cta: call to action / closing
+
+CHARACTER HANDLING:
+- If the user describes specific characters, preserve their descriptions verbatim
+- Include character names if provided
+- Note dialogue lines PER SHOT with timing
+- Specify character positioning and expressions
 
 OUTPUT FORMAT (JSON only):
 {
   "videoTitle": "compelling video title",
-  "narrativeConcept": "one paragraph describing the narrative arc",
+  "narrativeConcept": "one paragraph describing the narrative arc — preserve the user's tone (comedy, drama, etc.)",
   "captionSuggestion": "social media caption in PT-BR",
   "viralTrigger": "the one element that makes this shareable",
   "shots": [
     {
       "id": 1,
       "title": "Shot title",
-      "duration": "3s",
-      "description": "Detailed scene description including character, action, environment, emotion",
-      "type": "setup|conflict|resolution|hero|cta",
-      "recommendedModel": "${targetModel}"
+      "duration": "8s",
+      "description": "EXTREMELY DETAILED scene description: characters (name, appearance, clothing, expression), specific actions with timing, dialogue lines in quotes, camera position, environment details, lighting, emotional tone. Minimum 80 words per shot.",
+      "type": "setup|conflict|disaster|resolution|hero|cta",
+      "recommendedModel": "${targetModel}",
+      "dialogue": ["Character: \\"Line in PT-BR\\""] 
     }
   ]
 }
 
 RULES:
-- Each shot should have a clear purpose in the narrative
-- Total duration of all shots should roughly equal ${targetDuration}s
-- The hero shot should contain the DQEF brand moment
-- Descriptions must be specific enough to generate frame prompts later
-- Use DQEF visual language: warm tones, Brazilian settings, real service providers
+- PRESERVE the user's narrative arc, scenes, and dialogue EXACTLY
+- Each shot description must be detailed enough to generate a frame prompt AND a motion prompt
+- Descriptions should include specific character actions, expressions, and body language
+- Include dialogue lines with character attribution
+- Specify camera position per shot (wide, medium, close-up, etc.)
+- For humor/comedy: describe the comedic timing and physical comedy precisely
 
 CRITICAL: Return ONLY raw JSON.`;
 }
+
 
 // ─── Request Interface ─────────────────────────────────────────────────────────
 interface GenerateRequest {
