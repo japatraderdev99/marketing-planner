@@ -1,13 +1,15 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import {
   Brain, Clapperboard, Image, MessageSquare, Zap, DollarSign,
   BarChart3, Shield, Layers, Sparkles, TrendingUp, Clock,
-  FileText, Target, Palette, Video, Bot, ArrowRight
+  FileText, Target, Palette, Video, Bot, ArrowRight, Download
 } from 'lucide-react';
+import { toast } from 'sonner';
 
 // ─── Cost Data ────────────────────────────────────────────────────────────────
 
@@ -96,6 +98,8 @@ const PLATFORM_MODULES = [
 export default function RelatorioPlataforma() {
   const { user } = useAuth();
   const [usageStats, setUsageStats] = useState<{ totalCalls: number; totalCost: number; totalTokens: number } | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const reportRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -113,9 +117,42 @@ export default function RelatorioPlataforma() {
     })();
   }, [user]);
 
+  const handleExportPDF = async () => {
+    if (!reportRef.current) return;
+    setExporting(true);
+    try {
+      const html2pdf = (await import('html2pdf.js')).default;
+      await html2pdf()
+        .set({
+          margin: [10, 10, 10, 10],
+          filename: `DQEF_Relatorio_Executivo_${new Date().toISOString().slice(0, 10)}.pdf`,
+          image: { type: 'jpeg', quality: 0.98 },
+          html2canvas: { scale: 2, useCORS: true, backgroundColor: '#0c0a09' },
+          jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+          pagebreak: { mode: ['avoid-all', 'css', 'legacy'] },
+        })
+        .from(reportRef.current)
+        .save();
+      toast.success('PDF exportado com sucesso!');
+    } catch (e) {
+      console.error(e);
+      toast.error('Erro ao exportar PDF');
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <div className="h-full overflow-y-auto">
-      <div className="max-w-5xl mx-auto px-4 py-8 space-y-8">
+      {/* Export button - fixed top right */}
+      <div className="sticky top-0 z-10 flex justify-end px-4 py-3 bg-background/80 backdrop-blur-sm border-b border-border print:hidden">
+        <Button onClick={handleExportPDF} disabled={exporting} size="sm" className="gap-2">
+          <Download className="h-4 w-4" />
+          {exporting ? 'Gerando PDF…' : 'Exportar PDF'}
+        </Button>
+      </div>
+
+      <div ref={reportRef} className="max-w-5xl mx-auto px-4 py-8 space-y-8" style={{ backgroundColor: '#0c0a09', color: '#fafaf9' }}>
 
         {/* Header */}
         <div className="text-center space-y-3">
@@ -131,7 +168,7 @@ export default function RelatorioPlataforma() {
         </div>
 
         {/* O que é */}
-        <div className="rounded-2xl border border-border bg-card p-6 space-y-4">
+        <div className="rounded-2xl border border-border bg-card p-6 space-y-4" style={{ pageBreakInside: 'avoid' }}>
           <div className="flex items-center gap-3">
             <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center">
               <Bot className="h-5 w-5 text-primary" />
@@ -160,7 +197,7 @@ export default function RelatorioPlataforma() {
         </div>
 
         {/* Módulos */}
-        <div className="space-y-4">
+        <div className="space-y-4" style={{ pageBreakInside: 'avoid' }}>
           <h2 className="text-lg font-bold text-foreground flex items-center gap-2">
             <Layers className="h-5 w-5 text-primary" />
             Módulos da Plataforma
@@ -193,7 +230,7 @@ export default function RelatorioPlataforma() {
           </p>
           <div className="space-y-3">
             {MODEL_INFO.map(m => (
-              <div key={m.name} className={cn('rounded-xl border p-4', m.bgColor)}>
+              <div key={m.name} className={cn('rounded-xl border p-4', m.bgColor)} style={{ pageBreakInside: 'avoid' }}>
                 <div className="flex items-center gap-3 mb-2">
                   <m.icon className={cn('h-5 w-5', m.color)} />
                   <div className="flex-1">
@@ -219,7 +256,7 @@ export default function RelatorioPlataforma() {
         </div>
 
         {/* Custos de Vídeo */}
-        <div className="space-y-4">
+        <div className="space-y-4" style={{ pageBreakInside: 'avoid' }}>
           <h2 className="text-lg font-bold text-foreground flex items-center gap-2">
             <Video className="h-5 w-5 text-primary" />
             Custo de Produção de Vídeo com IA
@@ -227,8 +264,36 @@ export default function RelatorioPlataforma() {
           <p className="text-xs text-muted-foreground leading-relaxed">
             A geração de vídeo funciona em etapas: primeiro a IA cria uma imagem estática (frame), 
             depois outro modelo "anima" essa imagem. Cada vídeo de ~8 segundos consome créditos 
-            na plataforma de animação (Higgsfield). Abaixo os custos aproximados:
+            na plataforma de animação (Higgsfield).
           </p>
+
+          {/* Higgsfield Plan Info */}
+          <div className="rounded-xl border border-border bg-muted/20 p-4" style={{ pageBreakInside: 'avoid' }}>
+            <div className="flex items-center gap-3 mb-2">
+              <DollarSign className="h-5 w-5 text-primary" />
+              <p className="text-sm font-bold text-foreground">Plano Higgsfield — Custo Base</p>
+            </div>
+            <div className="grid grid-cols-3 gap-3 text-center">
+              <div>
+                <p className="text-2xl font-black text-primary">$150</p>
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wider mt-1">Custo mensal (USD)</p>
+              </div>
+              <div>
+                <p className="text-2xl font-black text-foreground">6.000</p>
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wider mt-1">Créditos inclusos</p>
+              </div>
+              <div>
+                <p className="text-2xl font-black text-foreground">$0,025</p>
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wider mt-1">Custo por crédito</p>
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground mt-3 leading-relaxed">
+              Com 6.000 créditos mensais, é possível gerar aproximadamente <strong className="text-foreground">103 vídeos de 8s com VEO 3.1</strong> (58 créditos cada), 
+              ou <strong className="text-foreground">55 vídeos com Sora 2</strong> (108 créditos cada), 
+              ou <strong className="text-foreground">300 vídeos com Seedance</strong> (20 créditos cada).
+            </p>
+          </div>
+
           <div className="rounded-xl border border-border overflow-hidden">
             <table className="w-full text-sm">
               <thead>
@@ -254,8 +319,11 @@ export default function RelatorioPlataforma() {
               </tbody>
             </table>
           </div>
+          <p className="text-[10px] text-muted-foreground italic">
+            * Custo estimado por vídeo = (créditos × $0,025) convertido a R$ pela cotação aproximada de R$ 5,80/USD.
+          </p>
 
-          <div className="rounded-xl border border-primary/20 bg-primary/5 p-4">
+          <div className="rounded-xl border border-primary/20 bg-primary/5 p-4" style={{ pageBreakInside: 'avoid' }}>
             <p className="text-xs font-bold text-primary mb-2">💡 Exemplo prático — Vídeo "O Ninja do AR Condicionado"</p>
             <p className="text-xs text-muted-foreground leading-relaxed">
               Um vídeo de 32 segundos (4 takes de 8s) usando <strong className="text-foreground">VEO 3.1</strong>:<br />
@@ -272,7 +340,7 @@ export default function RelatorioPlataforma() {
 
         {/* Usage stats */}
         {usageStats && (
-          <div className="space-y-4">
+          <div className="space-y-4" style={{ pageBreakInside: 'avoid' }}>
             <h2 className="text-lg font-bold text-foreground flex items-center gap-2">
               <TrendingUp className="h-5 w-5 text-primary" />
               Uso Atual da Plataforma
@@ -299,7 +367,7 @@ export default function RelatorioPlataforma() {
         )}
 
         {/* Workflow */}
-        <div className="space-y-4">
+        <div className="space-y-4" style={{ pageBreakInside: 'avoid' }}>
           <h2 className="text-lg font-bold text-foreground flex items-center gap-2">
             <Shield className="h-5 w-5 text-primary" />
             Como Funciona na Prática
