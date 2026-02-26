@@ -26,13 +26,13 @@ const TASK_CONFIG: Record<
     fallbackModel: "google/gemini-2.5-pro",
   },
   classify: {
-    model: "deepseek/deepseek-chat-v3-0324",
-    provider: "openrouter",
+    model: "google/gemini-2.5-flash",
+    provider: "lovable",
     fallbackModel: "google/gemini-2.5-flash-lite",
   },
   suggest: {
-    model: "deepseek/deepseek-chat-v3-0324",
-    provider: "openrouter",
+    model: "google/gemini-2.5-flash",
+    provider: "lovable",
     fallbackModel: "google/gemini-2.5-flash-lite",
   },
   image: {
