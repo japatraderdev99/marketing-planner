@@ -242,6 +242,118 @@ const BG_COLORS: Record<string, string> = {
   'dark-green': SLIDE_BG,
 };
 
+// ─── Visual Themes ────────────────────────────────────────────────────────────
+
+export type CarouselThemeId = 'brand-orange' | 'clean-white' | 'dark-premium';
+
+export interface CarouselTheme {
+  id: CarouselThemeId;
+  label: string;
+  description: string;
+  bg: string;
+  overlayGradient: string;
+  headlineColor: string;
+  subtextColor: string;
+  highlightColor: string;
+  highlightBgOnImage: string;
+  sloganDim: string;
+  sloganBright: string;
+  iconFilter: string;
+  previewBorder: string;
+  previewSwatch: string[];
+}
+
+export const CAROUSEL_THEMES: CarouselTheme[] = [
+  {
+    id: 'brand-orange',
+    label: 'DQEF Original',
+    description: 'Laranja icônico da marca',
+    bg: '#E8603C',
+    overlayGradient: 'linear-gradient(to top, rgba(0,0,0,0.68) 0%, rgba(0,0,0,0.15) 55%, rgba(0,0,0,0.05) 100%)',
+    headlineColor: '#FFFFFF',
+    subtextColor: 'rgba(255,255,255,0.75)',
+    highlightColor: '#E8603C',
+    highlightBgOnImage: 'rgba(255,255,255,0.22)',
+    sloganDim: 'rgba(255,255,255,0.45)',
+    sloganBright: '#FFFFFF',
+    iconFilter: 'brightness(0) invert(1)',
+    previewBorder: '#E8603C',
+    previewSwatch: ['#E8603C', '#1A1A1A', '#FFFFFF'],
+  },
+  {
+    id: 'clean-white',
+    label: 'Clean White',
+    description: 'Fundo claro, tipografia bold',
+    bg: '#F5F5F0',
+    overlayGradient: 'linear-gradient(to top, rgba(255,255,255,0.85) 0%, rgba(255,255,255,0.3) 55%, rgba(255,255,255,0.05) 100%)',
+    headlineColor: '#1A1A1A',
+    subtextColor: 'rgba(26,26,26,0.65)',
+    highlightColor: '#E8603C',
+    highlightBgOnImage: 'rgba(232,96,60,0.15)',
+    sloganDim: 'rgba(26,26,26,0.35)',
+    sloganBright: '#E8603C',
+    iconFilter: 'none',
+    previewBorder: '#E0E0E0',
+    previewSwatch: ['#F5F5F0', '#E8603C', '#1A1A1A'],
+  },
+  {
+    id: 'dark-premium',
+    label: 'Dark Premium',
+    description: 'Escuro sofisticado com teal',
+    bg: 'linear-gradient(160deg, #0F0F0F 0%, #1A1A2E 100%)',
+    overlayGradient: 'linear-gradient(to top, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0.2) 55%, rgba(0,0,0,0.1) 100%)',
+    headlineColor: '#FFFFFF',
+    subtextColor: 'rgba(255,255,255,0.65)',
+    highlightColor: '#00A7B5',
+    highlightBgOnImage: 'rgba(0,167,181,0.25)',
+    sloganDim: 'rgba(255,255,255,0.35)',
+    sloganBright: '#00A7B5',
+    iconFilter: 'brightness(0) invert(1)',
+    previewBorder: '#00A7B5',
+    previewSwatch: ['#0F0F0F', '#00A7B5', '#FFFFFF'],
+  },
+];
+
+function ThemePicker({ selected, onChange }: { selected: CarouselThemeId; onChange: (id: CarouselThemeId) => void }) {
+  return (
+    <div>
+      <p className="text-xs font-bold text-muted-foreground tracking-widest mb-2.5">TEMA VISUAL</p>
+      <div className="grid grid-cols-3 gap-2">
+        {CAROUSEL_THEMES.map(theme => (
+          <button
+            key={theme.id}
+            onClick={() => onChange(theme.id)}
+            className={cn(
+              'group relative rounded-xl border-2 p-2.5 transition-all text-left',
+              selected === theme.id
+                ? 'border-primary bg-primary/10 ring-1 ring-primary/30'
+                : 'border-border hover:border-border/70 bg-card/50'
+            )}
+          >
+            {/* Color swatch row */}
+            <div className="flex gap-1 mb-2">
+              {theme.previewSwatch.map((c, i) => (
+                <div
+                  key={i}
+                  className="h-3 flex-1 rounded-sm"
+                  style={{ background: c, border: c === '#FFFFFF' || c === '#F5F5F0' ? '1px solid rgba(0,0,0,0.1)' : 'none' }}
+                />
+              ))}
+            </div>
+            <p className="text-[10px] font-bold text-foreground leading-none">{theme.label}</p>
+            <p className="text-[9px] text-muted-foreground leading-tight mt-0.5">{theme.description}</p>
+            {selected === theme.id && (
+              <div className="absolute -top-1.5 -right-1.5 h-4 w-4 rounded-full bg-primary flex items-center justify-center">
+                <Check className="h-2.5 w-2.5 text-primary-foreground" />
+              </div>
+            )}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 const TYPE_LABELS: Record<string, string> = {
   hook: 'GANCHO',
   setup: 'SETUP',
@@ -304,18 +416,17 @@ interface SlidePreviewProps {
   imageUrl?: string;
   slideRef?: React.RefObject<HTMLDivElement>;
   format?: CreativeFormat;
-  /** When true, renders at exact export dimensions (offscreen). When false (default), renders responsively for UI display */
   exportMode?: boolean;
-  /** Text scale multiplier (0.5 to 2.0, default 1.0) */
   textScale?: number;
+  theme?: CarouselTheme;
 }
 
 // Approximate width of a single slide card in the UI preview (px)
 const PREVIEW_BASE_WIDTH = 340;
 
-function SlidePreview({ slide, imageUrl, slideRef, format, exportMode = false, textScale = 1 }: SlidePreviewProps) {
+function SlidePreview({ slide, imageUrl, slideRef, format, exportMode = false, textScale = 1, theme }: SlidePreviewProps) {
+  const activeTheme = theme ?? CAROUSEL_THEMES[0];
   const fmt = format ?? CREATIVE_FORMATS[0];
-  // In export mode, scale all font sizes so they match the visual proportions of the preview
   const exportScale = exportMode ? fmt.width / PREVIEW_BASE_WIDTH : 1;
 
   const ts = (size: string) => {
@@ -332,7 +443,7 @@ function SlidePreview({ slide, imageUrl, slideRef, format, exportMode = false, t
     }
     return size;
   };
-  const bg = BG_COLORS[slide.bgStyle] ?? SLIDE_BG;
+  const bg = activeTheme.bg;
   const isDataSlide = slide.layout === 'number-dominant';
   const isCTA = slide.layout === 'cta-clean';
 
@@ -351,20 +462,20 @@ function SlidePreview({ slide, imageUrl, slideRef, format, exportMode = false, t
 
   const renderHeadline = (headline: string, highlight?: string) => {
     if (!highlight || !headline.toLowerCase().includes(highlight.toLowerCase())) {
-      return <span style={{ color: '#FFFFFF' }}>{headline}</span>;
+      return <span style={{ color: activeTheme.headlineColor }}>{headline}</span>;
     }
     const idx = headline.toLowerCase().indexOf(highlight.toLowerCase());
     const before = headline.slice(0, idx);
     const word = headline.slice(idx, idx + highlight.length);
     const after = headline.slice(idx + highlight.length);
     const highlightStyle = imageUrl
-      ? { color: '#E8603C' }
-      : { color: '#FFFFFF', backgroundColor: 'rgba(255,255,255,0.22)', borderRadius: '2px', padding: '0 3px' };
+      ? { color: activeTheme.highlightColor }
+      : { color: activeTheme.headlineColor, backgroundColor: activeTheme.highlightBgOnImage, borderRadius: '2px', padding: '0 3px' };
     return (
       <>
-        {before && <span style={{ color: '#FFFFFF' }}>{before}</span>}
+        {before && <span style={{ color: activeTheme.headlineColor }}>{before}</span>}
         <span style={highlightStyle}>{word}</span>
-        {after && <span style={{ color: '#FFFFFF' }}>{after}</span>}
+        {after && <span style={{ color: activeTheme.headlineColor }}>{after}</span>}
       </>
     );
   };
@@ -398,13 +509,13 @@ function SlidePreview({ slide, imageUrl, slideRef, format, exportMode = false, t
             backgroundImage: `url(${imageUrl})`,
             backgroundSize: 'cover',
             backgroundPosition: 'center',
-            opacity: 0.52,
+            opacity: activeTheme.id === 'clean-white' ? 0.35 : 0.52,
             zIndex: 0,
           }} />
           <div style={{
             position: 'absolute',
             inset: 0,
-            background: 'linear-gradient(to top, rgba(0,0,0,0.68) 0%, rgba(0,0,0,0.15) 55%, rgba(0,0,0,0.05) 100%)',
+            background: activeTheme.overlayGradient,
             zIndex: 1,
           }} />
         </>
@@ -416,7 +527,7 @@ function SlidePreview({ slide, imageUrl, slideRef, format, exportMode = false, t
             fontFamily: 'Montserrat, sans-serif',
             fontWeight: 900,
             fontSize: ts('clamp(16px, 4.5vw, 24px)'),
-            color: '#FFFFFF',
+            color: activeTheme.headlineColor,
             lineHeight: 1.05,
             marginBottom: '10px',
             letterSpacing: '-0.01em',
@@ -429,7 +540,7 @@ function SlidePreview({ slide, imageUrl, slideRef, format, exportMode = false, t
               fontFamily: 'Montserrat, sans-serif',
               fontWeight: 600,
               fontSize: ts('10px'),
-              color: 'rgba(255,255,255,0.75)',
+              color: activeTheme.subtextColor,
               letterSpacing: '0.06em',
             }}>{slide.subtext}</div>
           )}
@@ -441,8 +552,8 @@ function SlidePreview({ slide, imageUrl, slideRef, format, exportMode = false, t
             marginTop: '18px',
             letterSpacing: '0.04em',
           }}>
-            <span style={{ color: 'rgba(255,255,255,0.45)' }}>pronto. </span>
-            <span style={{ color: '#FFFFFF' }}>resolvido.</span>
+            <span style={{ color: activeTheme.sloganDim }}>pronto. </span>
+            <span style={{ color: activeTheme.sloganBright }}>resolvido.</span>
           </div>
         </div>
       )}
@@ -453,7 +564,7 @@ function SlidePreview({ slide, imageUrl, slideRef, format, exportMode = false, t
             fontFamily: 'Montserrat, sans-serif',
             fontWeight: 900,
             fontSize: ts('clamp(44px, 13vw, 72px)'),
-            color: '#FFFFFF',
+            color: activeTheme.headlineColor,
             lineHeight: 0.9,
             letterSpacing: '-0.03em',
             marginBottom: '10px',
@@ -466,7 +577,7 @@ function SlidePreview({ slide, imageUrl, slideRef, format, exportMode = false, t
               fontFamily: 'Montserrat, sans-serif',
               fontWeight: 700,
               fontSize: ts('11px'),
-              color: 'rgba(255,255,255,0.8)',
+              color: activeTheme.subtextColor,
               lineHeight: 1.3,
               letterSpacing: '0.02em',
               textTransform: 'uppercase',
@@ -494,7 +605,7 @@ function SlidePreview({ slide, imageUrl, slideRef, format, exportMode = false, t
               fontFamily: 'Montserrat, sans-serif',
               fontWeight: 600,
               fontSize: ts('10px'),
-              color: 'rgba(255,255,255,0.75)',
+              color: activeTheme.subtextColor,
               lineHeight: 1.45,
               letterSpacing: '0.03em',
             }}>{slide.subtext}</div>
@@ -512,7 +623,7 @@ function SlidePreview({ slide, imageUrl, slideRef, format, exportMode = false, t
         <img src={dqfIcon} alt="DQF" style={{
           width: exportMode ? `${18 * exportScale}px` : '18px',
           height: exportMode ? `${18 * exportScale}px` : '18px',
-          filter: 'brightness(0) invert(1)',
+          filter: activeTheme.iconFilter,
         }} />
       </div>
     </div>
@@ -533,13 +644,14 @@ interface SlideCardProps {
   onLibraryChange: () => void;
   format: CreativeFormat;
   textScale?: number;
+  theme?: CarouselTheme;
 }
 
 function buildGenericImagePrompt(slide: SlideOutput): string {
   return `Editorial photography for a Brazilian service brand carousel slide. Style: documentary, natural light, authentic moment. The slide headline is "${slide.headline}". Create a background image that evokes this concept — no text, no overlays, no logos. The image will have a semi-transparent orange (#E8603C) overlay, so use high-contrast composition. Shot on Canon EOS R5, 35mm lens, f/2.8. Professional but human.`;
 }
 
-function SlideCard({ slide, imageUrl, isGenerating, onGenerateImage, onClearImage, onApplyLibraryImage, mediaLibraryCount, userId, onLibraryChange, format, textScale }: SlideCardProps) {
+function SlideCard({ slide, imageUrl, isGenerating, onGenerateImage, onClearImage, onApplyLibraryImage, mediaLibraryCount, userId, onLibraryChange, format, textScale, theme }: SlideCardProps) {
   const { toast } = useToast();
   const [expanded, setExpanded] = useState(false);
   const slideRef = useRef<HTMLDivElement>(null);
@@ -691,7 +803,7 @@ function SlideCard({ slide, imageUrl, isGenerating, onGenerateImage, onClearImag
 
       {/* ── Slide preview (display — fluid) ── */}
       <div className="p-3">
-        <SlidePreview slide={editedSlide} imageUrl={imageUrl} slideRef={slideRef} format={format} textScale={textScale} />
+        <SlidePreview slide={editedSlide} imageUrl={imageUrl} slideRef={slideRef} format={format} textScale={textScale} theme={theme} />
       </div>
 
       {/* ── Quick actions bar ── */}
@@ -921,7 +1033,7 @@ function SlideCard({ slide, imageUrl, isGenerating, onGenerateImage, onClearImag
 
       {/* Offscreen full-res node for PNG export */}
       <div style={{ position: 'fixed', left: '-99999px', top: 0, pointerEvents: 'none', zIndex: -1 }}>
-        <SlidePreview slide={editedSlide} imageUrl={imageUrl} slideRef={exportRef} format={format} exportMode textScale={textScale} />
+        <SlidePreview slide={editedSlide} imageUrl={imageUrl} slideRef={exportRef} format={format} exportMode textScale={textScale} theme={theme} />
       </div>
     </div>
   );
@@ -2360,6 +2472,8 @@ export default function AiCarrosseis() {
   const [result, setResult] = useState<{ carousel: CarouselOutput; autonomous: boolean } | null>(null);
   const [selectedFormat, setSelectedFormat] = useState<CreativeFormat>(CREATIVE_FORMATS[0]);
   const [textScale, setTextScale] = useState(1);
+  const [selectedThemeId, setSelectedThemeId] = useState<CarouselThemeId>('brand-orange');
+  const activeTheme = CAROUSEL_THEMES.find(t => t.id === selectedThemeId) ?? CAROUSEL_THEMES[0];
 
   // Per-slide image state
   const [slideImages, setSlideImages] = useState<Record<number, string>>({});
@@ -2810,6 +2924,9 @@ export default function AiCarrosseis() {
                     </div>
                   </div>
 
+                  {/* Theme picker */}
+                  <ThemePicker selected={selectedThemeId} onChange={setSelectedThemeId} />
+
                   {/* Format selector */}
                   <div>
                     <p className="text-xs font-bold text-muted-foreground tracking-widest mb-2.5">FORMATO DE SAÍDA</p>
@@ -3005,6 +3122,22 @@ export default function AiCarrosseis() {
                   />
                   <span className="text-sm font-bold text-muted-foreground">A</span>
                   <span className="text-[10px] font-mono text-primary min-w-[36px] text-right">{Math.round(textScale * 100)}%</span>
+                  <div className="h-4 w-px bg-border mx-1" />
+                  {/* Inline theme switcher */}
+                  <div className="flex gap-1">
+                    {CAROUSEL_THEMES.map(t => (
+                      <button
+                        key={t.id}
+                        onClick={() => setSelectedThemeId(t.id)}
+                        title={t.label}
+                        className={cn(
+                          'h-5 w-5 rounded-full border-2 transition-all flex-shrink-0',
+                          selectedThemeId === t.id ? 'border-primary scale-110' : 'border-border hover:border-muted-foreground'
+                        )}
+                        style={{ background: t.previewSwatch[0] }}
+                      />
+                    ))}
+                  </div>
                 </div>
 
                 {/* Slides grid */}
@@ -3023,6 +3156,7 @@ export default function AiCarrosseis() {
                       onLibraryChange={fetchLibrary}
                       format={selectedFormat}
                       textScale={textScale}
+                      theme={activeTheme}
                     />
                   ))}
                 </div>
