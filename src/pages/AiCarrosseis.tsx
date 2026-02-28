@@ -299,18 +299,18 @@ export const CAROUSEL_THEMES: CarouselTheme[] = [
   {
     id: 'dark-premium',
     label: 'Dark Premium',
-    description: 'Escuro sofisticado com teal',
+    description: 'Escuro sofisticado',
     bg: 'linear-gradient(160deg, #0F0F0F 0%, #1A1A2E 100%)',
     overlayGradient: 'linear-gradient(to top, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0.2) 55%, rgba(0,0,0,0.1) 100%)',
     headlineColor: '#FFFFFF',
     subtextColor: 'rgba(255,255,255,0.65)',
-    highlightColor: '#00A7B5',
-    highlightBgOnImage: 'rgba(0,167,181,0.25)',
+    highlightColor: '#E8603C',
+    highlightBgOnImage: 'rgba(232,96,60,0.25)',
     sloganDim: 'rgba(255,255,255,0.35)',
-    sloganBright: '#00A7B5',
+    sloganBright: '#E8603C',
     iconFilter: 'brightness(0) invert(1)',
     previewBorder: '#00A7B5',
-    previewSwatch: ['#0F0F0F', '#00A7B5', '#FFFFFF'],
+    previewSwatch: ['#0F0F0F', '#E8603C', '#FFFFFF'],
   },
 ];
 
@@ -419,12 +419,13 @@ interface SlidePreviewProps {
   exportMode?: boolean;
   textScale?: number;
   theme?: CarouselTheme;
+  imageOpacity?: number;
 }
 
 // Approximate width of a single slide card in the UI preview (px)
 const PREVIEW_BASE_WIDTH = 340;
 
-function SlidePreview({ slide, imageUrl, slideRef, format, exportMode = false, textScale = 1, theme }: SlidePreviewProps) {
+function SlidePreview({ slide, imageUrl, slideRef, format, exportMode = false, textScale = 1, theme, imageOpacity = 0.52 }: SlidePreviewProps) {
   const activeTheme = theme ?? CAROUSEL_THEMES[0];
   const fmt = format ?? CREATIVE_FORMATS[0];
   const exportScale = exportMode ? fmt.width / PREVIEW_BASE_WIDTH : 1;
@@ -509,7 +510,7 @@ function SlidePreview({ slide, imageUrl, slideRef, format, exportMode = false, t
             backgroundImage: `url(${imageUrl})`,
             backgroundSize: 'cover',
             backgroundPosition: 'center',
-            opacity: activeTheme.id === 'clean-white' ? 0.35 : 0.52,
+            opacity: imageOpacity,
             zIndex: 0,
           }} />
           <div style={{
@@ -645,13 +646,14 @@ interface SlideCardProps {
   format: CreativeFormat;
   textScale?: number;
   theme?: CarouselTheme;
+  imageOpacity?: number;
 }
 
 function buildGenericImagePrompt(slide: SlideOutput): string {
   return `Editorial photography for a Brazilian service brand carousel slide. Style: documentary, natural light, authentic moment. The slide headline is "${slide.headline}". Create a background image that evokes this concept — no text, no overlays, no logos. The image will have a semi-transparent orange (#E8603C) overlay, so use high-contrast composition. Shot on Canon EOS R5, 35mm lens, f/2.8. Professional but human.`;
 }
 
-function SlideCard({ slide, imageUrl, isGenerating, onGenerateImage, onClearImage, onApplyLibraryImage, mediaLibraryCount, userId, onLibraryChange, format, textScale, theme }: SlideCardProps) {
+function SlideCard({ slide, imageUrl, isGenerating, onGenerateImage, onClearImage, onApplyLibraryImage, mediaLibraryCount, userId, onLibraryChange, format, textScale, theme, imageOpacity }: SlideCardProps) {
   const { toast } = useToast();
   const [expanded, setExpanded] = useState(false);
   const slideRef = useRef<HTMLDivElement>(null);
@@ -803,7 +805,7 @@ function SlideCard({ slide, imageUrl, isGenerating, onGenerateImage, onClearImag
 
       {/* ── Slide preview (display — fluid) ── */}
       <div className="p-3">
-        <SlidePreview slide={editedSlide} imageUrl={imageUrl} slideRef={slideRef} format={format} textScale={textScale} theme={theme} />
+        <SlidePreview slide={editedSlide} imageUrl={imageUrl} slideRef={slideRef} format={format} textScale={textScale} theme={theme} imageOpacity={imageOpacity} />
       </div>
 
       {/* ── Quick actions bar ── */}
@@ -1033,7 +1035,7 @@ function SlideCard({ slide, imageUrl, isGenerating, onGenerateImage, onClearImag
 
       {/* Offscreen full-res node for PNG export */}
       <div style={{ position: 'fixed', left: '-99999px', top: 0, pointerEvents: 'none', zIndex: -1 }}>
-        <SlidePreview slide={editedSlide} imageUrl={imageUrl} slideRef={exportRef} format={format} exportMode textScale={textScale} theme={theme} />
+        <SlidePreview slide={editedSlide} imageUrl={imageUrl} slideRef={exportRef} format={format} exportMode textScale={textScale} theme={theme} imageOpacity={imageOpacity} />
       </div>
     </div>
   );
@@ -2474,6 +2476,7 @@ export default function AiCarrosseis() {
   const [textScale, setTextScale] = useState(1);
   const [selectedThemeId, setSelectedThemeId] = useState<CarouselThemeId>('brand-orange');
   const activeTheme = CAROUSEL_THEMES.find(t => t.id === selectedThemeId) ?? CAROUSEL_THEMES[0];
+  const [imageOpacity, setImageOpacity] = useState(0.52);
 
   // Per-slide image state
   const [slideImages, setSlideImages] = useState<Record<number, string>>({});
@@ -3140,6 +3143,21 @@ export default function AiCarrosseis() {
                   </div>
                 </div>
 
+                {/* Image opacity slider */}
+                <div className="flex items-center gap-3 mb-4 rounded-lg border border-border bg-card px-4 py-2.5">
+                  <span className="text-[10px] font-bold text-muted-foreground tracking-widest uppercase whitespace-nowrap">Imagem</span>
+                  <ImageIcon className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+                  <Slider
+                    value={[imageOpacity]}
+                    onValueChange={([v]) => setImageOpacity(v)}
+                    min={0.1}
+                    max={1}
+                    step={0.05}
+                    className="flex-1"
+                  />
+                  <span className="text-[10px] font-mono text-primary min-w-[36px] text-right">{Math.round(imageOpacity * 100)}%</span>
+                </div>
+
                 {/* Slides grid */}
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-3 gap-3 mb-6">
                   {result.carousel.slides.map(slide => (
@@ -3157,6 +3175,7 @@ export default function AiCarrosseis() {
                       format={selectedFormat}
                       textScale={textScale}
                       theme={activeTheme}
+                      imageOpacity={imageOpacity}
                     />
                   ))}
                 </div>
