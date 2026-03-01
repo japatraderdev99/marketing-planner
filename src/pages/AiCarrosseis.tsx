@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Layers, Wand2, Copy, Check, Download, ChevronDown, ChevronUp, ImageIcon, Video, Zap, RefreshCw, Image, Minimize2, Shuffle, Upload, Trash2, Library, X, Star, Target, FileText, Users, Megaphone, TrendingUp, BookOpen, AlertTriangle, PlusCircle, File, Eye, Save, MessageSquare, Clock, CheckCircle, XCircle, Send, BookMarked, Inbox, ShieldCheck, Loader2 } from 'lucide-react';
+import { Layers, Wand2, Copy, Check, Download, ChevronDown, ChevronUp, ImageIcon, Video, Zap, RefreshCw, Image, Minimize2, Shuffle, Upload, Trash2, Library, X, Star, Target, FileText, Users, Megaphone, TrendingUp, BookOpen, AlertTriangle, PlusCircle, File, Eye, Save, MessageSquare, Clock, CheckCircle, XCircle, Send, BookMarked, Inbox, ShieldCheck, Loader2, Grid3x3 } from 'lucide-react';
 import CampaignKnowledgeSelector from '@/components/CampaignKnowledgeSelector';
 import dqfIcon from '@/assets/dqf-icon.svg';
 import { Button } from '@/components/ui/button';
@@ -103,6 +103,14 @@ export const CREATIVE_FORMATS: CreativeFormat[] = [
     width: 1080, height: 1350, ratio: '4:5',
     safeZone: { top: 90, right: 90, bottom: 90, left: 90 },
     notes: 'Ocupa mais espaço no feed — maior impacto',
+  },
+  {
+    id: 'ig-feed-3x4',
+    label: 'Feed 3:4',
+    platform: 'Instagram',
+    width: 1080, height: 1440, ratio: '3:4',
+    safeZone: { top: 90, right: 90, bottom: 90, left: 90 },
+    notes: 'Formato vertical máximo para carrossel',
   },
   {
     id: 'ig-feed-1x1',
@@ -411,6 +419,8 @@ function CopyButton({ text, label = 'Copiar', size = 'sm' }: { text: string; lab
 
 // ─── SlidePreview ─────────────────────────────────────────────────────────────
 
+type TextPosition = 'top' | 'center' | 'bottom';
+
 interface SlidePreviewProps {
   slide: SlideOutput;
   imageUrl?: string;
@@ -420,12 +430,16 @@ interface SlidePreviewProps {
   textScale?: number;
   theme?: CarouselTheme;
   imageOpacity?: number;
+  textPosition?: TextPosition;
+  headlineScale?: number;
+  imageScale?: number;
+  imageOffsetY?: number;
 }
 
 // Approximate width of a single slide card in the UI preview (px)
 const PREVIEW_BASE_WIDTH = 340;
 
-function SlidePreview({ slide, imageUrl, slideRef, format, exportMode = false, textScale = 1, theme, imageOpacity = 0.52 }: SlidePreviewProps) {
+function SlidePreview({ slide, imageUrl, slideRef, format, exportMode = false, textScale = 1, theme, imageOpacity = 0.52, textPosition = 'bottom', headlineScale = 1, imageScale = 1, imageOffsetY = 0 }: SlidePreviewProps) {
   const activeTheme = theme ?? CAROUSEL_THEMES[0];
   const fmt = format ?? CREATIVE_FORMATS[0];
   const exportScale = exportMode ? fmt.width / PREVIEW_BASE_WIDTH : 1;
@@ -496,7 +510,7 @@ function SlidePreview({ slide, imageUrl, slideRef, format, exportMode = false, t
         overflow: 'hidden',
         display: 'flex',
         flexDirection: 'column',
-        justifyContent: isDataSlide ? 'center' : isCTA ? 'center' : 'flex-end',
+        justifyContent: isDataSlide ? 'center' : isCTA ? 'center' : textPosition === 'top' ? 'flex-start' : textPosition === 'center' ? 'center' : 'flex-end',
         alignItems: isCTA ? 'center' : 'flex-start',
         ...paddingStyle,
         boxSizing: 'border-box',
@@ -508,8 +522,8 @@ function SlidePreview({ slide, imageUrl, slideRef, format, exportMode = false, t
             position: 'absolute',
             inset: 0,
             backgroundImage: `url(${imageUrl})`,
-            backgroundSize: 'cover',
-            backgroundPosition: 'center',
+            backgroundSize: imageScale === 1 ? 'cover' : `${imageScale * 100}%`,
+            backgroundPosition: `center ${50 + imageOffsetY}%`,
             opacity: imageOpacity,
             zIndex: 0,
           }} />
@@ -592,11 +606,11 @@ function SlidePreview({ slide, imageUrl, slideRef, format, exportMode = false, t
           <div style={{
             fontFamily: 'Montserrat, sans-serif',
             fontWeight: 900,
-            fontSize: ts('clamp(14px, 3.8vw, 22px)'),
+            fontSize: ts(`clamp(${14 * headlineScale}px, ${3.8 * headlineScale}vw, ${22 * headlineScale}px)`),
             lineHeight: 1.1,
             letterSpacing: '-0.01em',
             marginBottom: slide.subtext ? '8px' : '0',
-            whiteSpace: 'pre-line',
+            whiteSpace: 'pre-line' as const,
             textTransform: 'uppercase',
           }}>
             {renderHeadline(slide.headline, slide.headlineHighlight)}
@@ -647,13 +661,17 @@ interface SlideCardProps {
   textScale?: number;
   theme?: CarouselTheme;
   imageOpacity?: number;
+  textPosition?: TextPosition;
+  headlineScale?: number;
+  imageScale?: number;
+  imageOffsetY?: number;
 }
 
 function buildGenericImagePrompt(slide: SlideOutput): string {
   return `Editorial photography for a Brazilian service brand carousel slide. Style: documentary, natural light, authentic moment. The slide headline is "${slide.headline}". Create a background image that evokes this concept — no text, no overlays, no logos. The image will have a semi-transparent orange (#E8603C) overlay, so use high-contrast composition. Shot on Canon EOS R5, 35mm lens, f/2.8. Professional but human.`;
 }
 
-function SlideCard({ slide, imageUrl, isGenerating, onGenerateImage, onClearImage, onApplyLibraryImage, mediaLibraryCount, userId, onLibraryChange, format, textScale, theme, imageOpacity }: SlideCardProps) {
+function SlideCard({ slide, imageUrl, isGenerating, onGenerateImage, onClearImage, onApplyLibraryImage, mediaLibraryCount, userId, onLibraryChange, format, textScale, theme, imageOpacity, textPosition, headlineScale, imageScale, imageOffsetY }: SlideCardProps) {
   const { toast } = useToast();
   const [expanded, setExpanded] = useState(false);
   const slideRef = useRef<HTMLDivElement>(null);
@@ -805,7 +823,7 @@ function SlideCard({ slide, imageUrl, isGenerating, onGenerateImage, onClearImag
 
       {/* ── Slide preview (display — fluid) ── */}
       <div className="p-3">
-        <SlidePreview slide={editedSlide} imageUrl={imageUrl} slideRef={slideRef} format={format} textScale={textScale} theme={theme} imageOpacity={imageOpacity} />
+        <SlidePreview slide={editedSlide} imageUrl={imageUrl} slideRef={slideRef} format={format} textScale={textScale} theme={theme} imageOpacity={imageOpacity} textPosition={textPosition} headlineScale={headlineScale} imageScale={imageScale} imageOffsetY={imageOffsetY} />
       </div>
 
       {/* ── Quick actions bar ── */}
@@ -1035,7 +1053,7 @@ function SlideCard({ slide, imageUrl, isGenerating, onGenerateImage, onClearImag
 
       {/* Offscreen full-res node for PNG export */}
       <div style={{ position: 'fixed', left: '-99999px', top: 0, pointerEvents: 'none', zIndex: -1 }}>
-        <SlidePreview slide={editedSlide} imageUrl={imageUrl} slideRef={exportRef} format={format} exportMode textScale={textScale} theme={theme} imageOpacity={imageOpacity} />
+        <SlidePreview slide={editedSlide} imageUrl={imageUrl} slideRef={exportRef} format={format} exportMode textScale={textScale} theme={theme} imageOpacity={imageOpacity} textPosition={textPosition} headlineScale={headlineScale} imageScale={imageScale} imageOffsetY={imageOffsetY} />
       </div>
     </div>
   );
@@ -2477,6 +2495,10 @@ export default function AiCarrosseis() {
   const [selectedThemeId, setSelectedThemeId] = useState<CarouselThemeId>('brand-orange');
   const activeTheme = CAROUSEL_THEMES.find(t => t.id === selectedThemeId) ?? CAROUSEL_THEMES[0];
   const [imageOpacity, setImageOpacity] = useState(0.52);
+  const [textPosition, setTextPosition] = useState<TextPosition>('bottom');
+  const [headlineScale, setHeadlineScale] = useState(1);
+  const [imageScale, setImageScale] = useState(1);
+  const [imageOffsetY, setImageOffsetY] = useState(0);
 
   // Per-slide image state
   const [slideImages, setSlideImages] = useState<Record<number, string>>({});
@@ -3111,51 +3133,60 @@ export default function AiCarrosseis() {
                   </div>
                 </div>
 
-                {/* Text size slider */}
-                <div className="flex items-center gap-3 mb-4 rounded-lg border border-border bg-card px-4 py-2.5">
-                  <span className="text-[10px] font-bold text-muted-foreground tracking-widest uppercase whitespace-nowrap">Texto</span>
-                  <span className="text-[10px] text-muted-foreground">A</span>
-                  <Slider
-                    value={[textScale]}
-                    onValueChange={([v]) => setTextScale(v)}
-                    min={0.5}
-                    max={2}
-                    step={0.05}
-                    className="flex-1"
-                  />
-                  <span className="text-sm font-bold text-muted-foreground">A</span>
-                  <span className="text-[10px] font-mono text-primary min-w-[36px] text-right">{Math.round(textScale * 100)}%</span>
-                  <div className="h-4 w-px bg-border mx-1" />
-                  {/* Inline theme switcher */}
-                  <div className="flex gap-1">
-                    {CAROUSEL_THEMES.map(t => (
-                      <button
-                        key={t.id}
-                        onClick={() => setSelectedThemeId(t.id)}
-                        title={t.label}
-                        className={cn(
-                          'h-5 w-5 rounded-full border-2 transition-all flex-shrink-0',
-                          selectedThemeId === t.id ? 'border-primary scale-110' : 'border-border hover:border-muted-foreground'
-                        )}
-                        style={{ background: t.previewSwatch[0] }}
-                      />
-                    ))}
+                {/* Layout Controls */}
+                <div className="space-y-2 mb-4">
+                  {/* Text size + theme */}
+                  <div className="flex items-center gap-3 rounded-lg border border-border bg-card px-4 py-2.5">
+                    <span className="text-[10px] font-bold text-muted-foreground tracking-widest uppercase whitespace-nowrap">Texto</span>
+                    <span className="text-[10px] text-muted-foreground">A</span>
+                    <Slider value={[textScale]} onValueChange={([v]) => setTextScale(v)} min={0.5} max={2} step={0.05} className="flex-1" />
+                    <span className="text-sm font-bold text-muted-foreground">A</span>
+                    <span className="text-[10px] font-mono text-primary min-w-[36px] text-right">{Math.round(textScale * 100)}%</span>
+                    <div className="h-4 w-px bg-border mx-1" />
+                    <div className="flex gap-1">
+                      {CAROUSEL_THEMES.map(t => (
+                        <button key={t.id} onClick={() => setSelectedThemeId(t.id)} title={t.label}
+                          className={cn('h-5 w-5 rounded-full border-2 transition-all flex-shrink-0', selectedThemeId === t.id ? 'border-primary scale-110' : 'border-border hover:border-muted-foreground')}
+                          style={{ background: t.previewSwatch[0] }}
+                        />
+                      ))}
+                    </div>
                   </div>
-                </div>
 
-                {/* Image opacity slider */}
-                <div className="flex items-center gap-3 mb-4 rounded-lg border border-border bg-card px-4 py-2.5">
-                  <span className="text-[10px] font-bold text-muted-foreground tracking-widest uppercase whitespace-nowrap">Imagem</span>
-                  <ImageIcon className="h-3 w-3 text-muted-foreground flex-shrink-0" />
-                  <Slider
-                    value={[imageOpacity]}
-                    onValueChange={([v]) => setImageOpacity(v)}
-                    min={0.1}
-                    max={1}
-                    step={0.05}
-                    className="flex-1"
-                  />
-                  <span className="text-[10px] font-mono text-primary min-w-[36px] text-right">{Math.round(imageOpacity * 100)}%</span>
+                  {/* Text position + headline size */}
+                  <div className="flex items-center gap-3 rounded-lg border border-border bg-card px-4 py-2.5">
+                    <span className="text-[10px] font-bold text-muted-foreground tracking-widest uppercase whitespace-nowrap">Posição</span>
+                    <div className="flex gap-1">
+                      {([['top', '↑'], ['center', '↔'], ['bottom', '↓']] as [TextPosition, string][]).map(([pos, icon]) => (
+                        <button key={pos} onClick={() => setTextPosition(pos)}
+                          className={cn('h-6 w-8 rounded text-xs font-bold border transition-all', textPosition === pos ? 'bg-primary/15 border-primary text-primary' : 'border-border text-muted-foreground hover:text-foreground')}
+                        >{icon}</button>
+                      ))}
+                    </div>
+                    <div className="h-4 w-px bg-border mx-1" />
+                    <span className="text-[10px] font-bold text-muted-foreground tracking-widest uppercase whitespace-nowrap">Headline</span>
+                    <Slider value={[headlineScale]} onValueChange={([v]) => setHeadlineScale(v)} min={0.5} max={2.5} step={0.1} className="flex-1" />
+                    <span className="text-[10px] font-mono text-primary min-w-[36px] text-right">{Math.round(headlineScale * 100)}%</span>
+                  </div>
+
+                  {/* Image controls */}
+                  <div className="flex items-center gap-3 rounded-lg border border-border bg-card px-4 py-2.5">
+                    <span className="text-[10px] font-bold text-muted-foreground tracking-widest uppercase whitespace-nowrap">Imagem</span>
+                    <ImageIcon className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+                    <Slider value={[imageOpacity]} onValueChange={([v]) => setImageOpacity(v)} min={0.1} max={1} step={0.05} className="flex-1" />
+                    <span className="text-[10px] font-mono text-primary min-w-[36px] text-right">{Math.round(imageOpacity * 100)}%</span>
+                  </div>
+
+                  {/* Image zoom + position */}
+                  <div className="flex items-center gap-3 rounded-lg border border-border bg-card px-4 py-2.5">
+                    <span className="text-[10px] font-bold text-muted-foreground tracking-widest uppercase whitespace-nowrap">Zoom</span>
+                    <Slider value={[imageScale]} onValueChange={([v]) => setImageScale(v)} min={0.5} max={3} step={0.1} className="flex-1" />
+                    <span className="text-[10px] font-mono text-primary min-w-[30px] text-right">{Math.round(imageScale * 100)}%</span>
+                    <div className="h-4 w-px bg-border mx-1" />
+                    <span className="text-[10px] font-bold text-muted-foreground tracking-widest uppercase whitespace-nowrap">Y</span>
+                    <Slider value={[imageOffsetY]} onValueChange={([v]) => setImageOffsetY(v)} min={-50} max={50} step={1} className="flex-1" />
+                    <span className="text-[10px] font-mono text-primary min-w-[30px] text-right">{imageOffsetY > 0 ? '+' : ''}{imageOffsetY}</span>
+                  </div>
                 </div>
 
                 {/* Slides grid */}
@@ -3176,6 +3207,10 @@ export default function AiCarrosseis() {
                       textScale={textScale}
                       theme={activeTheme}
                       imageOpacity={imageOpacity}
+                      textPosition={textPosition}
+                      headlineScale={headlineScale}
+                      imageScale={imageScale}
+                      imageOffsetY={imageOffsetY}
                     />
                   ))}
                 </div>
@@ -3214,6 +3249,46 @@ export default function AiCarrosseis() {
                       <Save className="h-3.5 w-3.5" />
                       Salvar Draft
                       {lastSavedSigla && <span className="text-[9px] opacity-70">({lastSavedSigla})</span>}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="gap-1.5 border-green-500/40 text-green-600 hover:bg-green-500/10"
+                      onClick={async () => {
+                        if (!userId || !result) return;
+                        // Use first slide image or generate a placeholder
+                        const firstSlideImg = slideImages[1];
+                        if (!firstSlideImg) {
+                          toast({ title: 'Sem imagem', description: 'Adicione uma imagem à primeira lâmina antes de enviar ao grid.', variant: 'destructive' });
+                          return;
+                        }
+                        // Get current max grid position
+                        const { data: gridItems } = await supabase
+                          .from('active_creatives')
+                          .select('grid_position')
+                          .not('grid_position', 'is', null)
+                          .order('grid_position', { ascending: false })
+                          .limit(1);
+                        const nextPos = (gridItems?.[0]?.grid_position ?? -1) + 1;
+                        const { error } = await supabase.from('active_creatives').insert({
+                          user_id: userId,
+                          title: result.carousel.title,
+                          file_url: firstSlideImg,
+                          thumbnail_url: firstSlideImg,
+                          platform: 'Instagram',
+                          format_type: 'Carrossel',
+                          status: 'active',
+                          grid_position: nextPos,
+                        });
+                        if (!error) {
+                          toast({ title: '📱 Enviado para o Grid!', description: 'A capa do carrossel foi adicionada ao Grid Instagram.' });
+                        } else {
+                          toast({ title: 'Erro', description: error.message, variant: 'destructive' });
+                        }
+                      }}
+                    >
+                      <Grid3x3 className="h-3.5 w-3.5" />
+                      Enviar para Grid
                     </Button>
                     <Button
                       size="sm"
