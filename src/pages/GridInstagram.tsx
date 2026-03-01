@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
@@ -15,9 +15,10 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import { toPng } from 'html-to-image';
 import {
-  Plus, Download, Trash2, Image as ImageIcon, Upload, Grid3x3, User, Heart, MessageCircle, Send, Bookmark,
+  Plus, Download, Trash2, Image as ImageIcon, Upload, Grid3x3, User, Edit3,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Textarea } from '@/components/ui/textarea';
 
 interface GridItem {
   id: string;
@@ -55,8 +56,24 @@ export default function GridInstagram() {
   const [uploading, setUploading] = useState(false);
   const [newFile, setNewFile] = useState<File | null>(null);
   const [newTitle, setNewTitle] = useState('');
-  const [profileName, setProfileName] = useState('@seuperfil');
   const [selectedItem, setSelectedItem] = useState<GridItem | null>(null);
+
+  // Editable profile fields
+  const [profileName, setProfileName] = useState(() => localStorage.getItem('grid_profileName') || '@seuperfil');
+  const [profileBio, setProfileBio] = useState(() => localStorage.getItem('grid_profileBio') || 'Bio do perfil · Edite abaixo');
+  const [profileFollowers, setProfileFollowers] = useState(() => localStorage.getItem('grid_profileFollowers') || '10.2k');
+  const [profileFollowing, setProfileFollowing] = useState(() => localStorage.getItem('grid_profileFollowing') || '482');
+  const [profileAvatar, setProfileAvatar] = useState(() => localStorage.getItem('grid_profileAvatar') || '');
+  const [editingProfile, setEditingProfile] = useState(false);
+
+  // Save profile to localStorage on change
+  useEffect(() => {
+    localStorage.setItem('grid_profileName', profileName);
+    localStorage.setItem('grid_profileBio', profileBio);
+    localStorage.setItem('grid_profileFollowers', profileFollowers);
+    localStorage.setItem('grid_profileFollowing', profileFollowing);
+    localStorage.setItem('grid_profileAvatar', profileAvatar);
+  }, [profileName, profileBio, profileFollowers, profileFollowing, profileAvatar]);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
@@ -79,7 +96,6 @@ export default function GridInstagram() {
       const oldIdx = prev.findIndex((i) => i.id === active.id);
       const newIdx = prev.findIndex((i) => i.id === over.id);
       const updated = arrayMove(prev, oldIdx, newIdx);
-      // Persist positions
       updated.forEach((item, idx) => {
         supabase.from('active_creatives').update({ grid_position: idx }).eq('id', item.id).then(() => {});
       });
@@ -132,6 +148,17 @@ export default function GridInstagram() {
     toast({ title: 'Grid exportado como PNG!' });
   }
 
+  const handleAvatarUpload = async (file: File) => {
+    if (!user) return;
+    const ext = file.name.split('.').pop();
+    const path = `${user.id}/avatar-${Date.now()}.${ext}`;
+    const { error } = await supabase.storage.from('brand-assets').upload(path, file);
+    if (error) { toast({ title: 'Erro', description: error.message, variant: 'destructive' }); return; }
+    const { data } = supabase.storage.from('brand-assets').getPublicUrl(path);
+    setProfileAvatar(data.publicUrl);
+    toast({ title: 'Avatar atualizado!' });
+  };
+
   const visibleItems = items.slice(0, visibleRows * 3);
 
   return (
@@ -140,6 +167,9 @@ export default function GridInstagram() {
       <div className="flex items-center gap-2">
         <Button size="sm" variant="outline" onClick={() => setShowUpload(true)}><Plus className="mr-1 h-3.5 w-3.5" /> Adicionar post</Button>
         <Button size="sm" variant="outline" onClick={handleExportPNG}><Download className="mr-1 h-3.5 w-3.5" /> Exportar PNG</Button>
+        <Button size="sm" variant="outline" onClick={() => setEditingProfile(!editingProfile)}>
+          <Edit3 className="mr-1 h-3.5 w-3.5" /> Editar perfil
+        </Button>
         <div className="ml-auto flex gap-1">
           {[3, 6, 9].map((n) => (
             <Button key={n} size="sm" variant={visibleRows === n ? 'default' : 'ghost'} onClick={() => setVisibleRows(n)}>{n}</Button>
@@ -147,24 +177,62 @@ export default function GridInstagram() {
         </div>
       </div>
 
+      {/* Profile Edit Panel */}
+      {editingProfile && (
+        <Card className="p-4 space-y-3 border-primary/30 bg-card">
+          <p className="text-xs font-bold text-primary tracking-widest uppercase">Editar Perfil do Mockup</p>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="col-span-2">
+              <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Nome do perfil</label>
+              <Input value={profileName} onChange={(e) => setProfileName(e.target.value)} placeholder="@seuperfil" className="text-sm mt-1" />
+            </div>
+            <div className="col-span-2">
+              <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Bio</label>
+              <Textarea value={profileBio} onChange={(e) => setProfileBio(e.target.value)} placeholder="Bio do perfil" rows={2} className="text-sm mt-1 resize-none" />
+            </div>
+            <div>
+              <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Seguidores</label>
+              <Input value={profileFollowers} onChange={(e) => setProfileFollowers(e.target.value)} placeholder="10.2k" className="text-sm mt-1" />
+            </div>
+            <div>
+              <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Seguindo</label>
+              <Input value={profileFollowing} onChange={(e) => setProfileFollowing(e.target.value)} placeholder="482" className="text-sm mt-1" />
+            </div>
+            <div className="col-span-2">
+              <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Avatar (upload)</label>
+              <input
+                type="file"
+                accept="image/*"
+                className="mt-1 text-xs file:mr-2 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) handleAvatarUpload(f); }}
+              />
+            </div>
+          </div>
+        </Card>
+      )}
+
       {/* Instagram Mockup */}
       <Card className="overflow-hidden border-border bg-white text-black">
         <div ref={gridRef} className="bg-white">
           {/* Profile Header */}
           <div className="flex items-center gap-4 p-4">
             <div className="flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-pink-500 via-red-500 to-amber-500">
-              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-white">
-                <User className="h-8 w-8 text-gray-400" />
+              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-white overflow-hidden">
+                {profileAvatar ? (
+                  <img src={profileAvatar} alt="Avatar" className="h-full w-full object-cover" />
+                ) : (
+                  <User className="h-8 w-8 text-gray-400" />
+                )}
               </div>
             </div>
             <div className="flex-1">
               <p className="text-sm font-bold text-black">{profileName}</p>
               <div className="mt-1 flex gap-4 text-xs text-gray-600">
                 <span><strong className="text-black">{items.length}</strong> posts</span>
-                <span><strong className="text-black">10.2k</strong> seguidores</span>
-                <span><strong className="text-black">482</strong> seguindo</span>
+                <span><strong className="text-black">{profileFollowers}</strong> seguidores</span>
+                <span><strong className="text-black">{profileFollowing}</strong> seguindo</span>
               </div>
-              <p className="mt-1 text-xs text-gray-500">Bio do perfil · Edite o nome acima</p>
+              <p className="mt-1 text-xs text-gray-500 whitespace-pre-line">{profileBio}</p>
             </div>
           </div>
 
@@ -182,19 +250,14 @@ export default function GridInstagram() {
             <div className="flex flex-col items-center gap-2 p-10 text-gray-400">
               <ImageIcon className="h-10 w-10 opacity-30" />
               <p className="text-sm">Adicione posts ao grid</p>
+              <p className="text-xs text-gray-300">Use "Adicionar post" ou envie do AI Carrosséis</p>
             </div>
           ) : (
             <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
               <SortableContext items={visibleItems.map((i) => i.id)} strategy={rectSortingStrategy}>
                 <div className="grid grid-cols-3 gap-[3px]">
-                  {visibleItems.map((item, idx) => (
-                    <div key={item.id}>
-                      <SortableCell item={item} onClick={() => setSelectedItem(item)} />
-                      {/* Row cut line every 3 posts */}
-                      {(idx + 1) % 3 === 0 && idx < visibleItems.length - 1 && (
-                        <div className="h-0" />
-                      )}
-                    </div>
+                  {visibleItems.map((item) => (
+                    <SortableCell key={item.id} item={item} onClick={() => setSelectedItem(item)} />
                   ))}
                 </div>
               </SortableContext>
@@ -202,9 +265,6 @@ export default function GridInstagram() {
           )}
         </div>
       </Card>
-
-      {/* Profile name edit */}
-      <Input value={profileName} onChange={(e) => setProfileName(e.target.value)} placeholder="@seuperfil" className="text-sm" />
 
       {/* Item dialog */}
       <Dialog open={!!selectedItem} onOpenChange={() => setSelectedItem(null)}>
