@@ -683,6 +683,9 @@ function SlideCard({ slide, imageUrl, isGenerating, onGenerateImage, onClearImag
   const [editedHighlight, setEditedHighlight] = useState(slide.headlineHighlight ?? '');
   const [editedSubtext, setEditedSubtext] = useState(slide.subtext ?? '');
   const [imageInstruction, setImageInstruction] = useState('');
+  const [customPrompt, setCustomPrompt] = useState('');
+  const [translatedPrompt, setTranslatedPrompt] = useState('');
+  const [translating, setTranslating] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [suggestions, setSuggestions] = useState<MediaSuggestion[]>([]);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
@@ -698,8 +701,41 @@ function SlideCard({ slide, imageUrl, isGenerating, onGenerateImage, onClearImag
   const basePrompt = slide.imagePrompt ?? buildGenericImagePrompt(slide);
 
   const buildImagePrompt = () => {
+    // If user provided a custom prompt that was translated, use it
+    if (translatedPrompt.trim()) {
+      return translatedPrompt.trim();
+    }
     if (!imageInstruction.trim()) return basePrompt;
     return `${basePrompt}\n\nADJUSTMENT: ${imageInstruction.trim()}`;
+  };
+
+  const handleTranslateAndGenerate = async () => {
+    if (!customPrompt.trim()) return;
+    setTranslating(true);
+    try {
+      // Translate to English using Lovable AI
+      const { data, error } = await supabase.functions.invoke('ai-router', {
+        body: {
+          task_type: 'classify',
+          messages: [
+            { role: 'system', content: 'You are a translator. Translate the following text to English. Output ONLY the translated text, nothing else. The text is an image generation prompt for AI art.' },
+            { role: 'user', content: customPrompt.trim() },
+          ],
+        },
+      });
+      if (error) throw error;
+      const translated = data?.choices?.[0]?.message?.content?.trim() || customPrompt.trim();
+      setTranslatedPrompt(translated);
+      // Now generate with the translated prompt
+      onGenerateImage(slide.number, translated, 'fast');
+    } catch (e: any) {
+      console.error('Translation error:', e);
+      // Fallback: use original prompt
+      setTranslatedPrompt(customPrompt.trim());
+      onGenerateImage(slide.number, customPrompt.trim(), 'fast');
+    } finally {
+      setTranslating(false);
+    }
   };
 
   const handleExport = async () => {
@@ -896,21 +932,58 @@ function SlideCard({ slide, imageUrl, isGenerating, onGenerateImage, onClearImag
           onChange={e => { const f = e.target.files?.[0]; if (f) handleDirectUpload(f); e.target.value = ''; }}
         />
 
+        {/* Custom prompt for image generation (PT → EN translation) */}
+        <div className="rounded-lg border border-primary/20 bg-primary/5 p-2.5 space-y-2">
+          <p className="text-[9px] font-bold text-primary tracking-[0.15em] uppercase flex items-center gap-1">
+            <Wand2 className="h-3 w-3" /> Prompt personalizado (PT→EN)
+          </p>
+          <textarea
+            value={customPrompt}
+            onChange={e => { setCustomPrompt(e.target.value); setTranslatedPrompt(''); }}
+            rows={2}
+            className="w-full rounded-md border border-primary/20 bg-card px-2 py-1.5 text-xs text-foreground resize-none focus:outline-none focus:ring-1 focus:ring-primary/40"
+            placeholder='Descreva a imagem em português. Ex: "Eletricista sorrindo em obra, luz natural dourada, close-up"'
+          />
+          {translatedPrompt && (
+            <div className="rounded-md bg-muted/30 px-2 py-1.5">
+              <p className="text-[8px] font-bold text-muted-foreground/50 uppercase mb-0.5">Tradução usada:</p>
+              <p className="text-[10px] text-muted-foreground leading-snug italic">{translatedPrompt}</p>
+            </div>
+          )}
+          <button
+            onClick={handleTranslateAndGenerate}
+            disabled={isGenerating || translating || !customPrompt.trim()}
+            className={cn(
+              'w-full flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-bold transition-all border',
+              (isGenerating || translating || !customPrompt.trim())
+                ? 'border-border text-muted-foreground cursor-not-allowed'
+                : 'border-primary bg-primary/15 text-primary hover:bg-primary/25'
+            )}
+          >
+            {translating
+              ? <><span className="h-3 w-3 border border-current border-t-transparent rounded-full animate-spin" /> Traduzindo...</>
+              : isGenerating
+                ? <><span className="h-3 w-3 border border-current border-t-transparent rounded-full animate-spin" /> Gerando...</>
+                : <><Wand2 className="h-3 w-3" /> Traduzir e Gerar Imagem</>}
+          </button>
+        </div>
+
+        {/* Quick instruction adjustment */}
         <textarea
           value={imageInstruction}
           onChange={e => setImageInstruction(e.target.value)}
           rows={2}
           className="w-full rounded-md border border-border bg-muted/20 px-2 py-1.5 text-xs text-foreground resize-none focus:outline-none focus:ring-1 focus:ring-primary/40"
-          placeholder='Instrução: "luz dourada", "ângulo de baixo", "preto e branco"...'
+          placeholder='Ajuste rápido: "luz dourada", "ângulo de baixo", "preto e branco"...'
         />
 
-        {/* Generate via AI */}
+        {/* Generate via AI (standard) */}
         <button
           onClick={() => onGenerateImage(slide.number, buildImagePrompt(), 'fast')}
-          disabled={isGenerating || uploadingImage}
+          disabled={isGenerating || uploadingImage || translating}
           className={cn(
             'w-full flex items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all border',
-            (isGenerating || uploadingImage)
+            (isGenerating || uploadingImage || translating)
               ? 'border-border text-muted-foreground cursor-not-allowed'
               : hasImage
                 ? 'border-border text-muted-foreground hover:bg-muted/30 hover:text-foreground'
@@ -922,7 +995,7 @@ function SlideCard({ slide, imageUrl, isGenerating, onGenerateImage, onClearImag
             : hasImage ? <RefreshCw className="h-3 w-3" /> : <Image className="h-3 w-3" />}
           {isGenerating ? 'Gerando...' : hasImage
             ? (imageInstruction.trim() ? 'Aplicar ajuste' : 'Trocar imagem')
-            : 'Gerar imagem'}
+            : 'Gerar imagem (automático)'}
         </button>
 
         {/* Direct upload from device */}
