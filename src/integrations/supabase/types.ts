@@ -261,6 +261,7 @@ export type Database = {
         Row: {
           approval_note: string | null
           approved_by: string | null
+          asset_name: string | null
           assigned_to: string
           campaign_context: Json | null
           campaign_id: string
@@ -272,6 +273,8 @@ export type Database = {
           creative_type: string
           deadline: string | null
           description: string | null
+          destination_platform: string | null
+          drive_link: string | null
           format_height: number | null
           format_name: string | null
           format_ratio: string | null
@@ -287,6 +290,7 @@ export type Database = {
         Insert: {
           approval_note?: string | null
           approved_by?: string | null
+          asset_name?: string | null
           assigned_to?: string
           campaign_context?: Json | null
           campaign_id: string
@@ -298,6 +302,8 @@ export type Database = {
           creative_type: string
           deadline?: string | null
           description?: string | null
+          destination_platform?: string | null
+          drive_link?: string | null
           format_height?: number | null
           format_name?: string | null
           format_ratio?: string | null
@@ -313,6 +319,7 @@ export type Database = {
         Update: {
           approval_note?: string | null
           approved_by?: string | null
+          asset_name?: string | null
           assigned_to?: string
           campaign_context?: Json | null
           campaign_id?: string
@@ -324,6 +331,8 @@ export type Database = {
           creative_type?: string
           deadline?: string | null
           description?: string | null
+          destination_platform?: string | null
+          drive_link?: string | null
           format_height?: number | null
           format_name?: string | null
           format_ratio?: string | null

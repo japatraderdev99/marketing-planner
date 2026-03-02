@@ -796,51 +796,148 @@ function DetailPanel({
   );
 }
 
-// ─── New Card Modal ───────────────────────────────────────────────────────────
+// ─── New Card Modal (Campaign-linked Creative Task) ──────────────────────────
 
-function NewCardModal({ open, onClose, columnId, onSave }: {
+const CREATIVE_TYPES = [
+  { id: 'carrossel', label: 'Carrossel', icon: '🎠' },
+  { id: 'post', label: 'Post', icon: '📸' },
+  { id: 'reels', label: 'Reels', icon: '🎬' },
+  { id: 'stories', label: 'Stories', icon: '📱' },
+  { id: 'video', label: 'Vídeo', icon: '🎥' },
+  { id: 'ads', label: 'Ads', icon: '📊' },
+  { id: 'shorts', label: 'Shorts', icon: '⚡' },
+];
+
+const DESTINATION_PLATFORMS = ['Meta Ads', 'Instagram Orgânico', 'TikTok', 'LinkedIn', 'Google Ads', 'YouTube'];
+
+function NewCardModal({ open, onClose, columnId, onSave, onSaveCreativeTask, campaigns }: {
   open: boolean; onClose: () => void; columnId: KanbanStatus;
   onSave: (data: Partial<Campaign>) => void;
+  onSaveCreativeTask: (task: Partial<CampaignTask>) => Promise<void>;
+  campaigns: Campaign[];
 }) {
+  const [mode, setMode] = useState<'simple' | 'campaign'>('campaign');
   const [name, setName] = useState('');
-  const [responsible, setResponsible] = useState<TeamMemberId>('gabriel');
+  const [responsible, setResponsible] = useState<TeamMemberId>('guilherme');
   const [priority, setPriority] = useState<Priority>('Média');
   const [endDate, setEndDate] = useState('');
   const [channel, setChannel] = useState('Instagram');
+  const [selectedCampaignId, setSelectedCampaignId] = useState('');
+  const [creativeType, setCreativeType] = useState('carrossel');
+  const [driveLink, setDriveLink] = useState('');
+  const [destinationPlatform, setDestinationPlatform] = useState('Meta Ads');
+  const [description, setDescription] = useState('');
 
-  const handleSave = () => {
-    if (!name.trim()) return;
+  const activeCampaigns = campaigns.filter(c => c.status === 'Ativa' || c.status === 'Aprovada' || c.status === 'Rascunho');
+  const selectedCampaign = activeCampaigns.find(c => c.id === selectedCampaignId);
+
+  const handleSave = async () => {
+    if (mode === 'simple') {
+      if (!name.trim()) return;
+      const member = TEAM.find(t => t.id === responsible)!;
+      onSave({ name, channel: [channel as Channel], priority, responsible: member.name, avatar: member.initials, endDate });
+      resetAndClose();
+      return;
+    }
+    // Campaign-linked creative task
+    if (!name.trim() || !selectedCampaignId) return;
     const member = TEAM.find(t => t.id === responsible)!;
-    onSave({ name, channel: [channel as Channel], priority, responsible: member.name, avatar: member.initials, endDate });
-    setName(''); setEndDate('');
+    await onSaveCreativeTask({
+      campaign_id: selectedCampaignId,
+      campaign_name: selectedCampaign?.name || '',
+      title: name,
+      description: description || null,
+      creative_type: creativeType,
+      channel,
+      priority,
+      assigned_to: member.name,
+      deadline: endDate || null,
+      drive_link: driveLink || null,
+      destination_platform: destinationPlatform,
+      status: TASK_STATUS_REVERSE[columnId] || 'pending',
+    });
+    resetAndClose();
+  };
+
+  const resetAndClose = () => {
+    setName(''); setEndDate(''); setDriveLink(''); setDescription(''); setSelectedCampaignId('');
     onClose();
   };
 
   return (
-    <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-sm bg-card border-border">
+    <Dialog open={open} onOpenChange={resetAndClose}>
+      <DialogContent className="sm:max-w-md bg-card border-border max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-sm flex items-center gap-2">
             <Plus className="h-4 w-4 text-primary" />
             Nova tarefa — <span className="text-primary">{COLUMNS.find(c => c.id === columnId)?.label}</span>
           </DialogTitle>
         </DialogHeader>
+
+        {/* Mode toggle */}
+        <div className="flex gap-1.5 mb-1">
+          <button onClick={() => setMode('campaign')} className={cn('flex-1 rounded-lg border px-3 py-2 text-xs font-bold transition-all', mode === 'campaign' ? 'bg-primary/15 border-primary/40 text-primary' : 'border-border text-muted-foreground')}>
+            🎯 Vincular a Campanha
+          </button>
+          <button onClick={() => setMode('simple')} className={cn('flex-1 rounded-lg border px-3 py-2 text-xs font-bold transition-all', mode === 'simple' ? 'bg-primary/15 border-primary/40 text-primary' : 'border-border text-muted-foreground')}>
+            📝 Tarefa Simples
+          </button>
+        </div>
+
         <div className="space-y-3">
+          {/* Campaign selector (campaign mode) */}
+          {mode === 'campaign' && (
+            <div>
+              <p className="text-[10px] font-bold text-muted-foreground/60 mb-1.5">Campanha *</p>
+              <Select value={selectedCampaignId} onValueChange={setSelectedCampaignId}>
+                <SelectTrigger className="bg-muted/20 border-border/60 h-9 text-xs"><SelectValue placeholder="Selecione uma campanha..." /></SelectTrigger>
+                <SelectContent className="bg-card border-border">
+                  {activeCampaigns.map(c => (
+                    <SelectItem key={c.id} value={c.id} className="text-xs">
+                      {c.name} <span className="text-muted-foreground/50 ml-1">({c.status})</span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
           <Input placeholder="Nome da tarefa *" value={name} onChange={e => setName(e.target.value)} className="bg-muted/20 border-border/60" autoFocus />
+
+          {mode === 'campaign' && (
+            <Textarea placeholder="Descrição (opcional)" value={description} onChange={e => setDescription(e.target.value)} rows={2} className="bg-muted/20 border-border/60 text-xs resize-none" />
+          )}
+
+          {/* Creative type (campaign mode) */}
+          {mode === 'campaign' && (
+            <div>
+              <p className="text-[10px] font-bold text-muted-foreground/60 mb-1.5">Tipo de Criativo</p>
+              <div className="flex flex-wrap gap-1.5">
+                {CREATIVE_TYPES.map(ct => (
+                  <button key={ct.id} onClick={() => setCreativeType(ct.id)}
+                    className={cn('rounded-lg border px-2.5 py-1.5 text-[10px] font-bold transition-all',
+                      creativeType === ct.id ? 'bg-primary/15 border-primary/40 text-primary' : 'border-border text-muted-foreground hover:border-primary/20'
+                    )}>
+                    {ct.icon} {ct.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div>
             <p className="text-[10px] font-bold text-muted-foreground/60 mb-1.5">Responsável</p>
-            <div className="flex gap-2">
+            <div className="flex gap-1.5 flex-wrap">
               {TEAM.map(t => (
                 <button
                   key={t.id}
                   onClick={() => setResponsible(t.id)}
                   className={cn(
-                    'flex items-center gap-1.5 rounded-xl border px-3 py-2 flex-1 text-xs font-semibold transition-all',
+                    'flex items-center gap-1 rounded-lg border px-2 py-1.5 text-[10px] font-bold transition-all',
                     responsible === t.id ? `${t.bg} ${t.border} ${t.text}` : 'border-border text-muted-foreground hover:border-primary/20'
                   )}
                 >
-                  <div className={cn('h-5 w-5 rounded-full flex items-center justify-center text-[9px] font-black text-white', t.color)}>{t.initials}</div>
+                  <div className={cn('h-4 w-4 rounded-full flex items-center justify-center text-[8px] font-black text-white', t.color)}>{t.initials}</div>
                   {t.name}
                 </button>
               ))}
@@ -868,14 +965,37 @@ function NewCardModal({ open, onClose, columnId, onSave }: {
             </div>
           </div>
 
+          {/* Destination platform (campaign mode) */}
+          {mode === 'campaign' && (
+            <div>
+              <p className="text-[10px] font-bold text-muted-foreground/60 mb-1.5">Plataforma de destino</p>
+              <Select value={destinationPlatform} onValueChange={setDestinationPlatform}>
+                <SelectTrigger className="bg-muted/20 border-border/60 h-8 text-xs"><SelectValue /></SelectTrigger>
+                <SelectContent className="bg-card border-border">
+                  {DESTINATION_PLATFORMS.map(p => <SelectItem key={p} value={p} className="text-xs">{p}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
           <div>
             <p className="text-[10px] font-bold text-muted-foreground/60 mb-1.5">Prazo</p>
             <Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="bg-muted/20 border-border/60 h-8 text-xs" />
           </div>
+
+          {/* Drive link (campaign mode) */}
+          {mode === 'campaign' && (
+            <div>
+              <p className="text-[10px] font-bold text-muted-foreground/60 mb-1.5">Link do ativo (Google Drive)</p>
+              <Input placeholder="https://drive.google.com/..." value={driveLink} onChange={e => setDriveLink(e.target.value)} className="bg-muted/20 border-border/60 h-8 text-xs" />
+            </div>
+          )}
         </div>
         <DialogFooter>
-          <Button variant="ghost" size="sm" onClick={onClose}>Cancelar</Button>
-          <Button size="sm" onClick={handleSave} className="bg-primary text-primary-foreground border-0">Criar tarefa</Button>
+          <Button variant="ghost" size="sm" onClick={resetAndClose}>Cancelar</Button>
+          <Button size="sm" onClick={handleSave} disabled={mode === 'campaign' ? (!name.trim() || !selectedCampaignId) : !name.trim()} className="bg-primary text-primary-foreground border-0">
+            Criar tarefa
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -906,6 +1026,9 @@ interface CampaignTask {
   campaign_context: Record<string, any>;
   creative_output: Record<string, any>;
   created_at: string;
+  drive_link: string | null;
+  asset_name: string | null;
+  destination_platform: string | null;
 }
 
 const TASK_STATUS_MAP: Record<string, KanbanStatus> = {
@@ -1121,6 +1244,28 @@ function CreativeTaskCard({
         <DeadlineBadge dateStr={task.deadline || undefined} />
       </div>
 
+      {/* Drive link */}
+      {task.drive_link && (
+        <a
+          href={task.drive_link}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={e => e.stopPropagation()}
+          className="flex items-center gap-1.5 w-full rounded-lg border border-border bg-muted/20 px-2.5 py-1.5 text-[10px] font-semibold text-muted-foreground hover:border-primary/30 hover:text-foreground transition-colors mb-2"
+        >
+          <FolderOpen className="h-3 w-3" />
+          <span className="truncate flex-1">Ativo no Drive</span>
+          <ExternalLink className="h-2.5 w-2.5 shrink-0" />
+        </a>
+      )}
+
+      {/* Destination platform */}
+      {task.destination_platform && (
+        <span className="inline-flex items-center gap-1 rounded-full bg-blue-500/10 border border-blue-500/20 px-2 py-0.5 text-[9px] font-bold text-blue-400 mb-2">
+          🎯 {task.destination_platform}
+        </span>
+      )}
+
       {/* Open tool button */}
       <button
         onClick={handleOpenTool}
@@ -1170,6 +1315,14 @@ function CreativeTaskCard({
           </span>
         )}
       </div>
+
+      {/* Asset name (approved) */}
+      {task.asset_name && task.status === 'approved' && (
+        <div className="mt-2 rounded-lg bg-green-500/10 border border-green-500/20 px-2 py-1.5">
+          <p className="text-[9px] text-green-400 font-semibold mb-0.5">Nome do ativo:</p>
+          <p className="text-[10px] text-foreground/70 font-mono">{task.asset_name}</p>
+        </div>
+      )}
 
       {/* Rejection note */}
       {task.approval_note && task.status === 'in_progress' && (
@@ -1230,16 +1383,52 @@ export default function Kanban() {
     }
   };
 
+  const [approvalModal, setApprovalModal] = useState<{ taskId: string; open: boolean }>({ taskId: '', open: false });
+  const [approvalAssetName, setApprovalAssetName] = useState('');
+  const [approvalDriveLink, setApprovalDriveLink] = useState('');
+
   const handleApproveTask = async (taskId: string) => {
+    const task = creativeTasks.find(t => t.id === taskId);
+    setApprovalAssetName('');
+    setApprovalDriveLink(task?.drive_link || '');
+    setApprovalModal({ taskId, open: true });
+  };
+
+  const confirmApproval = async () => {
+    const taskId = approvalModal.taskId;
+    const task = creativeTasks.find(t => t.id === taskId);
+    if (!task || !approvalAssetName.trim()) return;
+
+    // Update task as approved with asset name
     const { error } = await (supabase as any).from('campaign_tasks').update({
       status: 'approved',
       approved_by: 'Gabriel',
       completed_at: new Date().toISOString(),
+      asset_name: approvalAssetName.trim(),
+      drive_link: approvalDriveLink.trim() || task.drive_link,
     }).eq('id', taskId);
+
     if (!error) {
-      setCreativeTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: 'approved', approved_by: 'Gabriel' } : t));
-      toast({ title: '✅ Tarefa aprovada!' });
+      // Register as active creative
+      if (user) {
+        await (supabase as any).from('active_creatives').insert({
+          user_id: user.id,
+          title: approvalAssetName.trim(),
+          platform: task.destination_platform || task.channel,
+          format_type: task.creative_type,
+          dimensions: task.format_width && task.format_height ? `${task.format_width}x${task.format_height}` : null,
+          campaign_id: task.campaign_id,
+          status: 'active',
+          file_url: approvalDriveLink.trim() || task.drive_link,
+          notes: `Campanha: ${task.campaign_name} | Tipo: ${task.creative_type} | Canal: ${task.channel}`,
+          tags: [task.creative_type, task.channel, task.campaign_name].filter(Boolean),
+        });
+      }
+
+      setCreativeTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: 'approved', approved_by: 'Gabriel', asset_name: approvalAssetName.trim() } : t));
+      toast({ title: '✅ Ativo aprovado e registrado!', description: `"${approvalAssetName.trim()}" enviado para Criativos Ativos.` });
     }
+    setApprovalModal({ taskId: '', open: false });
   };
 
   const handleRejectTask = async (taskId: string, note: string) => {
@@ -1253,7 +1442,20 @@ export default function Kanban() {
     }
   };
 
-  // ── Seed version guard: reset localStorage when seed changes ─────────────
+  const handleCreateCreativeTask = async (taskData: Partial<CampaignTask>) => {
+    if (!user) return;
+    const { error, data } = await (supabase as any).from('campaign_tasks').insert({
+      ...taskData,
+      user_id: user.id,
+    }).select().single();
+    if (!error && data) {
+      setCreativeTasks(prev => [...prev, data]);
+      toast({ title: '✅ Tarefa criativa criada!', description: `Vinculada à campanha "${taskData.campaign_name}"` });
+    } else {
+      toast({ title: 'Erro ao criar tarefa', description: error?.message, variant: 'destructive' });
+    }
+  };
+
   useEffect(() => {
     const storedVersion = localStorage.getItem('dqef-seed-version');
     if (storedVersion !== SEED_VERSION) {
@@ -1558,8 +1760,50 @@ export default function Kanban() {
           onClose={() => setNewCardColumn(null)}
           columnId={newCardColumn}
           onSave={handleAddCard}
+          onSaveCreativeTask={handleCreateCreativeTask}
+          campaigns={campaigns}
         />
       )}
+
+      {/* ── Approval modal ─────────────────────────────────────────────────── */}
+      <Dialog open={approvalModal.open} onOpenChange={o => !o && setApprovalModal({ taskId: '', open: false })}>
+        <DialogContent className="sm:max-w-sm bg-card border-border">
+          <DialogHeader>
+            <DialogTitle className="text-sm flex items-center gap-2">
+              <CheckCircle2 className="h-4 w-4 text-green-500" />
+              Aprovar ativo
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <p className="text-[10px] font-bold text-muted-foreground/60 mb-1.5">Nome do ativo no gerenciador *</p>
+              <Input
+                placeholder="Ex: DQEF_Meta_Carrossel_Maio_01"
+                value={approvalAssetName}
+                onChange={e => setApprovalAssetName(e.target.value)}
+                className="bg-muted/20 border-border/60"
+                autoFocus
+              />
+              <p className="text-[9px] text-muted-foreground/50 mt-1">Este nome será registrado no banco de dados para acompanhamento de métricas.</p>
+            </div>
+            <div>
+              <p className="text-[10px] font-bold text-muted-foreground/60 mb-1.5">Link do ativo (Google Drive)</p>
+              <Input
+                placeholder="https://drive.google.com/..."
+                value={approvalDriveLink}
+                onChange={e => setApprovalDriveLink(e.target.value)}
+                className="bg-muted/20 border-border/60 text-xs"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" size="sm" onClick={() => setApprovalModal({ taskId: '', open: false })}>Cancelar</Button>
+            <Button size="sm" disabled={!approvalAssetName.trim()} onClick={confirmApproval} className="bg-green-600 hover:bg-green-700 text-white border-0">
+              <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" /> Aprovar e Registrar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* ── Detail panel overlay ───────────────────────────────────────────── */}
       {selectedCampaign && (
