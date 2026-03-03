@@ -20,7 +20,7 @@ import {
   Plus, GripVertical, X, Edit2, Trash2, MessageSquare, Calendar,
   AlertCircle, CheckSquare, Square, Clock, Send, ChevronRight,
   Target, Flame, BarChart2, Filter, Users, ExternalLink, Link2, FolderOpen,
-  Palette, Video, CheckCircle2, XCircle, ArrowRight,
+  Palette, Video, CheckCircle2, XCircle, ArrowRight, CheckCheck, Move,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -113,7 +113,7 @@ const PRIORITY_STYLE: Record<Priority, { badge: string; icon: string }> = {
 };
 
 const CHANNEL_ICON: Record<string, string> = {
-  Instagram: '📸', TikTok: '🎵', 'Meta Ads': '📊',
+  TikTok: '🎵', 'Meta Ads': '📊',
   LinkedIn: '💼', 'Google Ads': '🔍', Orgânico: '🌱', YouTube: '▶️',
 };
 
@@ -180,12 +180,14 @@ function parseComment(h: { date: string; action: string; user: string }): Commen
 // ─── Kanban Card ──────────────────────────────────────────────────────────────
 
 function KanbanCard({
-  campaign, isDragging, onClick, onDelete,
+  campaign, isDragging, onClick, onDelete, selected, onToggleSelect,
 }: {
   campaign: Campaign;
   isDragging?: boolean;
   onClick?: () => void;
   onDelete?: (id: string) => void;
+  selected?: boolean;
+  onToggleSelect?: (id: string) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging: isSorting } = useSortable({ id: campaign.id });
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isSorting ? 0.4 : 1 };
@@ -212,6 +214,16 @@ function KanbanCard({
     >
       {/* Grip + title row */}
       <div className="flex items-start gap-2">
+        {onToggleSelect && (
+          <button
+            onClick={e => { e.stopPropagation(); onToggleSelect(campaign.id); }}
+            className={cn('mt-0.5 shrink-0 h-4 w-4 rounded border flex items-center justify-center transition-all',
+              selected ? 'bg-primary border-primary text-primary-foreground' : 'border-muted-foreground/30 hover:border-primary/50'
+            )}
+          >
+            {selected && <CheckCheck className="h-2.5 w-2.5" />}
+          </button>
+        )}
         <button
           {...attributes} {...listeners}
           onClick={e => e.stopPropagation()}
@@ -411,10 +423,12 @@ function DetailPanel({
   campaign,
   onClose,
   onSave,
+  onConvertSubtask,
 }: {
   campaign: Campaign;
   onClose: () => void;
   onSave: (c: Campaign) => void;
+  onConvertSubtask?: (subtask: { title: string }, campaign: Campaign) => void;
 }) {
   const [localCampaign, setLocalCampaign] = useState<Campaign>(campaign);
   const [commentText, setCommentText] = useState('');
@@ -671,17 +685,27 @@ function DetailPanel({
           )}
           <div className="space-y-1">
             {localCampaign.subtasks.map(st => (
-              <button
-                key={st.id}
-                onClick={() => toggleSubtask(st.id)}
-                className="flex items-center gap-2 w-full text-left rounded-lg px-2 py-1.5 hover:bg-muted/40 transition-colors group"
-              >
-                {st.done
-                  ? <CheckSquare className="h-3.5 w-3.5 text-primary shrink-0" />
-                  : <Square className="h-3.5 w-3.5 text-muted-foreground/40 group-hover:text-muted-foreground shrink-0" />
-                }
-                <span className={cn('text-xs', st.done ? 'line-through text-muted-foreground/40' : 'text-foreground/85')}>{st.title}</span>
-              </button>
+              <div key={st.id} className="flex items-center gap-2 w-full rounded-lg px-2 py-1.5 hover:bg-muted/40 transition-colors group">
+                <button
+                  onClick={() => toggleSubtask(st.id)}
+                  className="flex items-center gap-2 flex-1 text-left"
+                >
+                  {st.done
+                    ? <CheckSquare className="h-3.5 w-3.5 text-primary shrink-0" />
+                    : <Square className="h-3.5 w-3.5 text-muted-foreground/40 group-hover:text-muted-foreground shrink-0" />
+                  }
+                  <span className={cn('text-xs', st.done ? 'line-through text-muted-foreground/40' : 'text-foreground/85')}>{st.title}</span>
+                </button>
+                {!st.done && onConvertSubtask && (
+                  <button
+                    onClick={() => onConvertSubtask(st, localCampaign)}
+                    title="Criar como tarefa no Kanban"
+                    className="shrink-0 opacity-0 group-hover:opacity-100 h-5 w-5 flex items-center justify-center rounded text-muted-foreground hover:text-primary hover:bg-primary/10 transition-all"
+                  >
+                    <ArrowRight className="h-3 w-3" />
+                  </button>
+                )}
+              </div>
             ))}
           </div>
           <div className="flex gap-1.5 mt-2">
@@ -821,7 +845,7 @@ function NewCardModal({ open, onClose, columnId, onSave, onSaveCreativeTask, cam
   const [responsible, setResponsible] = useState<TeamMemberId>('guilherme');
   const [priority, setPriority] = useState<Priority>('Média');
   const [endDate, setEndDate] = useState('');
-  const [channel, setChannel] = useState('Instagram');
+  const [channel, setChannel] = useState('Meta Ads');
   const [selectedCampaignId, setSelectedCampaignId] = useState('');
   const [creativeType, setCreativeType] = useState('carrossel');
   const [driveLink, setDriveLink] = useState('');
@@ -1165,6 +1189,8 @@ function CreativeTaskCard({
   onReject,
   onEdit,
   onDelete,
+  selected,
+  onToggleSelect,
 }: {
   task: CampaignTask;
   onClick?: () => void;
@@ -1173,6 +1199,8 @@ function CreativeTaskCard({
   onReject?: (taskId: string, note: string) => void;
   onEdit?: (task: CampaignTask) => void;
   onDelete?: (taskId: string) => void;
+  selected?: boolean;
+  onToggleSelect?: (id: string) => void;
 }) {
   const navigate = useNavigate();
   const member = getTeamMember(task.assigned_to);
@@ -1194,6 +1222,18 @@ function CreativeTaskCard({
         isOverdue && 'border-red-500/40 from-red-500/5',
       )}
     >
+      {/* Select checkbox */}
+      {onToggleSelect && (
+        <button
+          onClick={e => { e.stopPropagation(); onToggleSelect(task.id); }}
+          className={cn('absolute top-2 left-2 h-4 w-4 rounded border flex items-center justify-center transition-all z-10',
+            selected ? 'bg-primary border-primary text-primary-foreground' : 'border-muted-foreground/30 hover:border-primary/50 opacity-0 group-hover:opacity-100'
+          )}
+        >
+          {selected && <CheckCheck className="h-2.5 w-2.5" />}
+        </button>
+      )}
+
       {/* Action buttons (edit/delete) */}
       <div className="absolute top-2 right-2 flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity z-10">
         <button onClick={e => { e.stopPropagation(); onEdit?.(task); }}
@@ -1207,7 +1247,7 @@ function CreativeTaskCard({
       </div>
 
       {/* Campaign badge */}
-      <div className="flex items-center gap-1.5 mb-2">
+      <div className="flex items-center gap-1.5 mb-2 mt-1">
         <span className="rounded-full bg-primary/15 px-2 py-0.5 text-[9px] font-bold text-primary truncate max-w-[140px]">
           🎯 {task.campaign_name}
         </span>
@@ -1348,6 +1388,73 @@ export default function Kanban() {
   const [filterPriority, setFilterPriority] = useState<string>('all');
   const [creativeTasks, setCreativeTasks] = useState<CampaignTask[]>([]);
   const [editingTask, setEditingTask] = useState<CampaignTask | null>(null);
+  const [bulkSelected, setBulkSelected] = useState<Set<string>>(new Set());
+  const [bulkMode, setBulkMode] = useState(false);
+
+  const toggleBulkSelect = (id: string) => {
+    setBulkSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const handleBulkDelete = async () => {
+    if (!confirm(`Excluir ${bulkSelected.size} item(ns)?`)) return;
+    const campaignIds = [...bulkSelected].filter(id => campaigns.some(c => c.id === id));
+    const taskIds = [...bulkSelected].filter(id => creativeTasks.some(t => t.id === id));
+    if (campaignIds.length > 0) {
+      setCampaigns(prev => prev.filter(c => !campaignIds.includes(c.id)));
+    }
+    for (const tid of taskIds) {
+      await (supabase as any).from('campaign_tasks').delete().eq('id', tid);
+    }
+    if (taskIds.length > 0) {
+      setCreativeTasks(prev => prev.filter(t => !taskIds.includes(t.id)));
+    }
+    setBulkSelected(new Set());
+    toast({ title: `🗑️ ${bulkSelected.size} item(ns) excluído(s)` });
+  };
+
+  const handleBulkMove = async (col: KanbanStatus) => {
+    const campaignIds = [...bulkSelected].filter(id => campaigns.some(c => c.id === id));
+    const taskIds = [...bulkSelected].filter(id => creativeTasks.some(t => t.id === id));
+    if (campaignIds.length > 0) {
+      setCampaigns(prev => prev.map(c => campaignIds.includes(c.id) ? { ...c, kanbanStatus: col } : c));
+    }
+    const newStatus = TASK_STATUS_REVERSE[col] || 'pending';
+    for (const tid of taskIds) {
+      await (supabase as any).from('campaign_tasks').update({ status: newStatus }).eq('id', tid);
+    }
+    if (taskIds.length > 0) {
+      setCreativeTasks(prev => prev.map(t => taskIds.includes(t.id) ? { ...t, status: newStatus } : t));
+    }
+    setBulkSelected(new Set());
+    toast({ title: `✅ ${bulkSelected.size} item(ns) movido(s) para ${COLUMNS.find(c => c.id === col)?.label}` });
+  };
+
+  const handleConvertSubtask = async (subtask: { title: string }, campaign: Campaign) => {
+    if (!user) return;
+    const taskData = {
+      user_id: user.id,
+      campaign_id: campaign.id,
+      campaign_name: campaign.name,
+      title: subtask.title,
+      creative_type: 'post',
+      channel: campaign.channel[0] || 'Meta Ads',
+      priority: campaign.priority || 'Média',
+      assigned_to: campaign.responsible || 'Guilherme',
+      status: 'pending',
+    };
+    const { error, data } = await (supabase as any).from('campaign_tasks').insert(taskData).select().single();
+    if (!error && data) {
+      setCreativeTasks(prev => [...prev, data]);
+      toast({ title: '✅ Subtarefa convertida em tarefa!', description: `"${subtask.title}" criada no Kanban.` });
+    } else {
+      toast({ title: 'Erro', description: error?.message, variant: 'destructive' });
+    }
+  };
 
   // Load creative tasks from database
   useEffect(() => {
@@ -1526,7 +1633,7 @@ export default function Kanban() {
     const newCard: Campaign = {
       id: `camp-${Date.now()}`,
       name: data.name ?? 'Nova tarefa',
-      channel: data.channel ?? ['Instagram'],
+      channel: data.channel ?? ['Meta Ads'],
       status: 'Rascunho',
       kanbanStatus: newCardColumn ?? 'ideia',
       priority: data.priority ?? 'Média',
@@ -1642,6 +1749,14 @@ export default function Kanban() {
         <span className="ml-auto text-[11px] text-muted-foreground/50">
           {filtered.length + filteredTasks.length} tarefa{(filtered.length + filteredTasks.length) !== 1 ? 's' : ''}
         </span>
+        <button
+          onClick={() => { setBulkMode(!bulkMode); if (bulkMode) setBulkSelected(new Set()); }}
+          className={cn('rounded-full border px-3 py-1 text-[11px] font-semibold transition-all',
+            bulkMode ? 'bg-primary/20 text-primary border-primary/30' : 'border-border text-muted-foreground hover:border-primary/30'
+          )}
+        >
+          <CheckCheck className="h-3 w-3 inline mr-1" /> {bulkMode ? 'Sair seleção' : 'Selecionar'}
+        </button>
 
 
       {/* ── Edit task modal ────────────────────────────────────────────────── */}
@@ -1725,6 +1840,8 @@ export default function Kanban() {
                         onReject={handleRejectTask}
                         onEdit={t => setEditingTask(t)}
                         onDelete={handleDeleteTask}
+                        selected={bulkSelected.has(task.id)}
+                        onToggleSelect={bulkMode ? toggleBulkSelect : undefined}
                       />
                     ))}
                     {/* Campaign cards (from localStorage) */}
@@ -1732,8 +1849,10 @@ export default function Kanban() {
                       <KanbanCard
                         key={card.id}
                         campaign={card}
-                        onClick={() => setSelectedId(card.id)}
+                        onClick={() => !bulkMode && setSelectedId(card.id)}
                         onDelete={handleDelete}
+                        selected={bulkSelected.has(card.id)}
+                        onToggleSelect={bulkMode ? toggleBulkSelect : undefined}
                       />
                     ))}
                     {totalInCol === 0 && (
@@ -1752,6 +1871,36 @@ export default function Kanban() {
           {activeCampaign && <KanbanCard campaign={activeCampaign} isDragging />}
         </DragOverlay>
       </DndContext>
+
+      {/* ── Bulk action bar ────────────────────────────────────────────────── */}
+      {bulkMode && bulkSelected.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 rounded-2xl border border-primary/30 bg-card/95 backdrop-blur-md px-5 py-3 shadow-2xl animate-in slide-in-from-bottom duration-200">
+          <span className="text-xs font-bold text-primary">{bulkSelected.size} selecionado(s)</span>
+          <div className="h-4 w-px bg-border" />
+          {COLUMNS.map(col => (
+            <button
+              key={col.id}
+              onClick={() => handleBulkMove(col.id)}
+              className="flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-[10px] font-semibold text-muted-foreground hover:border-primary/30 hover:text-foreground transition-all"
+            >
+              <Move className="h-3 w-3" /> {col.label}
+            </button>
+          ))}
+          <div className="h-4 w-px bg-border" />
+          <button
+            onClick={handleBulkDelete}
+            className="flex items-center gap-1 rounded-lg bg-red-500/15 border border-red-500/25 px-3 py-1.5 text-[10px] font-bold text-red-400 hover:bg-red-500/25 transition-colors"
+          >
+            <Trash2 className="h-3 w-3" /> Excluir
+          </button>
+          <button
+            onClick={() => { setBulkSelected(new Set()); setBulkMode(false); }}
+            className="ml-1 h-6 w-6 flex items-center justify-center rounded-full text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
 
       {/* ── New card modal ─────────────────────────────────────────────────── */}
       {newCardColumn && (
@@ -1816,6 +1965,7 @@ export default function Kanban() {
             campaign={selectedCampaign}
             onClose={() => setSelectedId(null)}
             onSave={handleSaveCard}
+            onConvertSubtask={handleConvertSubtask}
           />
         </>
       )}

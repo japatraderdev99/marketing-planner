@@ -122,12 +122,12 @@ const PRIORITY_COLORS: Record<Priority, string> = {
 };
 
 const CHANNEL_COLORS: Record<string, string> = {
-  Instagram: C.orange,
   TikTok: C.teal,
   'Meta Ads': C.purple,
   LinkedIn: C.blue,
   YouTube: C.red,
   Orgânico: C.green,
+  'Google Ads': C.orange,
 };
 
 const FUNNEL_COLORS: Record<string, string> = {
@@ -148,10 +148,10 @@ const EMPTY_FORM = (): CampaignForm => ({
   funnel: 'Topo', responsible: '', description: '',
 });
 
-const ALL_CHANNELS: Channel[] = ['Instagram', 'TikTok', 'Meta Ads', 'LinkedIn', 'YouTube', 'Orgânico'];
+const ALL_CHANNELS: Channel[] = ['TikTok', 'Meta Ads', 'LinkedIn', 'YouTube', 'Orgânico', 'Google Ads'];
 
 const CHANNEL_EMOJI: Record<string, string> = {
-  Instagram: '📸', TikTok: '🎵', 'Meta Ads': '📢', LinkedIn: '💼', YouTube: '▶️', Orgânico: '🌱',
+  TikTok: '🎵', 'Meta Ads': '📢', LinkedIn: '💼', YouTube: '▶️', Orgânico: '🌱', 'Google Ads': '🔍',
 };
 
 // ─── Analytics helpers ────────────────────────────────────────────────────────
@@ -803,7 +803,7 @@ export default function Campanhas() {
       toast({ title: 'Nome obrigatório', variant: 'destructive' });
       return;
     }
-    const chs: Channel[] = form.channels.length > 0 ? form.channels : ['Instagram'];
+    const chs: Channel[] = form.channels.length > 0 ? form.channels : ['Meta Ads'];
     if (editingId) {
       setCampaigns(prev => prev.map(c => c.id === editingId ? {
         ...c, name: form.name, objective: form.objective,
@@ -944,7 +944,7 @@ export default function Campanhas() {
   const handleApplyPlan = async () => {
     if (!aiPlan) return;
     const startMs = form.startDate ? new Date(form.startDate + 'T12:00:00').getTime() : Date.now();
-    const chs: Channel[] = form.channels.length > 0 ? form.channels : ['Instagram'];
+    const chs: Channel[] = form.channels.length > 0 ? form.channels : ['Meta Ads'];
     const savedId = editingId || `camp-${Date.now()}`;
     const campaignName = form.name;
     if (editingId) {

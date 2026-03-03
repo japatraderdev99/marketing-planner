@@ -3,7 +3,7 @@
 // SEED VERSION: bump this to force localStorage reset when seed changes
 export const SEED_VERSION = '2026-02-21-v6';
 
-export type Channel = 'Instagram' | 'TikTok' | 'Meta Ads' | 'LinkedIn' | 'Google Ads' | 'Orgânico' | 'YouTube';
+export type Channel = 'TikTok' | 'Meta Ads' | 'LinkedIn' | 'Google Ads' | 'Orgânico' | 'YouTube';
 export type Priority = 'Alta' | 'Média' | 'Baixa';
 export type KanbanStatus = 'ideia' | 'desenvolvimento' | 'revisao' | 'aprovado' | 'publicado';
 export type CampaignStatus = 'Rascunho' | 'Aprovada' | 'Ativa' | 'Pausada' | 'Finalizada';
@@ -144,7 +144,7 @@ export const initialCampaigns: Campaign[] = [
   {
     id: 'camp-awareness-template',
     name: '🎯 Template — Campanha de Awareness',
-    channel: ['Instagram', 'TikTok'],
+    channel: ['Meta Ads', 'TikTok'],
     status: 'Rascunho',
     kanbanStatus: 'ideia',
     priority: 'Alta',
@@ -197,7 +197,7 @@ export const initialEstrategias: EstrategiaPublico[] = [
       'Você instala o Brasil. Merece cobrar o que vale.',
       'Agenda cheia sem pagar por lead frio.',
     ],
-    channels: ['TikTok', 'Instagram', 'Meta Ads'],
+    channels: ['TikTok', 'Meta Ads'],
   },
   {
     id: 'est-002',
@@ -217,7 +217,7 @@ export const initialEstrategias: EstrategiaPublico[] = [
       'Outubro a março é só o começo. A DQEF funciona o ano todo.',
       'Sua carteira de clientes pode crescer mesmo na baixa temporada.',
     ],
-    channels: ['Instagram', 'Meta Ads', 'Orgânico'],
+    channels: ['Meta Ads', 'Orgânico'],
   },
   {
     id: 'est-003',
@@ -237,7 +237,7 @@ export const initialEstrategias: EstrategiaPublico[] = [
       'Você resolve tudo. A DQEF resolve o resto.',
       'De 3 clientes para 30 — sem depender de um só.',
     ],
-    channels: ['TikTok', 'Instagram', 'Meta Ads'],
+    channels: ['TikTok', 'Meta Ads'],
   },
   {
     id: 'est-004',
@@ -257,6 +257,6 @@ export const initialEstrategias: EstrategiaPublico[] = [
       'Floripa tem 12.000 Airbnbs. Só quem é organizado fica com todos.',
       'De 3 para 10 Airbnbs — com a agenda na mão.',
     ],
-    channels: ['Instagram', 'Meta Ads', 'Orgânico'],
+    channels: ['Meta Ads', 'Orgânico'],
   },
 ];
