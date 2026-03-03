@@ -97,7 +97,7 @@ export default function Calendario() {
   const selectedDayContents = selectedDay ? (contentByDay[selectedDay] ?? []) : [];
   const selectedDayTasks = selectedDay ? (tasksByDay[selectedDay] ?? []) : [];
 
-  const [form, setForm] = useState({ title: '', format: 'Post' as ContentFormat, channel: 'Instagram' as Channel, status: 'Rascunho' as ContentItem['status'], responsible: '', copy: '' });
+  const [form, setForm] = useState({ title: '', format: 'Post' as ContentFormat, channel: 'Meta Ads' as Channel, status: 'Rascunho' as ContentItem['status'], responsible: '', copy: '' });
 
   const handleCreate = () => {
     if (!form.title || !newDate) return;
@@ -113,7 +113,7 @@ export default function Calendario() {
     };
     setContents(prev => [...prev, item]);
     setShowNewModal(false);
-    setForm({ title: '', format: 'Post', channel: 'Instagram', status: 'Rascunho', responsible: '', copy: '' });
+    setForm({ title: '', format: 'Post', channel: 'Meta Ads', status: 'Rascunho', responsible: '', copy: '' });
   };
 
   return (
@@ -365,7 +365,7 @@ export default function Calendario() {
               <Select value={form.channel} onValueChange={v => setForm(f => ({ ...f, channel: v as Channel }))}>
                 <SelectTrigger className="bg-background"><SelectValue /></SelectTrigger>
                 <SelectContent className="bg-card border-border">
-                  {['Instagram', 'TikTok', 'Meta Ads', 'LinkedIn', 'YouTube', 'Orgânico'].map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                  {['TikTok', 'Meta Ads', 'LinkedIn', 'YouTube', 'Orgânico', 'Google Ads'].map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
