@@ -333,11 +333,36 @@ Deno.serve(async (req) => {
 
     const strategyBlock = strategyContext ? `\n\n=== STRATEGIC CONTEXT (from brand strategy, campaigns, and approved ideas) ===\n${strategyContext}\n===` : "";
 
+    const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+    const ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
+
     const callAI = async (model: string, messages: { role: string; content: string }[], temperature = 0.75) => {
       const res = await fetch(AI_GATEWAY, {
         method: "POST",
         headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
         body: JSON.stringify({ model, messages, temperature }),
+      });
+      if (!res.ok) {
+        const status = res.status;
+        if (status === 429) throw Object.assign(new Error("Rate limit atingido. Aguarde e tente novamente."), { status: 429 });
+        if (status === 402) throw Object.assign(new Error("Créditos insuficientes. Adicione créditos ao workspace."), { status: 402 });
+        throw new Error("Erro no serviço de IA");
+      }
+      const data = await res.json();
+      return (data.choices?.[0]?.message?.content ?? "") as string;
+    };
+
+    // Route through ai-router for Claude Sonnet (storyboard, frame, motion)
+    const callSonnet = async (messages: { role: string; content: string }[], temperature = 0.72, fnName = "generate-video-assets") => {
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/ai-router`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${ANON_KEY}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          task_type: "analyze",
+          messages,
+          options: { temperature, response_format: { type: "json_object" } },
+          function_name: fnName,
+        }),
       });
       if (!res.ok) {
         const status = res.status;
@@ -359,10 +384,10 @@ Deno.serve(async (req) => {
       const userContent = `BRIEFING:\n${freeText}\n\n${contentAngle ? `Emotional angle: ${contentAngle}` : ""}\n${persona ? `Character: ${persona}` : ""}\n\nGenerate the storyboard. JSON only.`;
 
       try {
-        const raw = await callAI("google/gemini-2.5-pro", [
+        const raw = await callSonnet([
           { role: "system", content: systemPrompt },
           { role: "user", content: userContent },
-        ], 0.72);
+        ], 0.72, "video-storyboard");
         const parsed = extractJSON(raw);
         return new Response(JSON.stringify(parsed), { headers: CORS });
       } catch (e: unknown) {
@@ -385,10 +410,10 @@ ${additionalContext ? `Additional context: ${additionalContext}` : ""}
 Generate the animatable Start Frame image prompt. ONLY JSON.`;
 
       try {
-        const raw = await callAI("google/gemini-2.5-flash", [
+        const raw = await callSonnet([
           { role: "system", content: enhancedSystem },
           { role: "user", content: userMsg },
-        ], 0.7);
+        ], 0.7, "video-frame-prompt");
         const parsed = extractJSON(raw);
         return new Response(JSON.stringify(parsed), { headers: CORS });
       } catch (e: unknown) {
@@ -413,10 +438,10 @@ ${contentAngle ? `Content angle: ${contentAngle}` : ""}
 Apply the ${targetModel} native grammar. JSON only.`;
 
       try {
-        const raw = await callAI("google/gemini-2.5-pro", [
+        const raw = await callSonnet([
           { role: "system", content: enhancedSystem },
           { role: "user", content: userMsg },
-        ], 0.73);
+        ], 0.73, "video-motion-prompt");
         const parsed = extractJSON(raw);
         return new Response(JSON.stringify(parsed), { headers: CORS });
       } catch (e: unknown) {

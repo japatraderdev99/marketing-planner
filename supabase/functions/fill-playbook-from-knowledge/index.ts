@@ -12,8 +12,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY não configurada");
+    // AI calls are routed through ai-router
 
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -105,14 +104,14 @@ Retorne um JSON com EXATAMENTE estes campos:
   "skippedFields": ["lista dos campos mantidos sem alteração pois já tinham conteúdo"]
 }`;
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const response = await fetch(`${SUPABASE_URL}/functions/v1/ai-router`, {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${LOVABLE_API_KEY}`,
+        "Authorization": `Bearer ${Deno.env.get("SUPABASE_ANON_KEY")}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
+        task_type: "analyze",
         messages: [
           {
             role: "system",
@@ -120,8 +119,11 @@ Retorne um JSON com EXATAMENTE estes campos:
           },
           { role: "user", content: prompt },
         ],
-        temperature: 0.2,
-        response_format: { type: "json_object" },
+        options: {
+          temperature: 0.2,
+          response_format: { type: "json_object" },
+        },
+        function_name: "fill-playbook-from-knowledge",
       }),
     });
 
