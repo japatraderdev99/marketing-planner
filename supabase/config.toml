@@ -26,3 +26,9 @@ verify_jwt = false
 
 [functions.extract-strategy-metafields]
 verify_jwt = false
+
+[functions.fill-playbook-from-knowledge]
+verify_jwt = false
+
+[functions.fill-metafields-from-knowledge]
+verify_jwt = false
