@@ -12,8 +12,17 @@ import { cn } from '@/lib/utils';
 import {
   Sparkles, Loader2, Send, Image, Film, Type, Layout, Layers,
   ThumbsUp, ThumbsDown, RefreshCw, Trash2,
-  Upload, FileText, Globe, X, Paperclip
+  Upload, FileText, Globe, X, Paperclip, Monitor, ExternalLink, Palette
 } from 'lucide-react';
+
+interface ChannelFormat {
+  channel: string;
+  format_label: string;
+  width: number;
+  height: number;
+  ratio: string;
+  adapted_copy: string;
+}
 
 interface CreativeSuggestion {
   id: string;
@@ -29,13 +38,14 @@ interface CreativeSuggestion {
   status: string;
   ai_reasoning: string | null;
   created_at: string;
+  metadata?: { channel_formats?: ChannelFormat[] } | null;
 }
 
 interface AttachedFile {
   name: string;
   type: 'image' | 'pdf' | 'html' | 'text';
   mime: string;
-  data: string; // base64 or text content
+  data: string;
   size: number;
   extracted_text?: string;
   page_images?: string[];
@@ -63,20 +73,117 @@ const FILE_ICON_MAP: Record<string, typeof FileText> = {
   text: Type,
 };
 
+const CHANNEL_ICONS: Record<string, string> = {
+  'Instagram': '📸',
+  'Facebook': '📘',
+  'TikTok': '🎵',
+  'LinkedIn': '💼',
+  'YouTube': '▶️',
+  'Google Display': '🖥️',
+  'Pinterest': '📌',
+  'X': '𝕏',
+};
+
+// ─── Production Panel (channel/format selector) ─────────────────────────────
+
+function ProductionPanel({
+  item,
+  onSelectFormat,
+}: {
+  item: CreativeSuggestion;
+  onSelectFormat: (item: CreativeSuggestion, format: ChannelFormat, tool: string) => void;
+}) {
+  const formats: ChannelFormat[] = (item.metadata as any)?.channel_formats || [];
+  
+  if (formats.length === 0) {
+    // Fallback: show basic routing without format details
+    return (
+      <div className="mt-3 rounded-lg border border-primary/20 bg-primary/5 p-3 space-y-2 animate-fade-in">
+        <p className="text-[10px] font-bold uppercase tracking-wider text-primary mb-2">
+          <Monitor className="h-3 w-3 inline mr-1" /> Selecione a ferramenta
+        </p>
+        <div className="flex gap-2">
+          {item.suggestion_type === 'carousel' && (
+            <Button size="sm" className="h-7 px-3 text-xs" onClick={() => onSelectFormat(item, { channel: item.channel || 'Instagram', format_label: 'Carrossel', width: 1080, height: 1350, ratio: '4:5', adapted_copy: item.copy_text || '' }, 'carousel')}>
+              <Layers className="h-3 w-3 mr-1" /> Carrossel
+            </Button>
+          )}
+          {(item.suggestion_type === 'post' || item.suggestion_type === 'carousel') && (
+            <Button size="sm" className="h-7 px-3 text-xs" onClick={() => onSelectFormat(item, { channel: item.channel || 'Instagram', format_label: 'Post', width: 1080, height: 1350, ratio: '4:5', adapted_copy: item.copy_text || '' }, 'criativo')}>
+              <Palette className="h-3 w-3 mr-1" /> Criativo
+            </Button>
+          )}
+          {(item.suggestion_type === 'video' || item.suggestion_type === 'reels') && (
+            <Button size="sm" className="h-7 px-3 text-xs" onClick={() => onSelectFormat(item, { channel: item.channel || 'Instagram', format_label: 'Vídeo', width: 1080, height: 1920, ratio: '9:16', adapted_copy: item.copy_text || '' }, 'video')}>
+              <Film className="h-3 w-3 mr-1" /> Vídeo IA
+            </Button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-3 rounded-lg border border-primary/20 bg-primary/5 p-3 space-y-2 animate-fade-in">
+      <p className="text-[10px] font-bold uppercase tracking-wider text-primary mb-2">
+        <Monitor className="h-3 w-3 inline mr-1" /> Formatos por Canal
+      </p>
+      <div className="grid grid-cols-1 gap-1.5">
+        {formats.map((fmt, i) => (
+          <div key={i} className="flex items-center gap-2 rounded-lg border border-border bg-card/50 px-3 py-2 hover:border-primary/40 transition-all group">
+            <span className="text-sm shrink-0">{CHANNEL_ICONS[fmt.channel] || '📱'}</span>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-bold text-foreground">{fmt.channel}</span>
+                <span className="text-[10px] text-muted-foreground">·</span>
+                <span className="text-[10px] text-muted-foreground">{fmt.format_label}</span>
+              </div>
+              <div className="flex items-center gap-2 mt-0.5">
+                <span className="text-[10px] text-muted-foreground font-mono">{fmt.width}×{fmt.height}</span>
+                <span className="text-[10px] text-muted-foreground">{fmt.ratio}</span>
+              </div>
+              {fmt.adapted_copy && (
+                <p className="text-[10px] text-muted-foreground mt-1 line-clamp-1 italic">"{fmt.adapted_copy}"</p>
+              )}
+            </div>
+            <div className="flex gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+              <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px]" 
+                onClick={() => onSelectFormat(item, fmt, 'criativo')}>
+                <Palette className="h-3 w-3 mr-0.5" /> Arte
+              </Button>
+              <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px]"
+                onClick={() => onSelectFormat(item, fmt, 'carousel')}>
+                <Layers className="h-3 w-3 mr-0.5" /> Carrossel
+              </Button>
+            </div>
+          </div>
+        ))}
+      </div>
+      {/* Also show video option if type is video/reels */}
+      {(item.suggestion_type === 'video' || item.suggestion_type === 'reels') && (
+        <Button size="sm" className="h-7 px-3 text-xs mt-2 w-full" onClick={() => onSelectFormat(item, { channel: item.channel || 'Instagram', format_label: 'Vídeo', width: 1080, height: 1920, ratio: '9:16', adapted_copy: item.copy_text || '' }, 'video')}>
+          <Film className="h-3 w-3 mr-1" /> Criar Roteiro de Vídeo
+        </Button>
+      )}
+    </div>
+  );
+}
+
+// ─── SuggestionCard ──────────────────────────────────────────────────────────
+
 function SuggestionCard({
-  item, onApprove, onReject, onSendToProduction, onDelete,
+  item, onApprove, onReject, onSelectFormat, onDelete,
 }: {
   item: CreativeSuggestion;
   onApprove: (id: string) => void;
   onReject: (id: string) => void;
-  onSendToProduction: (item: CreativeSuggestion) => void;
+  onSelectFormat: (item: CreativeSuggestion, format: ChannelFormat, tool: string) => void;
   onDelete: (id: string) => void;
 }) {
+  const [showFormats, setShowFormats] = useState(false);
   const typeConfig = TYPE_CONFIG[item.suggestion_type] || TYPE_CONFIG.post;
   const statusConfig = STATUS_CONFIG[item.status] || STATUS_CONFIG.pending;
   const Icon = typeConfig.icon;
-  const canSendToProduction = item.status === 'approved' &&
-    (item.suggestion_type === 'carousel' || item.suggestion_type === 'post');
 
   return (
     <Card className="border-border bg-card hover:border-primary/30 transition-all duration-200 group">
@@ -105,6 +212,12 @@ function SuggestionCard({
           )}
           {item.format && (
             <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">{item.format}</span>
+          )}
+          {/* Show format count badge */}
+          {(item.metadata as any)?.channel_formats?.length > 0 && (
+            <span className="rounded-full bg-primary/10 text-primary px-2 py-0.5 text-[10px] font-medium">
+              {(item.metadata as any).channel_formats.length} canais
+            </span>
           )}
         </div>
 
@@ -141,16 +254,16 @@ function SuggestionCard({
               </Button>
             </>
           )}
-          {canSendToProduction && (
+          {item.status === 'approved' && (
             <Button size="sm" className="h-7 px-3 text-xs bg-primary/20 text-primary hover:bg-primary/30 border border-primary/30"
-              onClick={() => onSendToProduction(item)}>
-              <Send className="h-3 w-3 mr-1" /> Enviar p/ Produção
+              onClick={() => setShowFormats(f => !f)}>
+              <Send className="h-3 w-3 mr-1" /> {showFormats ? 'Fechar' : 'Produzir'}
             </Button>
           )}
-          {item.status === 'sent_to_production' && item.suggestion_type === 'carousel' && (
+          {item.status === 'sent_to_production' && (
             <Button size="sm" className="h-7 px-3 text-xs bg-green-500/20 text-green-400 hover:bg-green-500/30 border border-green-500/30"
-              onClick={() => onSendToProduction(item)}>
-              <Layers className="h-3 w-3 mr-1" /> Criar Carrossel
+              onClick={() => setShowFormats(f => !f)}>
+              <ExternalLink className="h-3 w-3 mr-1" /> Abrir Ferramenta
             </Button>
           )}
           {item.status === 'rejected' && (
@@ -160,10 +273,17 @@ function SuggestionCard({
             </Button>
           )}
         </div>
+
+        {/* Production panel with channel/format selection */}
+        {showFormats && (item.status === 'approved' || item.status === 'sent_to_production') && (
+          <ProductionPanel item={item} onSelectFormat={onSelectFormat} />
+        )}
       </CardContent>
     </Card>
   );
 }
+
+// ─── File Helpers ─────────────────────────────────────────────────────────────
 
 function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -191,6 +311,8 @@ function getFileCategory(file: File): 'image' | 'pdf' | 'html' | 'text' {
 }
 
 const ACCEPTED_TYPES = 'image/*,.pdf,.html,.htm,.txt,.md,.csv,.json';
+
+// ─── Main Component ──────────────────────────────────────────────────────────
 
 export default function IdeacaoTab() {
   const { user } = useAuth();
@@ -223,18 +345,14 @@ export default function IdeacaoTab() {
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files) return;
-
-    const maxSize = 10 * 1024 * 1024; // 10MB
+    const maxSize = 10 * 1024 * 1024;
     const newFiles: AttachedFile[] = [];
-
     for (const file of Array.from(files)) {
       if (file.size > maxSize) {
         toast({ title: 'Arquivo muito grande', description: `${file.name} excede 10MB`, variant: 'destructive' });
         continue;
       }
-
       const category = getFileCategory(file);
-
       if (category === 'image') {
         const base64 = await fileToBase64(file);
         newFiles.push({ name: file.name, type: 'image', mime: file.type, data: base64, size: file.size });
@@ -246,7 +364,6 @@ export default function IdeacaoTab() {
         newFiles.push({ name: file.name, type: category, mime: file.type, data: text, size: file.size });
       }
     }
-
     setAttachedFiles(prev => [...prev, ...newFiles]);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
@@ -282,16 +399,11 @@ export default function IdeacaoTab() {
         input_type: inputType,
         user_id: user.id,
         files: attachedFiles.map(f => ({
-          name: f.name,
-          type: f.type,
-          mime: f.mime,
-          data: f.data,
-          extracted_text: f.extracted_text,
-          page_images: f.page_images,
+          name: f.name, type: f.type, mime: f.mime, data: f.data,
+          extracted_text: f.extracted_text, page_images: f.page_images,
         })),
         urls,
       };
-
       const { data, error } = await supabase.functions.invoke('analyze-creative-input', { body: payload });
       if (error) throw error;
       if (data?.suggestions) {
@@ -324,39 +436,63 @@ export default function IdeacaoTab() {
     if (!error) setSuggestions(prev => prev.filter(s => s.id !== id));
   };
 
-  const handleSendToProduction = (item: CreativeSuggestion) => {
-    // Only update status if not already sent
+  const handleSelectFormat = async (item: CreativeSuggestion, format: ChannelFormat, tool: string) => {
+    // Update status to sent_to_production
     if (item.status !== 'sent_to_production') {
-      handleUpdateStatus(item.id, 'sent_to_production');
+      await handleUpdateStatus(item.id, 'sent_to_production');
     }
 
-    if (item.suggestion_type === 'carousel') {
-      const briefing = [
-        item.title,
-        item.description,
-        item.copy_text ? `Copy: ${item.copy_text}` : '',
-        item.visual_direction ? `Direção visual: ${item.visual_direction}` : '',
-      ].filter(Boolean).join('\n\n');
+    // Save briefing metadata
+    const briefingData = {
+      channel_formats: (item.metadata as any)?.channel_formats || [],
+      selected_format: format,
+      selected_tool: tool,
+    };
+    await supabase.from('creative_suggestions').update({
+      metadata: briefingData as any,
+    }).eq('id', item.id);
 
+    // Build briefing context
+    const briefing = [
+      item.title,
+      item.description,
+      format.adapted_copy ? `Copy adaptada: ${format.adapted_copy}` : (item.copy_text ? `Copy: ${item.copy_text}` : ''),
+      item.visual_direction ? `Direção visual: ${item.visual_direction}` : '',
+      `Canal: ${format.channel}`,
+      `Formato: ${format.format_label} (${format.width}×${format.height}, ${format.ratio})`,
+    ].filter(Boolean).join('\n\n');
+
+    // Route to the correct tool
+    if (tool === 'carousel') {
       localStorage.setItem('ideacao_to_carousel', JSON.stringify({
         context: briefing,
-        channel: item.channel || 'Instagram Feed',
+        channel: format.channel,
+        suggestionId: item.id,
+        format: { width: format.width, height: format.height, ratio: format.ratio },
+      }));
+      toast({ title: 'Enviado para Carrosséis!', description: `${format.channel} · ${format.format_label}` });
+      navigate('/ai-carrosseis');
+    } else if (tool === 'video') {
+      localStorage.setItem('ideacao_to_video', JSON.stringify({
+        context: briefing,
+        channel: format.channel,
         suggestionId: item.id,
       }));
-
-      toast({
-        title: item.status === 'sent_to_production' ? 'Criando carrossel...' : 'Enviado para produção!',
-        description: 'Redirecionando para AI Carrosséis...',
-      });
-
-      navigate('/ai-carrosseis');
+      toast({ title: 'Enviado para Vídeo IA!', description: `${format.channel} · Roteiro` });
+      navigate('/video-ia');
     } else {
-      toast({
-        title: 'Enviado para produção!',
-        description: `Acesse a aba de Criativos para produzir.`,
-      });
-      const context = [item.title, item.description, item.copy_text, item.visual_direction].filter(Boolean).join('\n\n');
-      navigator.clipboard.writeText(context);
+      // Criativo - static art
+      localStorage.setItem('ideacao_to_criativo', JSON.stringify({
+        context: briefing,
+        channel: format.channel,
+        suggestionId: item.id,
+        format: { width: format.width, height: format.height, ratio: format.ratio, label: format.format_label },
+        copy_text: format.adapted_copy || item.copy_text,
+        visual_direction: item.visual_direction,
+        title: item.title,
+      }));
+      toast({ title: 'Enviado para AI Criativo!', description: `${format.channel} · ${format.format_label} (${format.width}×${format.height})` });
+      navigate('/criativo');
     }
   };
 
@@ -379,12 +515,11 @@ export default function IdeacaoTab() {
             <span className="text-[10px] rounded-full bg-primary/10 text-primary px-2 py-0.5 font-medium">Claude Sonnet 4</span>
           </div>
           <p className="text-xs text-muted-foreground">
-            Cole textos, anexe imagens/PDFs/HTMLs ou adicione URLs. A IA analisa tudo e gera sugestões acionáveis.
+            Cole textos, anexe imagens/PDFs/HTMLs ou adicione URLs. A IA analisa tudo e gera sugestões com formatos por canal.
           </p>
 
-          {/* Text input */}
           <Textarea
-            placeholder="Cole referências, ideias, prompts, copies, conceitos visuais...&#10;&#10;Exemplo: 'Quero um carrossel mostrando os 5 maiores erros de eletricistas ao precificar'"
+            placeholder="Cole referências, ideias, prompts, copies, conceitos visuais...&#10;&#10;Exemplo: 'Quero um post mostrando os 5 maiores erros de eletricistas ao precificar'"
             value={inputText}
             onChange={e => setInputText(e.target.value)}
             className="min-h-[100px] bg-background border-border text-sm"
@@ -502,7 +637,7 @@ export default function IdeacaoTab() {
               item={item}
               onApprove={id => handleUpdateStatus(id, 'approved')}
               onReject={id => handleUpdateStatus(id, 'rejected')}
-              onSendToProduction={handleSendToProduction}
+              onSelectFormat={handleSelectFormat}
               onDelete={handleDelete}
             />
           ))}
