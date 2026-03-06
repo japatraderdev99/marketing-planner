@@ -143,7 +143,12 @@ Retorne um JSON com EXATAMENTE estes campos:
 
     const aiResponse = await response.json();
     const content = aiResponse.choices[0].message.content;
-    const playbook = JSON.parse(content);
+    // Strip markdown fences if present
+    let cleanContent = content.trim();
+    if (cleanContent.startsWith("```")) {
+      cleanContent = cleanContent.replace(/^```(?:json)?\s*/, "").replace(/\s*```$/, "");
+    }
+    const playbook = JSON.parse(cleanContent);
 
     return new Response(JSON.stringify({ playbook, documentsUsed: knowledgeDocs.length }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
