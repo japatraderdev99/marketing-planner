@@ -26,15 +26,37 @@ TIPOS de sugestão permitidos:
 - "copy" — Copy para legenda ou anúncio
 - "reels" — Reels específico com roteiro
 
+IMPORTANTE: Para cada sugestão do tipo "post", inclua um array "channel_formats" com TODAS as variações de canal/formato possíveis. Use estas dimensões exatas:
+
+FORMATOS POR CANAL:
+- Instagram Feed 4:5 → 1080x1350
+- Instagram Feed 1:1 → 1080x1080
+- Instagram Stories 9:16 → 1080x1920
+- Facebook Feed 1:1 → 1080x1080
+- Facebook Stories 9:16 → 1080x1920
+- TikTok 9:16 → 1080x1920
+- TikTok 1:1 → 1080x1080
+- LinkedIn Feed 1:1 → 1200x1200
+- LinkedIn Landscape 1.91:1 → 1200x628
+- YouTube Thumbnail 16:9 → 1280x720
+- YouTube Shorts 9:16 → 1080x1920
+- Google Display Medium Rectangle → 300x250
+- Google Display Leaderboard → 728x90
+- Google Display Half Page → 300x600
+- Google Display Responsive 1.91:1 → 1200x628
+- Pinterest Pin 2:3 → 1000x1500
+- X/Twitter 16:9 → 1200x675
+
 Para CADA sugestão, retorne:
 - suggestion_type: um dos tipos acima
 - title: título curto e impactante (max 60 chars)
 - description: descrição do conceito criativo (2-3 frases)
 - copy_text: copy pronta para uso (se aplicável), ou null
 - visual_direction: direção visual/estética (1-2 frases)
-- channel: canal principal (Instagram, TikTok, LinkedIn, YouTube)
-- format: formato específico (ex: "Carrossel 5 lâminas", "Reels 30s", "Post 1:1")
+- channel: canal principal (Instagram, TikTok, LinkedIn, YouTube, Facebook, Google Display, Pinterest, X)
+- format: formato específico (ex: "Post 4:5", "Reels 9:16", "Carrossel 5 lâminas")
 - ai_reasoning: por que esta ideia tem potencial (1 frase)
+- channel_formats: array de objetos com { channel: string, format_label: string, width: number, height: number, ratio: string, adapted_copy: string }. Adapte a copy para cada canal (tom e comprimento). Inclua de 3 a 6 canais relevantes. APENAS para suggestion_type "post".
 
 Responda APENAS com um JSON válido no formato:
 { "suggestions": [ { ... }, { ... } ] }
@@ -205,6 +227,7 @@ serve(async (req) => {
       channel: s.channel || null,
       format: s.format || null,
       ai_reasoning: s.ai_reasoning || null,
+      metadata: s.channel_formats ? { channel_formats: s.channel_formats } : {},
       status: "pending",
     }));
 
