@@ -165,7 +165,11 @@ Retorne um JSON com EXATAMENTE esta estrutura:
 
     const aiResponse = await response.json();
     const content = aiResponse.choices[0].message.content;
-    const metafields = JSON.parse(content);
+    let cleanContent = content.trim();
+    if (cleanContent.startsWith("```")) {
+      cleanContent = cleanContent.replace(/^```(?:json)?\s*/, "").replace(/\s*```$/, "");
+    }
+    const metafields = JSON.parse(cleanContent);
 
     return new Response(JSON.stringify({ metafields, documentsUsed: knowledgeDocs.length }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
