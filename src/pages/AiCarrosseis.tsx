@@ -2889,21 +2889,135 @@ export default function AiCarrosseis() {
     toast({ title: 'Imagem aplicada ✅', description: `Lâmina ${slideNumber} atualizada com imagem da biblioteca.` });
   }, [toast]);
 
+  // ── Narrative mode handlers ──
+  const handleGenerateNarrative = async () => {
+    setNarrativeLoading(true);
+    setNarrativeResult(null);
+    setNarrativeSlideImages({});
+    try {
+      let strategyContext = '';
+      try {
+        const raw = localStorage.getItem('dqef_strategy_metafields_v1');
+        if (raw) strategyContext = JSON.parse(raw).promptContext || '';
+      } catch { /* ignore */ }
+
+      const { data, error } = await supabase.functions.invoke('generate-narrative-carousel', {
+        body: {
+          topic: [campaignCtx, narrativeTopic].filter(Boolean).join('\n\n'),
+          audience_angle: narrativeAudienceAngle,
+          tone: tone,
+          channel,
+          strategyContext,
+          num_slides: narrativeNumSlides,
+        },
+      });
+      if (error) throw error;
+      if (data?.error) {
+        toast({ title: 'Erro', description: data.error, variant: 'destructive' });
+        return;
+      }
+      setNarrativeResult(data);
+      toast({ title: 'Carrossel narrativo gerado! ✅', description: `${data.carousel.slides.length} lâminas com storytelling profundo.` });
+    } catch (e) {
+      console.error(e);
+      toast({ title: 'Erro', description: 'Falha ao gerar carrossel narrativo.', variant: 'destructive' });
+    } finally {
+      setNarrativeLoading(false);
+    }
+  };
+
+  const handleNarrativeGenerateImage = useCallback(async (slideNumber: number, prompt: string, quality: 'fast' | 'high') => {
+    setNarrativeGeneratingImage(prev => ({ ...prev, [slideNumber]: true }));
+    try {
+      const { data, error } = await supabase.functions.invoke('generate-slide-image', {
+        body: { imagePrompt: prompt, quality },
+      });
+      if (error) throw error;
+      if (data?.error) {
+        toast({ title: 'Erro na imagem', description: data.error, variant: 'destructive' });
+        return;
+      }
+      if (data?.imageUrl) {
+        let finalUrl = data.imageUrl;
+        if (userId && finalUrl.startsWith('data:image/')) {
+          try {
+            const mimeMatch = finalUrl.match(/^data:(image\/\w+);base64,/);
+            const ext = mimeMatch ? mimeMatch[1].split('/')[1] : 'png';
+            const base64Data = finalUrl.split(',')[1];
+            const byteArray = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
+            const blob = new Blob([byteArray], { type: mimeMatch?.[1] || 'image/png' });
+            const storagePath = `${userId}/narrative-slide-${Date.now()}-${slideNumber}.${ext}`;
+            const { error: upErr } = await supabase.storage.from('media-library').upload(storagePath, blob, { contentType: blob.type });
+            if (!upErr) {
+              const { data: urlData } = supabase.storage.from('media-library').getPublicUrl(storagePath);
+              finalUrl = urlData.publicUrl;
+            }
+          } catch { /* use base64 */ }
+        }
+        setNarrativeSlideImages(prev => ({ ...prev, [slideNumber]: finalUrl }));
+        toast({ title: `Imagem gerada ✅`, description: `Lâmina ${slideNumber} atualizada.` });
+      }
+    } catch (e) {
+      console.error(e);
+      toast({ title: 'Erro', description: 'Falha ao gerar imagem.', variant: 'destructive' });
+    } finally {
+      setNarrativeGeneratingImage(prev => ({ ...prev, [slideNumber]: false }));
+    }
+  }, [toast, userId]);
+
+  const handleNarrativeClearImage = useCallback((slideNumber: number) => {
+    setNarrativeSlideImages(prev => { const n = { ...prev }; delete n[slideNumber]; return n; });
+  }, []);
+
+  const handleNarrativeApplyImage = useCallback((slideNumber: number, url: string) => {
+    setNarrativeSlideImages(prev => ({ ...prev, [slideNumber]: url }));
+  }, []);
+
   return (
     <div className="h-full overflow-y-auto">
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;800;900&family=JetBrains+Mono:wght@400;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;700&display=swap');
       `}</style>
 
       <div className="p-6 max-w-[1400px] mx-auto">
         {/* Header */}
-        <div className="mb-6 flex items-start gap-3">
-          <div className="rounded-xl bg-primary/10 p-2.5">
-            <Layers className="h-5 w-5 text-primary" />
+        <div className="mb-6 flex items-start justify-between">
+          <div className="flex items-start gap-3">
+            <div className="rounded-xl bg-primary/10 p-2.5">
+              <Layers className="h-5 w-5 text-primary" />
+            </div>
+            <div>
+              <h1 className="text-xl font-bold text-foreground">AI Carrosséis</h1>
+              <p className="text-sm text-muted-foreground">Gere carrosséis completos com arte visual, copy e prompts de imagem por lâmina</p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-xl font-bold text-foreground">AI Carrosséis</h1>
-            <p className="text-sm text-muted-foreground">Gere carrosséis completos com arte visual, copy e prompts de imagem por lâmina</p>
+
+          {/* Mode Toggle */}
+          <div className="flex rounded-xl border border-border bg-card overflow-hidden">
+            <button
+              onClick={() => setCarouselMode('direto')}
+              className={cn(
+                'px-4 py-2 text-xs font-bold transition-all flex items-center gap-2',
+                carouselMode === 'direto'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+              )}
+            >
+              <Zap className="h-3.5 w-3.5" />
+              Direto
+            </button>
+            <button
+              onClick={() => setCarouselMode('narrativa')}
+              className={cn(
+                'px-4 py-2 text-xs font-bold transition-all flex items-center gap-2',
+                carouselMode === 'narrativa'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+              )}
+            >
+              <BookText className="h-3.5 w-3.5" />
+              Narrativa
+            </button>
           </div>
         </div>
 
