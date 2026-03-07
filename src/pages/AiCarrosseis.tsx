@@ -3567,8 +3567,227 @@ export default function AiCarrosseis() {
                 )}
               </div>
             )}
-          </div>
         </div>
+        )}
+
+        {/* ══════════════════════════════════════════════════════════════════
+             MODO NARRATIVA — carrossel editorial 7-10 slides
+            ══════════════════════════════════════════════════════════════════ */}
+        {carouselMode === 'narrativa' && (
+          <div className="grid grid-cols-1 xl:grid-cols-[380px,1fr] gap-6">
+            {/* ── LEFT: Narrative Briefing ── */}
+            <div className="space-y-4">
+              <div className="rounded-xl border border-border bg-card p-5 space-y-5">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="rounded-lg bg-primary/10 p-1.5">
+                    <BookText className="h-4 w-4 text-primary" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-foreground">Carrossel Narrativo</p>
+                    <p className="text-[10px] text-muted-foreground">Storytelling editorial profundo · 7-10 lâminas</p>
+                  </div>
+                </div>
+
+                <CampaignKnowledgeSelector onContextChange={setCampaignCtx} />
+
+                <div>
+                  <p className="text-xs font-bold text-primary tracking-widest mb-3">TEMA / TÓPICO</p>
+                  <Textarea
+                    placeholder="Ex: O fim do American Dream e a ascensão do Sonho Brasileiro..."
+                    value={narrativeTopic}
+                    onChange={e => setNarrativeTopic(e.target.value)}
+                    className="min-h-[100px] text-sm resize-none bg-muted/30 border-border/60"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1.5 flex items-center gap-1">
+                    <Wand2 className="h-3 w-3" />
+                    Se vazio, a IA escolhe um tema trending relevante
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs font-bold text-muted-foreground tracking-widest mb-2.5">ÂNGULO DE AUDIÊNCIA</p>
+                  <Textarea
+                    placeholder="Como esse conteúdo se conecta com os desejos do público DQEF? (opcional)"
+                    value={narrativeAudienceAngle}
+                    onChange={e => setNarrativeAudienceAngle(e.target.value)}
+                    className="min-h-[60px] text-sm resize-none bg-muted/30 border-border/60"
+                  />
+                </div>
+
+                <div>
+                  <p className="text-xs font-bold text-muted-foreground tracking-widest mb-2.5">NÚMERO DE SLIDES</p>
+                  <div className="flex items-center gap-3">
+                    <Slider value={[narrativeNumSlides]} onValueChange={([v]) => setNarrativeNumSlides(v)} min={7} max={10} step={1} className="flex-1" />
+                    <span className="text-sm font-bold text-primary min-w-[30px] text-center">{narrativeNumSlides}</span>
+                  </div>
+                </div>
+
+                {/* Channel */}
+                <div>
+                  <p className="text-xs font-bold text-muted-foreground tracking-widest mb-2.5">CANAL</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {CHANNELS.map(c => (
+                      <button key={c} onClick={() => setChannel(c)}
+                        className={cn('rounded-full border px-3 py-1 text-xs font-medium transition-all',
+                          channel === c ? 'bg-primary text-primary-foreground border-primary' : 'border-border text-muted-foreground hover:text-foreground'
+                        )}>
+                        {c}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Format selector */}
+                <div>
+                  <p className="text-xs font-bold text-muted-foreground tracking-widest mb-2.5">FORMATO DE SAÍDA</p>
+                  {['Instagram', 'TikTok', 'LinkedIn'].map(platform => (
+                    <div key={platform} className="mb-3">
+                      <p className="text-[9px] font-bold text-muted-foreground/50 tracking-[0.15em] uppercase mb-1.5">{platform}</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {CREATIVE_FORMATS.filter(f => f.platform === platform && (f.ratio === '4:5' || f.ratio === '3:4' || f.ratio === '1:1' || f.ratio === '9:16')).map(fmt => (
+                          <button key={fmt.id} onClick={() => setSelectedFormat(fmt)}
+                            className={cn('rounded-lg border px-2.5 py-1.5 text-left transition-all',
+                              selectedFormat.id === fmt.id ? 'border-primary bg-primary/15 text-primary' : 'border-border text-muted-foreground hover:text-foreground'
+                            )}>
+                            <p className="text-[10px] font-semibold">{fmt.label}</p>
+                            <p className="text-[9px] text-muted-foreground/70">{fmt.width}×{fmt.height}</p>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Generate button */}
+                <Button
+                  onClick={handleGenerateNarrative}
+                  disabled={narrativeLoading}
+                  className="w-full h-12 text-base font-bold bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl"
+                >
+                  {narrativeLoading ? (
+                    <span className="flex items-center gap-2">
+                      <span className="h-4 w-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
+                      Gerando narrativa...
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-2">
+                      <BookText className="h-4 w-4" />
+                      Gerar Carrossel Narrativo
+                    </span>
+                  )}
+                </Button>
+              </div>
+            </div>
+
+            {/* ── RIGHT: Narrative Output ── */}
+            <div>
+              {!narrativeResult && !narrativeLoading && (
+                <div className="h-full min-h-[400px] rounded-xl border border-dashed border-border flex flex-col items-center justify-center gap-3 text-center p-8">
+                  <div className="rounded-2xl bg-primary/10 p-4">
+                    <BookText className="h-8 w-8 text-primary/60" />
+                  </div>
+                  <div>
+                    <p className="font-semibold text-foreground mb-1">Carrossel Narrativo</p>
+                    <p className="text-sm text-muted-foreground max-w-sm">Crie carrosséis editoriais com storytelling profundo, dados com fontes e narrativa que prende a atenção. Inspirado nos melhores perfis de conteúdo informativo.</p>
+                  </div>
+                </div>
+              )}
+
+              {narrativeLoading && (
+                <div className="space-y-4">
+                  <div className="h-32 rounded-xl bg-muted/30 animate-pulse" />
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                    {[...Array(8)].map((_, i) => (
+                      <div key={i} className="rounded-xl bg-muted/20 animate-pulse" style={{ aspectRatio: '4/5' }} />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {narrativeResult && !narrativeLoading && (
+                <div>
+                  {/* Narrative header */}
+                  <div className="mb-5 space-y-3">
+                    <h2 className="text-2xl font-black tracking-tight text-foreground" style={{ fontFamily: 'Montserrat, sans-serif', fontWeight: 900 }}>
+                      {narrativeResult.carousel.title}
+                    </h2>
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground font-mono">
+                      <span>TEMA: {narrativeResult.carousel.theme}</span>
+                      <span>·</span>
+                      <span>{narrativeResult.carousel.slides.length} slides</span>
+                      <span>·</span>
+                      <span>⏰ {narrativeResult.carousel.bestTime}</span>
+                    </div>
+                    <div className="text-xs text-muted-foreground border-l-2 border-primary pl-3 space-y-1">
+                      <div><span className="font-semibold text-primary">→ ARCO NARRATIVO:</span> {narrativeResult.carousel.narrative_arc}</div>
+                      <div><span className="font-semibold text-primary">→ CONEXÃO:</span> {narrativeResult.carousel.target_connection}</div>
+                      <div><span className="font-semibold text-primary">→ COMPARTILHABILIDADE:</span> {narrativeResult.carousel.shareability_hook}</div>
+                    </div>
+                  </div>
+
+                  {/* Controls */}
+                  <div className="space-y-2 mb-4">
+                    <div className="flex items-center gap-3 rounded-lg border border-border bg-card px-4 py-2.5">
+                      <span className="text-[10px] font-bold text-muted-foreground tracking-widest uppercase whitespace-nowrap">Texto</span>
+                      <span className="text-[10px] text-muted-foreground">A</span>
+                      <Slider value={[narrativeTextScale]} onValueChange={([v]) => setNarrativeTextScale(v)} min={0.5} max={2} step={0.05} className="flex-1" />
+                      <span className="text-sm font-bold text-muted-foreground">A</span>
+                      <span className="text-[10px] font-mono text-primary min-w-[36px] text-right">{Math.round(narrativeTextScale * 100)}%</span>
+                    </div>
+                    <div className="flex items-center gap-3 rounded-lg border border-border bg-card px-4 py-2.5">
+                      <span className="text-[10px] font-bold text-muted-foreground tracking-widest uppercase whitespace-nowrap">Imagem</span>
+                      <ImageIcon className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+                      <Slider value={[narrativeImageOpacity]} onValueChange={([v]) => setNarrativeImageOpacity(v)} min={0.1} max={1} step={0.05} className="flex-1" />
+                      <span className="text-[10px] font-mono text-primary min-w-[36px] text-right">{Math.round(narrativeImageOpacity * 100)}%</span>
+                    </div>
+                  </div>
+
+                  {/* Slides grid */}
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-6">
+                    {narrativeResult.carousel.slides.map(slide => (
+                      <NarrativeSlideCard
+                        key={slide.number}
+                        slide={slide}
+                        imageUrl={narrativeSlideImages[slide.number]}
+                        isGenerating={narrativeGeneratingImage[slide.number]}
+                        onGenerateImage={handleNarrativeGenerateImage}
+                        onClearImage={handleNarrativeClearImage}
+                        onApplyImage={handleNarrativeApplyImage}
+                        userId={userId}
+                        format={selectedFormat}
+                        textScale={narrativeTextScale}
+                        imageOpacity={narrativeImageOpacity}
+                        themeId={narrativeResult.carousel.theme}
+                      />
+                    ))}
+                  </div>
+
+                  {/* Caption */}
+                  <div className="rounded-xl border border-border bg-card p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-bold text-primary tracking-widest">CAPTION</p>
+                      <CopyButton text={narrativeResult.carousel.caption} label="Copiar caption" />
+                    </div>
+                    <p className="text-sm text-muted-foreground whitespace-pre-line leading-relaxed">
+                      {narrativeResult.carousel.caption}
+                    </p>
+                    <div className="flex flex-wrap gap-2 pt-2 border-t border-border">
+                      <Button size="sm" variant="outline" onClick={() => {
+                        const allText = narrativeResult.carousel.slides.map(s =>
+                          `SLIDE ${s.number} — ${s.type.toUpperCase()}:\n${s.headline}\n${s.bodyText ?? ''}`
+                        ).join('\n\n');
+                        navigator.clipboard.writeText(allText);
+                        toast({ title: 'Copiado!', description: 'Todo o roteiro copiado.' });
+                      }}>
+                        <Copy className="h-3.5 w-3.5 mr-1.5" /> Copiar tudo
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
