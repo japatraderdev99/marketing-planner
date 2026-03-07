@@ -3021,7 +3021,10 @@ export default function AiCarrosseis() {
           </div>
         </div>
 
-        {/* Two-column layout */}
+        {/* ══════════════════════════════════════════════════════════════════
+             MODO DIRETO — carrossel padrão 5 slides
+            ══════════════════════════════════════════════════════════════════ */}
+        {carouselMode === 'direto' && (
         <div className="grid grid-cols-1 xl:grid-cols-[380px,1fr] gap-6">
 
           {/* ── LEFT: Briefing + Biblioteca tabs ── */}
