@@ -2575,6 +2575,19 @@ export default function AiCarrosseis() {
   const [imageScale, setImageScale] = useState(1);
   const [imageOffsetY, setImageOffsetY] = useState(0);
 
+  // ── Narrative mode state ──
+  type CarouselMode = 'direto' | 'narrativa';
+  const [carouselMode, setCarouselMode] = useState<CarouselMode>('direto');
+  const [narrativeTopic, setNarrativeTopic] = useState('');
+  const [narrativeAudienceAngle, setNarrativeAudienceAngle] = useState('');
+  const [narrativeNumSlides, setNarrativeNumSlides] = useState(10);
+  const [narrativeResult, setNarrativeResult] = useState<{ carousel: NarrativeCarousel; autonomous: boolean } | null>(null);
+  const [narrativeSlideImages, setNarrativeSlideImages] = useState<Record<number, string>>({});
+  const [narrativeGeneratingImage, setNarrativeGeneratingImage] = useState<Record<number, boolean>>({});
+  const [narrativeLoading, setNarrativeLoading] = useState(false);
+  const [narrativeTextScale, setNarrativeTextScale] = useState(1);
+  const [narrativeImageOpacity, setNarrativeImageOpacity] = useState(0.85);
+
   // Per-slide image state
   const [slideImages, setSlideImages] = useState<Record<number, string>>({});
   const [generatingImage, setGeneratingImage] = useState<Record<number, boolean>>({});
