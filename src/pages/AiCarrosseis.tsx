@@ -2,7 +2,7 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Layers, Wand2, Copy, Check, Download, ChevronDown, ChevronUp, ImageIcon, Video, Zap, RefreshCw, Image, Minimize2, Shuffle, Upload, Trash2, Library, X, Star, Target, FileText, Users, Megaphone, TrendingUp, BookOpen, AlertTriangle, PlusCircle, File, Eye, Save, MessageSquare, Clock, CheckCircle, XCircle, Send, BookMarked, Inbox, ShieldCheck, Loader2, Grid3x3, BookText } from 'lucide-react';
 import NarrativeSlideCard from '@/components/carousel/NarrativeSlideCard';
-import NarrativeSlidePreview, { type NarrativeSlide, type NarrativeCarousel } from '@/components/carousel/NarrativeSlidePreview';
+import NarrativeSlidePreview, { type NarrativeSlide, type NarrativeCarousel, type NarrativeThemeId, NARRATIVE_THEMES } from '@/components/carousel/NarrativeSlidePreview';
 import CampaignKnowledgeSelector from '@/components/CampaignKnowledgeSelector';
 import dqfIcon from '@/assets/dqf-icon.svg';
 import { Button } from '@/components/ui/button';
@@ -2587,6 +2587,10 @@ export default function AiCarrosseis() {
   const [narrativeLoading, setNarrativeLoading] = useState(false);
   const [narrativeTextScale, setNarrativeTextScale] = useState(1);
   const [narrativeImageOpacity, setNarrativeImageOpacity] = useState(0.85);
+  const [narrativeThemeId, setNarrativeThemeId] = useState<NarrativeThemeId>('editorial-dark');
+  const [narrativeHeadlineScale, setNarrativeHeadlineScale] = useState(1);
+  const [narrativeImageScale, setNarrativeImageScale] = useState(1);
+  const [narrativeImageOffsetY, setNarrativeImageOffsetY] = useState(0);
 
   // Per-slide image state
   const [slideImages, setSlideImages] = useState<Record<number, string>>({});
@@ -3726,6 +3730,25 @@ export default function AiCarrosseis() {
                     </div>
                   </div>
 
+                  {/* Theme picker */}
+                  <div className="flex flex-wrap gap-2 mb-4">
+                    {(Object.keys(NARRATIVE_THEMES) as NarrativeThemeId[]).map(tid => {
+                      const t = NARRATIVE_THEMES[tid];
+                      return (
+                        <button key={tid} onClick={() => setNarrativeThemeId(tid)}
+                          className={cn(
+                            'rounded-lg border px-3 py-2 text-left transition-all',
+                            narrativeThemeId === tid ? 'border-primary bg-primary/15' : 'border-border hover:border-muted-foreground/30'
+                          )}>
+                          <div className="flex items-center gap-2">
+                            <div className="w-4 h-4 rounded-full border border-border" style={{ background: t.bg }} />
+                            <span className="text-[10px] font-semibold text-foreground">{t.label}</span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+
                   {/* Controls */}
                   <div className="space-y-2 mb-4">
                     <div className="flex items-center gap-3 rounded-lg border border-border bg-card px-4 py-2.5">
@@ -3736,10 +3759,25 @@ export default function AiCarrosseis() {
                       <span className="text-[10px] font-mono text-primary min-w-[36px] text-right">{Math.round(narrativeTextScale * 100)}%</span>
                     </div>
                     <div className="flex items-center gap-3 rounded-lg border border-border bg-card px-4 py-2.5">
+                      <span className="text-[10px] font-bold text-muted-foreground tracking-widest uppercase whitespace-nowrap">Headline</span>
+                      <Slider value={[narrativeHeadlineScale]} onValueChange={([v]) => setNarrativeHeadlineScale(v)} min={0.5} max={2} step={0.05} className="flex-1" />
+                      <span className="text-[10px] font-mono text-primary min-w-[36px] text-right">{Math.round(narrativeHeadlineScale * 100)}%</span>
+                    </div>
+                    <div className="flex items-center gap-3 rounded-lg border border-border bg-card px-4 py-2.5">
                       <span className="text-[10px] font-bold text-muted-foreground tracking-widest uppercase whitespace-nowrap">Imagem</span>
                       <ImageIcon className="h-3 w-3 text-muted-foreground flex-shrink-0" />
                       <Slider value={[narrativeImageOpacity]} onValueChange={([v]) => setNarrativeImageOpacity(v)} min={0.1} max={1} step={0.05} className="flex-1" />
                       <span className="text-[10px] font-mono text-primary min-w-[36px] text-right">{Math.round(narrativeImageOpacity * 100)}%</span>
+                    </div>
+                    <div className="flex items-center gap-3 rounded-lg border border-border bg-card px-4 py-2.5">
+                      <span className="text-[10px] font-bold text-muted-foreground tracking-widest uppercase whitespace-nowrap">Zoom</span>
+                      <Slider value={[narrativeImageScale]} onValueChange={([v]) => setNarrativeImageScale(v)} min={1} max={2} step={0.05} className="flex-1" />
+                      <span className="text-[10px] font-mono text-primary min-w-[36px] text-right">{Math.round(narrativeImageScale * 100)}%</span>
+                    </div>
+                    <div className="flex items-center gap-3 rounded-lg border border-border bg-card px-4 py-2.5">
+                      <span className="text-[10px] font-bold text-muted-foreground tracking-widest uppercase whitespace-nowrap">Offset Y</span>
+                      <Slider value={[narrativeImageOffsetY]} onValueChange={([v]) => setNarrativeImageOffsetY(v)} min={-30} max={30} step={1} className="flex-1" />
+                      <span className="text-[10px] font-mono text-primary min-w-[36px] text-right">{narrativeImageOffsetY}</span>
                     </div>
                   </div>
 
@@ -3758,7 +3796,10 @@ export default function AiCarrosseis() {
                         format={selectedFormat}
                         textScale={narrativeTextScale}
                         imageOpacity={narrativeImageOpacity}
-                        themeId={narrativeResult.carousel.theme}
+                        themeId={narrativeThemeId}
+                        headlineScale={narrativeHeadlineScale}
+                        imageScale={narrativeImageScale}
+                        imageOffsetY={narrativeImageOffsetY}
                       />
                     ))}
                   </div>
