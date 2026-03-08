@@ -2587,6 +2587,10 @@ export default function AiCarrosseis() {
   const [narrativeLoading, setNarrativeLoading] = useState(false);
   const [narrativeTextScale, setNarrativeTextScale] = useState(1);
   const [narrativeImageOpacity, setNarrativeImageOpacity] = useState(0.85);
+  const [narrativeThemeId, setNarrativeThemeId] = useState<NarrativeThemeId>('editorial-dark');
+  const [narrativeHeadlineScale, setNarrativeHeadlineScale] = useState(1);
+  const [narrativeImageScale, setNarrativeImageScale] = useState(1);
+  const [narrativeImageOffsetY, setNarrativeImageOffsetY] = useState(0);
 
   // Per-slide image state
   const [slideImages, setSlideImages] = useState<Record<number, string>>({});
