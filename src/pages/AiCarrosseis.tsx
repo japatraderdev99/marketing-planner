@@ -2,7 +2,7 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Layers, Wand2, Copy, Check, Download, ChevronDown, ChevronUp, ImageIcon, Video, Zap, RefreshCw, Image, Minimize2, Shuffle, Upload, Trash2, Library, X, Star, Target, FileText, Users, Megaphone, TrendingUp, BookOpen, AlertTriangle, PlusCircle, File, Eye, Save, MessageSquare, Clock, CheckCircle, XCircle, Send, BookMarked, Inbox, ShieldCheck, Loader2, Grid3x3, BookText } from 'lucide-react';
 import NarrativeSlideCard from '@/components/carousel/NarrativeSlideCard';
-import NarrativeSlidePreview, { type NarrativeSlide, type NarrativeCarousel } from '@/components/carousel/NarrativeSlidePreview';
+import NarrativeSlidePreview, { type NarrativeSlide, type NarrativeCarousel, type NarrativeThemeId, NARRATIVE_THEMES } from '@/components/carousel/NarrativeSlidePreview';
 import CampaignKnowledgeSelector from '@/components/CampaignKnowledgeSelector';
 import dqfIcon from '@/assets/dqf-icon.svg';
 import { Button } from '@/components/ui/button';
