@@ -46,4 +46,6 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.analyze-brand-document]
+
+[functions.generate-narrative-carousel]
 verify_jwt = false
